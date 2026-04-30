@@ -3,6 +3,8 @@
  * Express с native req/res (официалният модел на Vercel за Express).
  * Lazy require + includeFiles в vercel.json — пълно включване на backend при монорепо.
  */
+const { sendErrorJson } = require('../backend/errorResponse.js');
+
 let cached;
 
 function getBackend() {
@@ -26,22 +28,19 @@ module.exports = async (req, res) => {
     ({ app, ensureInitialized } = getBackend());
   } catch (e) {
     console.error('ColorTrack api: failed to load backend bundle', e);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'internal' });
-    }
+    sendErrorJson(res, e);
     return;
   }
 
   try {
     await ensureInitialized();
   } catch (e) {
-    const code = e && e.statusCode;
-    if (code === 503) {
+    if (e && e.code === 'missing_database_url') {
       res.status(503).json({ ok: false, error: 'unavailable' });
       return;
     }
-    console.error(e);
-    if (!res.headersSent) res.status(500).json({ error: 'internal' });
+    console.error('ColorTrack ensureInitialized:', e);
+    sendErrorJson(res, e);
     return;
   }
 
@@ -50,7 +49,7 @@ module.exports = async (req, res) => {
     app(req, res);
   } catch (err) {
     console.error(err);
-    if (!res.headersSent) res.status(500).json({ error: 'internal' });
+    sendErrorJson(res, err);
     return;
   }
   await done;

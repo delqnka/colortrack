@@ -8,6 +8,7 @@ const { ensureSchema } = require('./schemaEnsure');
 const r2 = require('./r2');
 const { authMiddleware, ensureBootstrapStaff, loginHandler, registerHandler, appleAuthHandler } = require('./auth');
 const push = require('./push');
+const { jsonForError } = require('./errorResponse');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -123,6 +124,7 @@ function getSql() {
   if (!url) {
     const err = new Error('DATABASE_URL is not set');
     err.statusCode = 503;
+    err.code = 'missing_database_url';
     throw err;
   }
   return neon(url);
@@ -1445,14 +1447,8 @@ app.use((err, req, res, next) => {
   if (res.headersSent) {
     return next(err);
   }
-  const status = Number(err.statusCode || err.status) || 500;
-  if (err.expose === true && typeof err.code === 'string') {
-    return res.status(status >= 400 && status < 600 ? status : 500).json({
-      error: err.code,
-      message: err.message,
-    });
-  }
-  res.status(status >= 400 && status < 600 ? status : 500).json({ error: 'internal' });
+  const { status, body } = jsonForError(err);
+  res.status(status).json(body);
 });
 
 let initPromise = null;
@@ -1463,6 +1459,7 @@ function ensureInitialized() {
       if (!process.env.DATABASE_URL) {
         const err = new Error('DATABASE_URL is not set');
         err.statusCode = 503;
+        err.code = 'missing_database_url';
         throw err;
       }
       await ensureSchema(getSql());

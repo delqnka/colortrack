@@ -68614,23 +68614,8 @@ function authGate(req, res, next) {
   return next();
 }
 app.use(cors());
-if (process.env.VERCEL) {
-  app.use((req, res, next) => {
-    const m = (req.method || "GET").toUpperCase();
-    if (m === "GET" || m === "HEAD" || m === "OPTIONS") return next();
-    const ct = typeof req.headers["content-type"] === "string" ? req.headers["content-type"] : "";
-    if (ct.includes("application/json") || ct.includes("application/x-www-form-urlencoded") || ct.includes("text/plain")) {
-      try {
-        void req.body;
-      } catch {
-        return res.status(400).json({ error: "bad_request" });
-      }
-    }
-    return next();
-  });
-} else {
-  app.use(express.json());
-}
+app.use(express.json({ limit: "12mb" }));
+app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 app.use(authGate);
 app.post("/api/auth/register", async (req, res, next) => {
   try {
@@ -69675,7 +69660,8 @@ app.post("/api/visits", async (req, res, next) => {
   try {
     const sql = getSql();
     const sid = req.auth.salonId;
-    const { client_id, visit_date, procedure_name, chair_label, notes, lines, appointment_id } = req.body || {};
+    const b = req.body || {};
+    const { client_id, visit_date, procedure_name, chair_label, notes, lines, appointment_id } = b;
     const cid = Number(client_id);
     if (!Number.isFinite(cid) || cid < 1) {
       return res.status(400).json({ error: "bad_request" });
@@ -69725,19 +69711,19 @@ app.post("/api/visits", async (req, res, next) => {
     }
     const vd = typeof visit_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(visit_date) ? visit_date : null;
     let paidVal = null;
-    if (req.body.amount_paid_cents != null && req.body.amount_paid_cents !== "") {
-      const n = Math.round(Number(req.body.amount_paid_cents));
+    if (b.amount_paid_cents != null && b.amount_paid_cents !== "") {
+      const n = Math.round(Number(b.amount_paid_cents));
       if (Number.isFinite(n) && n >= 0) paidVal = n;
       else return res.status(400).json({ error: "bad_request" });
-    } else if (req.body.amount_usd != null && req.body.amount_usd !== "") {
-      const u = Number(req.body.amount_usd);
+    } else if (b.amount_usd != null && b.amount_usd !== "") {
+      const u = Number(b.amount_usd);
       if (Number.isFinite(u) && u >= 0) paidVal = Math.round(u * 100);
       else return res.status(400).json({ error: "bad_request" });
     }
-    const devCal = typeof req.body.device_calendar_event_id === "string" && req.body.device_calendar_event_id.trim() ? String(req.body.device_calendar_event_id).trim().slice(0, 256) : null;
+    const devCal = typeof b.device_calendar_event_id === "string" && b.device_calendar_event_id.trim() ? String(b.device_calendar_event_id).trim().slice(0, 256) : null;
     let src = "manual";
-    if (typeof req.body.source === "string" && ["manual", "device_calendar", "appointment"].includes(req.body.source)) {
-      src = req.body.source;
+    if (typeof b.source === "string" && ["manual", "device_calendar", "appointment"].includes(b.source)) {
+      src = b.source;
     } else if (devCal) {
       src = "device_calendar";
     } else if (apptId) {

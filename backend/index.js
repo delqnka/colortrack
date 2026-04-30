@@ -23,7 +23,27 @@ function authGate(req, res, next) {
 }
 
 app.use(cors());
-app.use(express.json());
+if (process.env.VERCEL) {
+  app.use((req, res, next) => {
+    const m = (req.method || 'GET').toUpperCase();
+    if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return next();
+    const ct = typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : '';
+    if (
+      ct.includes('application/json') ||
+      ct.includes('application/x-www-form-urlencoded') ||
+      ct.includes('text/plain')
+    ) {
+      try {
+        void req.body;
+      } catch {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+    }
+    return next();
+  });
+} else {
+  app.use(express.json());
+}
 app.use(authGate);
 
 app.post('/api/auth/register', async (req, res, next) => {

@@ -1,8 +1,16 @@
 /**
  * Vercel entry при празен Root Directory.
- * Express се вика директно с Node req/res (без serverless-http — Express 5 не е стабилен с него).
+ * Express с native req/res (официалният модел на Vercel за Express).
+ * Lazy require + includeFiles в vercel.json — пълно включване на backend при монорепо.
  */
-const { app, ensureInitialized } = require('../backend/index.js');
+let cached;
+
+function getBackend() {
+  if (!cached) {
+    cached = require('../backend/index.js');
+  }
+  return cached;
+}
 
 function untilResponseDone(res) {
   return new Promise((resolve) => {
@@ -12,6 +20,18 @@ function untilResponseDone(res) {
 }
 
 module.exports = async (req, res) => {
+  let app;
+  let ensureInitialized;
+  try {
+    ({ app, ensureInitialized } = getBackend());
+  } catch (e) {
+    console.error('ColorTrack api: failed to load backend bundle', e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'internal' });
+    }
+    return;
+  }
+
   try {
     await ensureInitialized();
   } catch (e) {

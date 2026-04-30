@@ -1,8 +1,14 @@
 /**
- * Vercel serverless entry при Root Directory = backend.
- * Използваме директно Express с req/res (без serverless-http за Express 5).
+ * Vercel entry при Root Directory = backend.
  */
-const { app, ensureInitialized } = require('../index.js');
+let cached;
+
+function getBackend() {
+  if (!cached) {
+    cached = require('../index.js');
+  }
+  return cached;
+}
 
 function untilResponseDone(res) {
   return new Promise((resolve) => {
@@ -12,6 +18,18 @@ function untilResponseDone(res) {
 }
 
 module.exports = async (req, res) => {
+  let app;
+  let ensureInitialized;
+  try {
+    ({ app, ensureInitialized } = getBackend());
+  } catch (e) {
+    console.error('ColorTrack api: failed to load backend', e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'internal' });
+    }
+    return;
+  }
+
   try {
     await ensureInitialized();
   } catch (e) {
@@ -21,7 +39,7 @@ module.exports = async (req, res) => {
       return;
     }
     console.error(e);
-    res.status(500).json({ error: 'internal' });
+    if (!res.headersSent) res.status(500).json({ error: 'internal' });
     return;
   }
 

@@ -110,7 +110,14 @@ function bodyFromMessage(msg, err) {
 function jsonForError(err) {
   const hint = vercelHint();
   if (!err) {
-    return { status: 500, body: { error: 'internal', ...(hint ? { hint } : {}) } };
+    return {
+      status: 500,
+      body: {
+        error: 'internal',
+        message: 'No error object (should not happen). Check Function logs.',
+        ...(hint ? { hint } : {}),
+      },
+    };
   }
   const msg = String(err.message || '');
   const errClass = typeof err.name === 'string' && err.name ? err.name : 'Error';
@@ -193,6 +200,9 @@ function jsonForError(err) {
   const body = {
     error: 'internal',
     error_class: errClass,
+    message: hint
+      ? 'Unhandled error; check Vercel Function logs. Follow hint to add debug fields to this response temporarily.'
+      : 'Unhandled error; check server logs.',
     ...(hint ? { hint } : {}),
   };
   if (isApiDebug()) {

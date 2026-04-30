@@ -1442,7 +1442,17 @@ app.get('/api/visits/:id', async (req, res, next) => {
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: 'internal' });
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = Number(err.statusCode || err.status) || 500;
+  if (err.expose === true && typeof err.code === 'string') {
+    return res.status(status >= 400 && status < 600 ? status : 500).json({
+      error: err.code,
+      message: err.message,
+    });
+  }
+  res.status(status >= 400 && status < 600 ? status : 500).json({ error: 'internal' });
 });
 
 let initPromise = null;

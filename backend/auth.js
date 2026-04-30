@@ -11,8 +11,15 @@ const appleJwks = jwksClient({
 function jwtSecret() {
   const s = process.env.JWT_SECRET;
   if (s && String(s).trim()) return String(s).trim();
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET required');
+  const prodLike = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+  if (prodLike) {
+    const err = new Error(
+      'JWT_SECRET is not set. Add it in Vercel → Settings → Environment Variables (Production).',
+    );
+    err.statusCode = 500;
+    err.code = 'missing_jwt_secret';
+    err.expose = true;
+    throw err;
   }
   return 'dev-colortrack-jwt';
 }

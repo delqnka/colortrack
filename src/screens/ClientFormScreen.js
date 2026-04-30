@@ -248,6 +248,13 @@ export default function ClientFormScreen({ route, navigation }) {
         navigation.goBack();
       } else {
         const row = await apiPost('/api/clients', body);
+        if (!row || !row.id) {
+          Alert.alert(
+            '',
+            'Could not create client. Make sure you are logged in, online, and try again.',
+          );
+          return;
+        }
         await tryUploadAvatar(row.id);
         navigation.replace('ClientDetail', { clientId: row.id });
       }

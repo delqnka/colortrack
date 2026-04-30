@@ -106,6 +106,9 @@ function humanizeApiError(text, res) {
   if (res.status === 503 && msg.toLowerCase() === 'unavailable') {
     return 'Service unavailable (database or file storage may be missing on the server).';
   }
+  if (res.status === 401) {
+    return 'Session expired or not signed in. Log out and log in again.';
+  }
   return msg;
 }
 
@@ -147,17 +150,26 @@ async function mutate(method, path, body) {
     const text = await res.text();
     if (!res.ok) throw new Error(humanizeApiError(text, res));
     if (res.status === 204) return null;
-    if (!text) return null;
+    if (!text) {
+      if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
+        throw new Error('Empty response from server');
+      }
+      return null;
+    }
     try {
       return JSON.parse(text);
     } catch {
-      return null;
+      throw new Error('Invalid response from server');
     }
   } catch (e) {
     const msg = e && e.message ? String(e.message) : '';
     const state = await NetInfo.fetch();
     const offline = !state.isConnected || msg === 'Network request failed';
     if (offline && method !== 'GET') {
+      /* Creating a client must return an id — queueing breaks navigation. */
+      if (method === 'POST' && path === '/api/clients') {
+        throw new Error('No connection. Connect to the internet and try again to create a client.');
+      }
       await enqueueOutbox({ method, path, body });
       return { queued: true };
     }

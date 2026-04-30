@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "cd backend && npm install && npx --yes esbuild@0.24.2 index.js --bundle --platform=node --format=cjs --legal-comments=none --external:expo-server-sdk --external:@aws-sdk/client-s3 --external:@aws-sdk/s3-request-presigner --outfile=../api/colortrack-server.cjs && cd ../api && npm install",
+  "installCommand": "bash scripts/vercel-install.sh",
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
   "functions": {
     "api/index.js": {

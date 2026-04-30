@@ -6,7 +6,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
-      "includeFiles": ["backend/**/*.js", "node_modules/**"]
+      "includeFiles": "{backend/**/*.js,node_modules/**}"
     }
   }
 }

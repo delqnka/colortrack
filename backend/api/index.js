@@ -1,18 +1,15 @@
 /**
  * Vercel entry при Root Directory = backend (проектът е само папката backend).
+ * Литерален require на бъндъла, за да го включи node-file-trace.
  */
 const { sendErrorJson } = require('../errorResponse.js');
-const path = require('path');
 
 function onVercel() {
   return process.env.VERCEL === '1' || process.env.VERCEL === 'true';
 }
 
-const bundlePath = path.join(__dirname, 'colortrack-server.cjs');
-
-function loadAppModule() {
   try {
-    return require(bundlePath);
+    return require('./colortrack-server.cjs');
   } catch (e) {
     if (onVercel()) {
       if (e && e.code === 'MODULE_NOT_FOUND') {

@@ -131,11 +131,11 @@ function jsonForError(err) {
       message:
         'A Node module failed to resolve (deployment bundle may be incomplete). Check Vercel build logs and includeFiles.',
       error_class: errClass,
+      detail: msg,
       ...(hint ? { hint } : {}),
     };
-    if (isApiDebug()) {
-      body.detail = msg;
-      if (err.stack) body.stack = err.stack.split('\n').slice(0, 8).join('\n');
+    if (isApiDebug() && err.stack) {
+      body.stack = err.stack.split('\n').slice(0, 12).join('\n');
     }
     return { status: 500, body };
   }

@@ -1,18 +1,10 @@
 /**
  * Vercel entry при празен Root Directory.
- * Express с native req/res (официалният модел на Vercel за Express).
- * Lazy require + includeFiles в vercel.json — пълно включване на backend при монорепо.
+ * Top-level require на backend — Vercel/NFT проследява статичните require; lazy require
+ * пропуска node_modules в bundle → MODULE_NOT_FOUND в Lambda.
  */
 const { sendErrorJson } = require('../backend/errorResponse.js');
-
-let cached;
-
-function getBackend() {
-  if (!cached) {
-    cached = require('../backend/index.js');
-  }
-  return cached;
-}
+const { app, ensureInitialized } = require('../backend/index.js');
 
 function untilResponseDone(res) {
   return new Promise((resolve) => {
@@ -22,16 +14,6 @@ function untilResponseDone(res) {
 }
 
 module.exports = async (req, res) => {
-  let app;
-  let ensureInitialized;
-  try {
-    ({ app, ensureInitialized } = getBackend());
-  } catch (e) {
-    console.error('ColorTrack api: failed to load backend bundle', e);
-    sendErrorJson(res, e);
-    return;
-  }
-
   try {
     await ensureInitialized();
   } catch (e) {

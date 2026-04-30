@@ -2,7 +2,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
-import { apiPost, getSessionToken } from '../api/client';
+import { apiPost, getSessionToken, loadStoredToken } from '../api/client';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -13,6 +13,7 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerExpoPushIfPossible() {
+  await loadStoredToken();
   if (!getSessionToken()) return;
   if (!Device.isDevice) return;
   const { status: cur } = await Notifications.getPermissionsAsync();

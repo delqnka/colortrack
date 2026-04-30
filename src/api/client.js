@@ -32,7 +32,15 @@ export async function saveSessionToken(token) {
   else await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
-function authHeaders() {
+/**
+ * In-memory token is lost on Fast Refresh / some reloads while UI still shows "logged in".
+ * Always rehydrate from AsyncStorage before authenticated requests.
+ */
+async function authHeaders() {
+  if (!sessionToken) {
+    const t = await AsyncStorage.getItem(TOKEN_KEY);
+    sessionToken = t || null;
+  }
   const h = {};
   if (sessionToken) h.Authorization = `Bearer ${sessionToken}`;
   return h;
@@ -76,7 +84,7 @@ export async function flushOutbox() {
   const remain = [];
   for (const item of queue) {
     try {
-      const headers = { ...authHeaders() };
+      const headers = { ...(await authHeaders()) };
       if (item.body !== undefined) headers['Content-Type'] = 'application/json';
       const res = await fetch(`${BASE}${item.path}`, {
         method: item.method,
@@ -122,7 +130,7 @@ function throwAuthResponseError(text, res) {
 
 export async function apiGet(path) {
   try {
-    const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
+    const res = await fetch(`${BASE}${path}`, { headers: { ...(await authHeaders()) } });
     const text = await res.text();
     if (!res.ok) throw new Error(humanizeApiError(text, res));
     const data = JSON.parse(text);
@@ -136,7 +144,7 @@ export async function apiGet(path) {
 }
 
 async function mutate(method, path, body) {
-  const headers = { ...authHeaders() };
+  const headers = { ...(await authHeaders()) };
   const opts = { method, headers };
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';

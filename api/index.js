@@ -1,18 +1,24 @@
 /**
  * Vercel entry при празен Root Directory.
- * require(backend) в try/catch — ако bundle/модул хвърли при load, връщаме JSON вместо FUNCTION_INVOCATION_FAILED.
- * includeFiles: backend/** в vercel.json допълва node_modules за NFT.
+ * Production: esbuild бъндъл (colortrack-server.cjs) при install — express е вътре;
+ * малък api/node_modules само за externals (AWS SDK, expo-server-sdk).
+ * Локално: няма .cjs файл → зарежда директно ../backend/index.js.
  */
+const fs = require('fs');
+const path = require('path');
 const { sendErrorJson } = require('../backend/errorResponse.js');
+
+const bundlePath = path.join(__dirname, 'colortrack-server.cjs');
 
 let app;
 let ensureInitialized;
 let backendLoadError;
 try {
-  ({ app, ensureInitialized } = require('../backend/index.js'));
+  const m = fs.existsSync(bundlePath) ? require(bundlePath) : require('../backend/index.js');
+  ({ app, ensureInitialized } = m);
 } catch (e) {
   backendLoadError = e;
-  console.error('ColorTrack api: failed to load ../backend/index.js', e);
+  console.error('ColorTrack api: failed to load app bundle', e);
 }
 
 function untilResponseDone(res) {

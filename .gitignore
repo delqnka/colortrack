@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# Vercel build output (generated in CI)
+api/colortrack-server.cjs
+
 # Expo
 .expo/
 dist/

@@ -1,22 +1,21 @@
-const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
-/** Metro prefers package.json's "react-native" -> src/index.tsx; broken installs often omit `src/`. `lib/commonjs` is always published. */
-const SAFE_AREA_MAIN = path.join(
-  __dirname,
-  'node_modules',
-  'react-native-safe-area-context',
-  'lib',
-  'commonjs',
-  'index.js',
-);
+/** Fallback if package.json still has "react-native" -> src (see scripts/patch-safe-area-context.cjs). */
+function safeAreaMain() {
+  try {
+    return require.resolve('react-native-safe-area-context/lib/commonjs/index.js', { paths: [__dirname] });
+  } catch {
+    return null;
+  }
+}
 
 const config = getDefaultConfig(__dirname);
 
 const upstreamResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === 'react-native-safe-area-context') {
-    return { type: 'sourceFile', filePath: SAFE_AREA_MAIN };
+  const mainFile = safeAreaMain();
+  if (mainFile && moduleName === 'react-native-safe-area-context') {
+    return { type: 'sourceFile', filePath: mainFile };
   }
   if (upstreamResolveRequest) {
     return upstreamResolveRequest(context, moduleName, platform);

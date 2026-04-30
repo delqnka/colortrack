@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "postinstall": "node scripts/patch-safe-area-context.cjs",
     "bundle:api": "bash scripts/bundle-api.sh",
     "start": "expo start",
     "android": "expo start --android",

@@ -8,6 +8,7 @@ function onVercel() {
   return process.env.VERCEL === '1' || process.env.VERCEL === 'true';
 }
 
+function loadAppModule() {
   try {
     return require('./colortrack-server.cjs');
   } catch (e) {
@@ -53,10 +54,6 @@ module.exports = async (req, res) => {
     try {
       await ensureInitialized();
     } catch (e) {
-      if (e && e.code === 'missing_database_url') {
-        res.status(503).json({ ok: false, error: 'unavailable' });
-        return;
-      }
       console.error('ColorTrack ensureInitialized:', e);
       sendErrorJson(res, e);
       return;

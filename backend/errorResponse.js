@@ -101,6 +101,30 @@ function bodyFromMessage(msg, err) {
       },
     };
   }
+  if (m.includes('relation') && m.includes('does not exist')) {
+    return {
+      status: 500,
+      body: {
+        error: 'db_schema',
+        message:
+          'A PostgreSQL relation is missing. Check that DATABASE_URL points to the correct database and API logs for schema ensure errors.',
+        ...debug,
+      },
+    };
+  }
+  if (
+    (m.includes('database_url') || m.includes('database url')) &&
+    (m.includes('not set') || m.includes('required') || m.includes('missing'))
+  ) {
+    return {
+      status: 503,
+      body: {
+        error: 'missing_database_url',
+        message: 'DATABASE_URL is not configured on the server.',
+        ...debug,
+      },
+    };
+  }
   return null;
 }
 

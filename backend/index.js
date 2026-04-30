@@ -1460,6 +1460,7 @@ function ensureInitialized() {
         const err = new Error('DATABASE_URL is not set');
         err.statusCode = 503;
         err.code = 'missing_database_url';
+        err.expose = true;
         throw err;
       }
       await ensureSchema(getSql());

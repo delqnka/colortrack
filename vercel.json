@@ -6,7 +6,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
-      "includeFiles": "{api/colortrack-server.cjs,api/node_modules/**}"
+      "includeFiles": "{api/**,lib/colortrack-server.cjs}"
     }
   }
 }

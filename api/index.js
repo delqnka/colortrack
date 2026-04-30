@@ -1,21 +1,48 @@
 /**
  * Vercel entry при празен Root Directory.
- * Production: esbuild бъндъл (colortrack-server.cjs) при install — express е вътре;
- * малък api/node_modules само за externals (AWS SDK, expo-server-sdk).
- * Локално: няма .cjs файл → зарежда директно ../backend/index.js.
+ * Production: colortrack-server.cjs (esbuild). На Vercel не падай към ../backend/index.js
+ * — там няма node_modules в Lambda и express липсва.
  */
 const fs = require('fs');
 const path = require('path');
 const { sendErrorJson } = require('../backend/errorResponse.js');
 
-const bundlePath = path.join(__dirname, 'colortrack-server.cjs');
+function onVercel() {
+  return process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+}
+
+function resolveBundlePath() {
+  const candidates = [
+    path.join(__dirname, 'colortrack-server.cjs'),
+    path.join(__dirname, '..', 'lib', 'colortrack-server.cjs'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function loadAppModule() {
+  const bundle = resolveBundlePath();
+  if (bundle) {
+    return require(bundle);
+  }
+  if (onVercel()) {
+    const err = new Error(
+      'Missing colortrack-server.cjs after build (check installCommand, includeFiles, and that the bundle path is not gitignored).',
+    );
+    err.code = 'vercel_bundle_missing';
+    err.expose = true;
+    throw err;
+  }
+  return require('../backend/index.js');
+}
 
 let app;
 let ensureInitialized;
 let backendLoadError;
 try {
-  const m = fs.existsSync(bundlePath) ? require(bundlePath) : require('../backend/index.js');
-  ({ app, ensureInitialized } = m);
+  ({ app, ensureInitialized } = loadAppModule());
 } catch (e) {
   backendLoadError = e;
   console.error('ColorTrack api: failed to load app bundle', e);

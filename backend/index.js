@@ -1443,7 +1443,23 @@ app.get('/api/visits/:id', async (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  const method = req.method;
+  const url = req.originalUrl || req.url;
+  console.error(
+    '[ColorTrack API error]',
+    JSON.stringify({
+      method,
+      url,
+      message: err && err.message,
+      code: err && err.code,
+      name: err && err.name,
+    }),
+  );
+  if (err && err.stack) {
+    console.error(err.stack);
+  } else {
+    console.error(err);
+  }
   if (res.headersSent) {
     return next(err);
   }

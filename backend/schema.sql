@@ -25,7 +25,7 @@ DROP TABLE IF EXISTS salons CASCADE;
 DROP TYPE IF EXISTS formula_section CASCADE;
 DROP TYPE IF EXISTS inventory_category CASCADE;
 
-CREATE TYPE formula_section AS ENUM ('roots', 'lengths', 'toner', 'other');
+CREATE TYPE formula_section AS ENUM ('roots', 'lengths', 'toner', 'other', 'developer');
 
 CREATE TABLE salons (
   id SERIAL PRIMARY KEY,

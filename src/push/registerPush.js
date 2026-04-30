@@ -37,7 +37,7 @@ export async function registerExpoPushIfPossible() {
   const token = tokenRow?.data;
   if (!token) return;
   try {
-    await apiPost('/api/push/register', { token });
+    await apiPost('/api/push/register', { token }, { clearSessionOn401: false });
   } catch {
     /* ignore */
   }

@@ -22,6 +22,7 @@ const SECTION_LABEL = {
   roots: 'Roots',
   lengths: 'Lengths',
   toner: 'Toner',
+  developer: 'Developer / oxidant',
   other: 'Other',
 };
 

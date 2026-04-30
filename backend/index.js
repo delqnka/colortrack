@@ -1187,7 +1187,7 @@ app.get('/api/appointments/days', async (req, res, next) => {
   }
 });
 
-const FORMULA_SECTIONS = new Set(['roots', 'lengths', 'toner', 'other']);
+const FORMULA_SECTIONS = new Set(['roots', 'lengths', 'toner', 'other', 'developer']);
 
 app.post('/api/visits', async (req, res, next) => {
   try {

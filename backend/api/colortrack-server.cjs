@@ -29569,6 +29569,14 @@ var require_schemaEnsure = __commonJS({
       WHEN duplicate_object THEN NULL;
     END $ct$
   `;
+      try {
+        await sql`ALTER TYPE formula_section ADD VALUE IF NOT EXISTS 'developer'`;
+      } catch {
+        try {
+          await sql`ALTER TYPE formula_section ADD VALUE 'developer'`;
+        } catch {
+        }
+      }
       await sql`
     CREATE TABLE IF NOT EXISTS salons (
       id SERIAL PRIMARY KEY,
@@ -44195,7 +44203,7 @@ app.get("/api/appointments/days", async (req, res, next) => {
     next(e);
   }
 });
-var FORMULA_SECTIONS = /* @__PURE__ */ new Set(["roots", "lengths", "toner", "other"]);
+var FORMULA_SECTIONS = /* @__PURE__ */ new Set(["roots", "lengths", "toner", "other", "developer"]);
 app.post("/api/visits", async (req, res, next) => {
   try {
     const sql = getSql();

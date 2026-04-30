@@ -11,6 +11,16 @@ async function ensureSchema(sql) {
     END $ct$
   `;
 
+  try {
+    await sql`ALTER TYPE formula_section ADD VALUE IF NOT EXISTS 'developer'`;
+  } catch {
+    try {
+      await sql`ALTER TYPE formula_section ADD VALUE 'developer'`;
+    } catch {
+      /* value may already exist on older Postgres without IF NOT EXISTS */
+    }
+  }
+
   await sql`
     CREATE TABLE IF NOT EXISTS salons (
       id SERIAL PRIMARY KEY,

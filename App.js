@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState } from 'react';
-import { View, Pressable, useWindowDimensions } from 'react-native';
+import { View, Pressable, useWindowDimensions, DeviceEventEmitter } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -189,6 +189,13 @@ export default function App() {
     });
     return () => sub();
   }, [refreshAuth]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('colortrack:session-cleared', () => {
+      setSignedIn(false);
+    });
+    return () => sub.remove();
+  }, []);
 
   if (!authReady) {
     return (

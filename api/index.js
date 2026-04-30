@@ -1,25 +1,30 @@
 /**
- * Vercel entry при празен Root Directory.
- * Production: `api/colortrack-server.cjs` е комитнат (esbuild); `api/node_modules` се инсталира при installCommand.
- * Локално без .cjs: `npm run bundle:api` или зарежда се ../backend/index.js.
+ * Vercel entry при празен Root Directory (цялото repo).
+ * Бъндълът е в `backend/api/colortrack-server.cjs` — същият път се деплойва и при Root Directory = `backend`.
  */
+const path = require('path');
 const { sendErrorJson } = require('../backend/errorResponse.js');
 
 function onVercel() {
   return process.env.VERCEL === '1' || process.env.VERCEL === 'true';
 }
 
+const bundlePath = path.join(__dirname, '..', 'backend', 'api', 'colortrack-server.cjs');
+
 function loadAppModule() {
   try {
-    return require('./colortrack-server.cjs');
+    return require(bundlePath);
   } catch (e) {
     if (onVercel()) {
-      const err = new Error(
-        'colortrack-server.cjs missing from repo or api/ bundle. Run: npm run bundle:api and commit api/colortrack-server.cjs',
-      );
-      err.code = 'vercel_bundle_missing';
-      err.expose = true;
-      throw err;
+      if (e && e.code === 'MODULE_NOT_FOUND') {
+        const err = new Error(
+          `Missing ${bundlePath} in deployment. Run: npm run bundle:api then commit backend/api/colortrack-server.cjs`,
+        );
+        err.code = 'vercel_bundle_missing';
+        err.expose = true;
+        throw err;
+      }
+      throw e;
     }
     return require('../backend/index.js');
   }

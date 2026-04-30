@@ -1,16 +1,42 @@
 /**
- * Vercel entry при Root Directory = backend.
+ * Vercel entry при Root Directory = backend (проектът е само папката backend).
  */
 const { sendErrorJson } = require('../errorResponse.js');
+const path = require('path');
+
+function onVercel() {
+  return process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+}
+
+const bundlePath = path.join(__dirname, 'colortrack-server.cjs');
+
+function loadAppModule() {
+  try {
+    return require(bundlePath);
+  } catch (e) {
+    if (onVercel()) {
+      if (e && e.code === 'MODULE_NOT_FOUND') {
+        const err = new Error(
+          `Missing backend/api/colortrack-server.cjs. Run from repo root: npm run bundle:api && commit.`,
+        );
+        err.code = 'vercel_bundle_missing';
+        err.expose = true;
+        throw err;
+      }
+      throw e;
+    }
+    return require('../index.js');
+  }
+}
 
 let app;
 let ensureInitialized;
 let backendLoadError;
 try {
-  ({ app, ensureInitialized } = require('../index.js'));
+  ({ app, ensureInitialized } = loadAppModule());
 } catch (e) {
   backendLoadError = e;
-  console.error('ColorTrack api: failed to load ../index.js', e);
+  console.error('ColorTrack backend/api: failed to load app', e);
 }
 
 function untilResponseDone(res) {

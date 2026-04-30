@@ -1,12 +1,21 @@
 /**
- * Vercel entry при Root Directory = празно (цялото repo).
- * Зависимостите са в backend/node_modules — resolve оттам.
+ * Vercel entry при празен Root Directory. Build: `vercel.json` installCommand
+ * копира `serverless-http` в корен `node_modules`, за да се открие от трасера и Node.
  */
 const path = require('path');
 
-const backendDir = path.join(__dirname, '..', 'backend');
-const serverless = require(require.resolve('serverless-http', { paths: [backendDir] }));
-const { app, ensureInitialized } = require(path.join(backendDir, 'index.js'));
+const backendRoot = path.join(__dirname, '..', 'backend');
+
+function loadServerless() {
+  try {
+    return require('serverless-http');
+  } catch {
+    return require(path.join(backendRoot, 'node_modules', 'serverless-http'));
+  }
+}
+
+const serverless = loadServerless();
+const { app, ensureInitialized } = require(path.join(backendRoot, 'index.js'));
 
 let handler;
 
@@ -20,11 +29,16 @@ module.exports = async (req, res) => {
       return;
     }
     console.error(e);
-    res.status(500).json({ error: 'internal' });
+    if (!res.headersSent) res.status(500).json({ error: 'internal' });
     return;
   }
   if (!handler) {
     handler = serverless(app, { binary: ['image/*', 'application/octet-stream'] });
   }
-  return handler(req, res);
+  try {
+    return await handler(req, res);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'internal' });
+  }
 };

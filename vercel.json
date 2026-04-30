@@ -1,12 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "cd backend && npm install",
+  "installCommand": "cd backend && npm install && cd .. && rm -rf node_modules && cp -R backend/node_modules ./node_modules",
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
-      "includeFiles": "backend/**"
+      "includeFiles": ["backend/**/*.js", "node_modules/**"]
     }
   }
 }

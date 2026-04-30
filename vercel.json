@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "cd backend && npm install && mkdir -p ../node_modules && cp -R node_modules/serverless-http ../node_modules/",
+  "installCommand": "cd backend && npm install",
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
   "functions": {
     "api/index.js": {

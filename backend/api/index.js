@@ -1,11 +1,15 @@
 /**
- * Vercel serverless entry: forwards all HTTP to Express (see ../index.js).
- * In Vercel Dashboard set Project → Root Directory to `backend`.
+ * Vercel serverless entry при Root Directory = backend.
+ * Използваме директно Express с req/res (без serverless-http за Express 5).
  */
-const serverless = require('serverless-http');
 const { app, ensureInitialized } = require('../index.js');
 
-let handler;
+function untilResponseDone(res) {
+  return new Promise((resolve) => {
+    res.once('finish', resolve);
+    res.once('close', resolve);
+  });
+}
 
 module.exports = async (req, res) => {
   try {
@@ -20,8 +24,14 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: 'internal' });
     return;
   }
-  if (!handler) {
-    handler = serverless(app, { binary: ['image/*', 'application/octet-stream'] });
+
+  const done = untilResponseDone(res);
+  try {
+    app(req, res);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'internal' });
+    return;
   }
-  return handler(req, res);
+  await done;
 };

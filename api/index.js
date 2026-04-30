@@ -1,23 +1,15 @@
 /**
- * Vercel entry при празен Root Directory. Build: `vercel.json` installCommand
- * копира `serverless-http` в корен `node_modules`, за да се открие от трасера и Node.
+ * Vercel entry при празен Root Directory.
+ * Express се вика директно с Node req/res (без serverless-http — Express 5 не е стабилен с него).
  */
-const path = require('path');
+const { app, ensureInitialized } = require('../backend/index.js');
 
-const backendRoot = path.join(__dirname, '..', 'backend');
-
-function loadServerless() {
-  try {
-    return require('serverless-http');
-  } catch {
-    return require(path.join(backendRoot, 'node_modules', 'serverless-http'));
-  }
+function untilResponseDone(res) {
+  return new Promise((resolve) => {
+    res.once('finish', resolve);
+    res.once('close', resolve);
+  });
 }
-
-const serverless = loadServerless();
-const { app, ensureInitialized } = require(path.join(backendRoot, 'index.js'));
-
-let handler;
 
 module.exports = async (req, res) => {
   try {
@@ -32,13 +24,14 @@ module.exports = async (req, res) => {
     if (!res.headersSent) res.status(500).json({ error: 'internal' });
     return;
   }
-  if (!handler) {
-    handler = serverless(app, { binary: ['image/*', 'application/octet-stream'] });
-  }
+
+  const done = untilResponseDone(res);
   try {
-    return await handler(req, res);
+    app(req, res);
   } catch (err) {
     console.error(err);
     if (!res.headersSent) res.status(500).json({ error: 'internal' });
+    return;
   }
+  await done;
 };

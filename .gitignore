@@ -3,10 +3,6 @@
 # dependencies
 node_modules/
 
-# Бележка: не игнорирай api/colortrack-server.cjs — Vercel може да го маха от
-# serverless bundle, ако е в .gitignore, дори да е генериран при installCommand.
-# Файлът е ~2MB; не го комитвай (остава untracked след локален build).
-
 # Expo
 .expo/
 dist/

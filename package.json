@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "bundle:api": "bash scripts/bundle-api.sh",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",

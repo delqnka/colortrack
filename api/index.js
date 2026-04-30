@@ -1,41 +1,28 @@
 /**
  * Vercel entry при празен Root Directory.
- * Production: colortrack-server.cjs (esbuild). На Vercel не падай към ../backend/index.js
- * — там няма node_modules в Lambda и express липсва.
+ * Production: `api/colortrack-server.cjs` е комитнат (esbuild); `api/node_modules` се инсталира при installCommand.
+ * Локално без .cjs: `npm run bundle:api` или зарежда се ../backend/index.js.
  */
-const fs = require('fs');
-const path = require('path');
 const { sendErrorJson } = require('../backend/errorResponse.js');
 
 function onVercel() {
   return process.env.VERCEL === '1' || process.env.VERCEL === 'true';
 }
 
-function resolveBundlePath() {
-  const candidates = [
-    path.join(__dirname, 'colortrack-server.cjs'),
-    path.join(__dirname, '..', 'lib', 'colortrack-server.cjs'),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
 function loadAppModule() {
-  const bundle = resolveBundlePath();
-  if (bundle) {
-    return require(bundle);
+  try {
+    return require('./colortrack-server.cjs');
+  } catch (e) {
+    if (onVercel()) {
+      const err = new Error(
+        'colortrack-server.cjs missing from repo or api/ bundle. Run: npm run bundle:api and commit api/colortrack-server.cjs',
+      );
+      err.code = 'vercel_bundle_missing';
+      err.expose = true;
+      throw err;
+    }
+    return require('../backend/index.js');
   }
-  if (onVercel()) {
-    const err = new Error(
-      'Missing colortrack-server.cjs after build (check installCommand, includeFiles, and that the bundle path is not gitignored).',
-    );
-    err.code = 'vercel_bundle_missing';
-    err.expose = true;
-    throw err;
-  }
-  return require('../backend/index.js');
 }
 
 let app;
@@ -45,7 +32,7 @@ try {
   ({ app, ensureInitialized } = loadAppModule());
 } catch (e) {
   backendLoadError = e;
-  console.error('ColorTrack api: failed to load app bundle', e);
+  console.error('ColorTrack api: failed to load app', e);
 }
 
 function untilResponseDone(res) {

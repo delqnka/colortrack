@@ -57,7 +57,7 @@ app.post('/api/auth/apple', async (req, res, next) => {
 app.post('/api/push/register', async (req, res, next) => {
   try {
     const token = typeof (req.body || {}).token === 'string' ? req.body.token.trim() : '';
-    if (!token || !push.Expo.isExpoPushToken(token)) {
+    if (!token || !push.isExpoPushToken(token)) {
       return res.status(400).json({ error: 'bad_request' });
     }
     const sql = getSql();

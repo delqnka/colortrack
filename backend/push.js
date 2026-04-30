@@ -1,6 +1,30 @@
-const { Expo } = require('expo-server-sdk');
+/** Matches expo-server-sdk static isExpoPushToken (must stay in sync with upstream). */
+function isExpoPushToken(token) {
+  return (
+    typeof token === 'string' &&
+    (((token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken[')) &&
+      token.endsWith(']')) ||
+      /^[a-z\d]{8}-[a-z\d]{4}-[a-z\d]{4}-[a-z\d]{4}-[a-z\d]{12}$/i.test(token))
+  );
+}
 
-const expo = new Expo();
+let expoModulePromise = null;
+function loadExpoModule() {
+  if (!expoModulePromise) {
+    expoModulePromise = import('expo-server-sdk');
+  }
+  return expoModulePromise;
+}
+
+/** Lazy singleton: expo-server-sdk uses createRequire(import.meta.url) and cannot live inside esbuild CJS bundle. */
+let expoClient = null;
+async function getExpo() {
+  if (!expoClient) {
+    const { Expo } = await loadExpoModule();
+    expoClient = new Expo();
+  }
+  return expoClient;
+}
 
 async function getTokensForSalon(sql, salonId) {
   const rows = await sql`
@@ -9,10 +33,11 @@ async function getTokensForSalon(sql, salonId) {
     INNER JOIN staff s ON s.id = p.staff_id
     WHERE s.salon_id = ${salonId}
   `;
-  return rows.map((r) => String(r.expo_token)).filter((t) => Expo.isExpoPushToken(t));
+  return rows.map((r) => String(r.expo_token)).filter((t) => isExpoPushToken(t));
 }
 
 async function notifySalon(sql, salonId, title, body, data) {
+  const expo = await getExpo();
   const tokens = await getTokensForSalon(sql, salonId);
   if (!tokens.length) return { sent: 0 };
 
@@ -39,4 +64,4 @@ async function notifySalon(sql, salonId, title, body, data) {
   return { sent };
 }
 
-module.exports = { notifySalon, getTokensForSalon, Expo };
+module.exports = { notifySalon, getTokensForSalon, isExpoPushToken };

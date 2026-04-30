@@ -1,7 +1,6 @@
 /**
  * Vercel entry при празен Root Directory (цялото repo).
- * Бъндълът е в `backend/api/colortrack-server.cjs`.
- * Използвай литерален string в require(), за да го включи Vercel node-file-trace.
+ * Бъндълът е `api/colortrack-server.cjs` (редом с този файл), за да го включи node-file-trace.
  */
 const { sendErrorJson } = require('../backend/errorResponse.js');
 
@@ -11,12 +10,12 @@ function onVercel() {
 
 function loadAppModule() {
   try {
-    return require('../backend/api/colortrack-server.cjs');
+    return require('./colortrack-server.cjs');
   } catch (e) {
     if (onVercel()) {
       if (e && e.code === 'MODULE_NOT_FOUND') {
         const err = new Error(
-          `Missing backend/api/colortrack-server.cjs in deployment. Run: npm run bundle:api then commit that file.`,
+          `Missing api/colortrack-server.cjs in deployment. Run: npm run bundle:api then commit api/colortrack-server.cjs`,
         );
         err.code = 'vercel_bundle_missing';
         err.expose = true;

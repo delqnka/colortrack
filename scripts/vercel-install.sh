@@ -5,3 +5,5 @@ cd "$root/backend"
 npm install
 cd "$root/backend/api"
 npm install
+cd "$root/api"
+npm install

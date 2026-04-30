@@ -8,7 +8,6 @@ out_root_api="$root/api/colortrack-server.cjs"
 npx --yes esbuild@0.24.2 index.js \
   --bundle --platform=node --format=cjs \
   --legal-comments=none \
-  --external:expo-server-sdk \
   --external:@aws-sdk/client-s3 \
   --external:@aws-sdk/s3-request-presigner \
   --outfile="$out_backend"

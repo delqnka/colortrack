@@ -13,6 +13,8 @@ const { jsonForError } = require('./errorResponse');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.get(/^\/favicon\.(ico|png)$/i, (req, res) => res.status(204).end());
+
 function authGate(req, res, next) {
   if (req.method === 'POST' && req.path === '/api/auth/register') return next();
   if (req.method === 'POST' && req.path === '/api/auth/login') return next();

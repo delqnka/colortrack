@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { apiGet } from '../api/client';
+import { glassPurpleFab } from '../theme/glassUi';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -401,11 +402,11 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.searchRow}>
-              <Ionicons name="search" size={20} color="#8E8E93" style={{ marginRight: 8 }} />
+              <Ionicons name="search" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
               <TextInput
                 style={styles.searchInput}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={searchQ}
                 onChangeText={onSearchChange}
                 autoCapitalize="none"
@@ -450,7 +451,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F5F5FA',
+    backgroundColor: '#FFFFFF',
   },
   container: {
     flex: 1,
@@ -480,27 +481,18 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#1C1C1E',
   },
   date: {
     fontSize: 14,
-    color: '#8E8E93',
-    fontWeight: '500',
+    color: '#1C1C1E',
+    fontWeight: '400',
     marginTop: 2,
   },
   searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFF',
+    ...glassPurpleFab,
     justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
   },
   bannerContainer: {
     backgroundColor: '#D1C4E9',
@@ -516,14 +508,14 @@ const styles = StyleSheet.create({
   },
   bannerTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#1C1C1E',
     marginBottom: 4,
   },
   bannerSubtitle: {
     fontSize: 14,
-    color: '#4A4A4A',
-    fontWeight: '500',
+    color: '#1C1C1E',
+    fontWeight: '400',
     marginBottom: 16,
   },
   moreDots: { flexDirection: 'row', gap: 6, marginTop: 12, alignItems: 'center' },
@@ -551,7 +543,7 @@ const styles = StyleSheet.create({
   },
   miniAvatarText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#1C1C1E',
   },
   abstractShape: {
@@ -586,25 +578,25 @@ const styles = StyleSheet.create({
   },
   dateTextDayActive: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '400',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   dateTextNumActive: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#FFFFFF',
   },
   dateTextDayIdle: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
+    fontWeight: '400',
+    color: '#1C1C1E',
     marginBottom: 4,
   },
   dateTextNumIdle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#AEAEB2',
+    fontWeight: '400',
+    color: '#1C1C1E',
   },
   dateTextDayToday: {
     color: '#5E35B1',
@@ -614,7 +606,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#1C1C1E',
     marginBottom: 16,
   },
@@ -643,7 +635,7 @@ const styles = StyleSheet.create({
   },
   badgeTextOrange: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#FFF',
   },
   badgeBlue: {
@@ -656,20 +648,20 @@ const styles = StyleSheet.create({
   },
   badgeTextBlue: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#FFF',
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#1C1C1E',
     marginBottom: 8,
   },
   cardSubtitle: {
     fontSize: 13,
-    color: '#555',
+    color: '#1C1C1E',
     marginBottom: 2,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   cardFooter: {
     flexDirection: 'row',
@@ -687,7 +679,7 @@ const styles = StyleSheet.create({
   },
   cardFooterSubtitle: {
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: '400',
     color: '#1C1C1E',
   },
   iconsRow: {
@@ -712,7 +704,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   modalSheet: {
-    backgroundColor: '#F5F5FA',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '88%',
@@ -728,8 +720,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { fontSize: 17, fontWeight: '800', color: '#1C1C1E' },
-  modalClose: { fontSize: 17, fontWeight: '600', color: '#5E35B1' },
+  modalTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  modalClose: { fontSize: 17, fontWeight: '400', color: '#5E35B1' },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -752,7 +744,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  searchHitName: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  searchHitPhone: { fontSize: 14, color: '#8E8E93', marginTop: 4 },
-  emptySearch: { textAlign: 'center', color: '#8E8E93', marginTop: 24 },
+  searchHitName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
+  searchHitPhone: { fontSize: 14, color: '#1C1C1E', marginTop: 4 },
+  emptySearch: { textAlign: 'center', color: '#1C1C1E', marginTop: 24 },
 });

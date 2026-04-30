@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet } from '../api/client';
+import { glassPurpleFabBar } from '../theme/glassUi';
 
 const ORDER = ['dye', 'oxidant', 'retail', 'consumable'];
 
@@ -84,7 +85,7 @@ export default function InventoryScreen({ navigation }) {
             activeOpacity={0.85}
             onPress={() => navigation.navigate('InventoryItem')}
           >
-            <Ionicons name="add" size={26} color="#1C1C1E" />
+            <Ionicons name="add" size={26} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -123,7 +124,7 @@ export default function InventoryScreen({ navigation }) {
                           <Text style={styles.lowLbl}>{item.low_stock_threshold}</Text>
                         ) : null}
                       </View>
-                      <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+                      <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -139,7 +140,7 @@ export default function InventoryScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F5FA' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -151,17 +152,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: '#1C1C1E' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    ...glassPurpleFabBar,
   },
   badge: {
     flexDirection: 'row',
@@ -172,14 +163,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 14,
   },
-  badgeText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  badgeText: { color: '#fff', fontWeight: '400', fontSize: 13 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
   section: { marginBottom: 22 },
   sectionTitle: {
     fontSize: 15,
-    fontWeight: '800',
-    color: '#8E8E93',
+    fontWeight: '400',
+    color: '#1C1C1E',
     marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -197,11 +188,11 @@ const styles = StyleSheet.create({
   },
   rowLow: { borderColor: '#FFCDD2', backgroundColor: '#FFF8F8' },
   rowMain: { flex: 1, paddingRight: 12 },
-  rowName: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  rowMeta: { marginTop: 4, fontSize: 13, color: '#8E8E93' },
+  rowName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
+  rowMeta: { marginTop: 4, fontSize: 13, color: '#1C1C1E' },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   qty: { alignItems: 'flex-end' },
-  qtyVal: { fontSize: 16, fontWeight: '800', color: '#1C1C1E' },
+  qtyVal: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
   qtyWarn: { color: '#C62828' },
-  lowLbl: { marginTop: 4, fontSize: 11, fontWeight: '700', color: '#E53935' },
+  lowLbl: { marginTop: 4, fontSize: 11, fontWeight: '400', color: '#E53935' },
 });

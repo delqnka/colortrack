@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { apiGet, apiPost } from '../api/client';
+import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
+import { formatDisplayDate, parseISODateToLocal } from '../lib/formatDate';
 
 const SECTIONS = [
   { key: 'roots', label: 'Roots' },
@@ -49,13 +53,19 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   const [procedureName, setProcedureName] = useState('');
   const [chairLabel, setChairLabel] = useState('');
   const [notes, setNotes] = useState('');
+  const [amountUsd, setAmountUsd] = useState('');
   const [visitDate, setVisitDate] = useState(() => toYMD(new Date()));
   const [lines, setLines] = useState(() => [newLine()]);
+
+  const [linkedAppointmentId, setLinkedAppointmentId] = useState(null);
+  const prefilledApptRef = useRef(null);
+  const prefilledDeviceCalRef = useRef(null);
 
   const [inventory, setInventory] = useState([]);
   const [loadingStock, setLoadingStock] = useState(true);
   const [pickerForKey, setPickerForKey] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [datePickMode, setDatePickMode] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +83,55 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       cancelled = true;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const aid = route.params?.appointmentId;
+      if (aid != null && Number(aid) > 0) {
+        const n = Number(aid);
+        setLinkedAppointmentId(n);
+        prefilledDeviceCalRef.current = null;
+        if (prefilledApptRef.current !== n) {
+          prefilledApptRef.current = n;
+          const ip = route.params?.initialProcedure;
+          if (ip != null && String(ip).trim()) setProcedureName(String(ip).trim());
+          const id = route.params?.initialDate;
+          if (id && /^\d{4}-\d{2}-\d{2}$/.test(String(id))) setVisitDate(String(id));
+          const ic = route.params?.initialChair;
+          if (ic != null && String(ic).trim()) setChairLabel(String(ic).trim());
+          const ino = route.params?.initialNotes;
+          if (ino != null && String(ino).trim()) setNotes(String(ino).trim());
+        }
+      } else {
+        setLinkedAppointmentId(null);
+        prefilledApptRef.current = null;
+        const dcid = route.params?.deviceCalendarEventId;
+        if (dcid != null && String(dcid).trim()) {
+          const key = String(dcid).trim();
+          if (prefilledDeviceCalRef.current !== key) {
+            prefilledDeviceCalRef.current = key;
+            const ip = route.params?.initialProcedure;
+            if (ip != null && String(ip).trim()) setProcedureName(String(ip).trim());
+            const id = route.params?.initialDate;
+            if (id && /^\d{4}-\d{2}-\d{2}$/.test(String(id))) setVisitDate(String(id));
+            const ic = route.params?.initialChair;
+            if (ic != null && String(ic).trim()) setChairLabel(String(ic).trim());
+            const ino = route.params?.initialNotes;
+            if (ino != null && String(ino).trim()) setNotes(String(ino).trim());
+          }
+        } else {
+          prefilledDeviceCalRef.current = null;
+        }
+      }
+    }, [
+      route.params?.appointmentId,
+      route.params?.deviceCalendarEventId,
+      route.params?.initialProcedure,
+      route.params?.initialDate,
+      route.params?.initialChair,
+      route.params?.initialNotes,
+    ]),
+  );
 
   const updateLine = (key, patch) => {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -121,14 +180,27 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
     setSubmitting(true);
     try {
-      await apiPost('/api/visits', {
+      const body = {
         client_id: clientId,
         visit_date: /^\d{4}-\d{2}-\d{2}$/.test(visitDate) ? visitDate : undefined,
         procedure_name: proc,
         chair_label: chairLabel.trim() || null,
         notes: notes.trim() || null,
         lines: validLines,
-      });
+      };
+      if (linkedAppointmentId) {
+        body.appointment_id = linkedAppointmentId;
+      }
+      const usdRaw = amountUsd.trim().replace(',', '.');
+      if (usdRaw) {
+        const u = Number(usdRaw);
+        if (Number.isFinite(u) && u >= 0) body.amount_usd = u;
+      }
+      const evId = route.params?.deviceCalendarEventId;
+      if (evId != null && String(evId).trim()) {
+        body.device_calendar_event_id = String(evId).trim().slice(0, 256);
+      }
+      await apiPost('/api/visits', body);
       navigation.goBack();
     } catch (e) {
       Alert.alert('', e.message || '');
@@ -153,11 +225,11 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
-            <Ionicons name="close" size={26} color="#1C1C1E" />
-          </TouchableOpacity>
+          <View style={styles.headerSide} />
           <Text style={styles.title}>Formula</Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
+            <Ionicons name="close" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -169,26 +241,26 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={procedureName}
             onChangeText={setProcedureName}
           />
 
           <Text style={styles.label}>Date</Text>
-          <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#C7C7CC"
-            value={visitDate}
-            onChangeText={setVisitDate}
-            autoCapitalize="none"
-          />
+          <TouchableOpacity
+            style={[styles.input, styles.datePickRow]}
+            onPress={() => setDatePickMode('date')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.datePickText}>{formatDisplayDate(visitDate)}</Text>
+            <Ionicons name="calendar-outline" size={22} color="#1C1C1E" />
+          </TouchableOpacity>
 
           <Text style={styles.label}>Chair</Text>
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={chairLabel}
             onChangeText={setChairLabel}
           />
@@ -197,16 +269,26 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           <TextInput
             style={[styles.input, styles.inputMulti]}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={notes}
             onChangeText={setNotes}
             multiline
           />
 
+          <Text style={styles.label}>Paid (USD, optional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder=""
+            placeholderTextColor="#1C1C1E"
+            value={amountUsd}
+            onChangeText={setAmountUsd}
+            keyboardType="decimal-pad"
+          />
+
           <View style={styles.linesHeader}>
             <Text style={styles.sectionTitle}>Formula lines</Text>
             <TouchableOpacity onPress={addRow} style={styles.addChip} activeOpacity={0.85}>
-              <Ionicons name="add" size={20} color="#5E35B1" />
+              <Ionicons name="add" size={20} color={BRAND_PURPLE} />
               <Text style={styles.addChipText}>Line</Text>
             </TouchableOpacity>
           </View>
@@ -239,7 +321,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={line.brand}
                 onChangeText={(t) => updateLine(line.key, { brand: t })}
               />
@@ -248,7 +330,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={line.shade_code}
                 onChangeText={(t) => updateLine(line.key, { shade_code: t })}
                 autoCapitalize="characters"
@@ -258,7 +340,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={String(line.amount)}
                 onChangeText={(t) => updateLine(line.key, { amount: t })}
                 keyboardType="decimal-pad"
@@ -304,6 +386,53 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {Platform.OS === 'ios' && datePickMode != null ? (
+        <Modal visible animationType="slide" transparent>
+          <View style={styles.iosPickerRoot}>
+            <TouchableOpacity
+              style={styles.iosPickerBackdrop}
+              activeOpacity={1}
+              onPress={() => setDatePickMode(null)}
+            />
+            <View style={styles.iosPickerSheet}>
+              <View style={styles.iosPickerToolbar}>
+                <View style={{ width: 72 }} />
+                <Text style={[styles.iosPickerTitleText, { flex: 1, textAlign: 'center' }]}>Date</Text>
+                <TouchableOpacity
+                  style={{ width: 72, alignItems: 'flex-end' }}
+                  onPress={() => setDatePickMode(null)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.modalClose}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={parseISODateToLocal(visitDate)}
+                mode="date"
+                display="spinner"
+                themeVariant="light"
+                onChange={(_, selected) => {
+                  if (selected) setVisitDate(toYMD(selected));
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+
+      {Platform.OS === 'android' && datePickMode != null ? (
+        <DateTimePicker
+          value={parseISODateToLocal(visitDate)}
+          mode="date"
+          display="default"
+          onChange={(event, selected) => {
+            setDatePickMode(null);
+            if (event.type === 'dismissed') return;
+            if (selected) setVisitDate(toYMD(selected));
+          }}
+        />
+      ) : null}
+
       <Modal visible={!!pickerForKey} animationType="slide" transparent>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
@@ -329,7 +458,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                         {item.unit}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+                    <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={null}
@@ -344,8 +473,8 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safe: { flex: 1, backgroundColor: '#F5F5FA' },
-  err: { textAlign: 'center', marginTop: 40, color: '#8E8E93' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
+  err: { textAlign: 'center', marginTop: 40, color: '#1C1C1E' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -353,18 +482,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  headerSide: { width: 40, height: 40 },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...glassPurpleIconBtn,
   },
-  title: { fontSize: 18, fontWeight: '800', color: '#1C1C1E' },
+  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  label: { fontSize: 14, fontWeight: '700', color: '#8E8E93', marginBottom: 8, marginTop: 4 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#1C1C1E' },
+  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
+  sectionTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
   linesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,7 +506,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#EDE7F6',
   },
-  addChipText: { fontWeight: '700', color: '#5E35B1', fontSize: 14 },
+  addChipText: { fontWeight: '400', color: BRAND_PURPLE, fontSize: 14 },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -393,6 +518,12 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5EA',
   },
   inputMulti: { minHeight: 88, textAlignVertical: 'top' },
+  datePickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  datePickText: { fontSize: 16, color: '#1C1C1E', flex: 1 },
   lineCard: {
     backgroundColor: '#fff',
     borderRadius: 20,
@@ -407,7 +538,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   lineTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  lineTitle: { fontWeight: '800', color: '#1C1C1E', fontSize: 15 },
+  lineTitle: { fontWeight: '400', color: '#1C1C1E', fontSize: 15 },
   segScroll: { gap: 8, marginBottom: 14 },
   seg: {
     paddingHorizontal: 14,
@@ -416,9 +547,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   segOn: { backgroundColor: '#1C1C1E' },
-  segTxt: { fontWeight: '600', color: '#555', fontSize: 13 },
+  segTxt: { fontWeight: '400', color: '#1C1C1E', fontSize: 13 },
   segTxtOn: { color: '#fff' },
-  labSm: { fontSize: 12, fontWeight: '700', color: '#8E8E93', marginBottom: 6, marginTop: 8 },
+  labSm: { fontSize: 12, fontWeight: '400', color: '#1C1C1E', marginBottom: 6, marginTop: 8 },
   linkStockBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -429,7 +560,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3E5F5',
     borderRadius: 14,
   },
-  linkStockTxt: { fontWeight: '700', color: '#5E35B1', fontSize: 14 },
+  linkStockTxt: { fontWeight: '400', color: '#5E35B1', fontSize: 14 },
   stockLinked: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -439,8 +570,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     borderRadius: 14,
   },
-  stockLinkedTxt: { flex: 1, fontSize: 13, fontWeight: '600', color: '#1B5E20' },
-  unlink: { fontWeight: '700', color: '#C62828', fontSize: 13 },
+  stockLinkedTxt: { flex: 1, fontSize: 13, fontWeight: '400', color: '#1B5E20' },
+  unlink: { fontWeight: '400', color: '#C62828', fontSize: 13 },
   saveBtn: {
     backgroundColor: '#1C1C1E',
     borderRadius: 16,
@@ -448,14 +579,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  saveTxt: { color: '#fff', fontSize: 17, fontWeight: '400' },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#F5F5FA',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '88%',
@@ -467,8 +598,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1C1C1E' },
-  modalClose: { fontSize: 16, fontWeight: '700', color: '#5E35B1' },
+  modalTitle: { fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
+  modalClose: { fontSize: 16, fontWeight: '400', color: '#5E35B1' },
   stockRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -477,6 +608,28 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 8,
   },
-  stockName: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  stockMeta: { marginTop: 4, fontSize: 13, color: '#8E8E93' },
+  stockName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
+  stockMeta: { marginTop: 4, fontSize: 13, color: '#1C1C1E' },
+  iosPickerRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  iosPickerBackdrop: { flex: 1 },
+  iosPickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 8,
+  },
+  iosPickerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  iosPickerTitleText: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
 });

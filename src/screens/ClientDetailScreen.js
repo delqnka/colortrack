@@ -7,11 +7,16 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { apiGet } from '../api/client';
+import * as ImagePicker from 'expo-image-picker';
+import { apiGet, apiPost, apiDelete } from '../api/client';
+import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
+import { formatDisplayDate } from '../lib/formatDate';
 
 const SECTION_LABEL = {
   roots: 'Roots',
@@ -20,10 +25,28 @@ const SECTION_LABEL = {
   other: 'Other',
 };
 
+const VISIT_SOURCE_LABEL = {
+  device_calendar: 'Device calendar',
+  appointment: 'Salon booking',
+  manual: null,
+};
+
+function formatUsdFromCents(cents) {
+  if (cents == null || cents === '') return null;
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return null;
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n / 100);
+  } catch {
+    return `$${(n / 100).toFixed(2)}`;
+  }
+}
+
 export default function ClientDetailScreen({route, navigation}) {
   const clientId = route.params?.clientId;
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     if (!clientId) {
@@ -66,12 +89,82 @@ export default function ClientDetailScreen({route, navigation}) {
   }
 
   const visits = client.visits || [];
+  const photos = client.photos || [];
+
+  const pickAndUpload = async () => {
+    if (!Number.isFinite(clientId)) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('', 'Photo library access');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const contentType = asset.mimeType && asset.mimeType.startsWith('image/')
+      ? asset.mimeType.split(';')[0].trim().toLowerCase() === 'image/jpg'
+        ? 'image/jpeg'
+        : asset.mimeType.split(';')[0].trim().toLowerCase()
+      : 'image/jpeg';
+
+    setUploading(true);
+    try {
+      const presign = await apiPost(`/api/clients/${clientId}/photos/presign`, { contentType });
+      const fileRes = await fetch(uri);
+      const blob = await fileRes.blob();
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': presign.contentType },
+        body: blob,
+      });
+      if (!putRes.ok) {
+        throw new Error(`Upload failed (${putRes.status})`);
+      }
+      await apiPost(`/api/clients/${clientId}/photos/commit`, {
+        key: presign.key,
+        contentType: presign.contentType,
+      });
+      await load();
+    } catch (e) {
+      Alert.alert('', e.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const confirmRemovePhoto = (photo) => {
+    Alert.alert(
+      'Delete photo',
+      'This removes the photo from the dossier and from cloud storage. You cannot undo this.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiDelete(`/api/clients/${clientId}/photos/${photo.id}`);
+              await load();
+            } catch (e) {
+              Alert.alert('', e.message || '');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const thumbW = Math.floor((Dimensions.get('window').width - 48 - 16) / 3);
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.top}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back} hitSlop={12}>
-          <Ionicons name="arrow-back" size={24} color="#1C1C1E" />
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.topTitle}>Dossier</Text>
         <TouchableOpacity
@@ -79,7 +172,7 @@ export default function ClientDetailScreen({route, navigation}) {
           style={styles.back}
           hitSlop={12}
         >
-          <Ionicons name="pencil" size={20} color="#1C1C1E" />
+          <Ionicons name="pencil" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -103,24 +196,60 @@ export default function ClientDetailScreen({route, navigation}) {
           <Text style={styles.ctaText}>Visit</Text>
         </TouchableOpacity>
 
-        {client.patch_overdue ? (
-          <View style={styles.alert}>
-            <Ionicons name="warning" size={20} color="#B71C1C" />
-            <Text style={styles.alertText}>Patch</Text>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('ClientForm', { clientId })}
+        >
+          <View
+            style={[
+              styles.patchTouch,
+              client.patch_overdue ? styles.patchRowWarn : styles.patchRowOk,
+            ]}
+          >
+            <Ionicons
+              name={client.patch_overdue ? 'warning' : 'checkmark-circle'}
+              size={20}
+              color={client.patch_overdue ? '#B71C1C' : '#2E7D32'}
+            />
+            <View style={styles.patchMid}>
+              <Text
+                style={[
+                  styles.patchTitle,
+                  { color: client.patch_overdue ? '#B71C1C' : '#2E7D32' },
+                ]}
+              >
+                Patch test
+              </Text>
+              <Text style={styles.patchDate}>
+                {client.last_patch_test_at ? formatDisplayDate(client.last_patch_test_at) : '—'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
           </View>
-        ) : (
-          <View style={styles.okBadge}>
-            <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />
-            <Text style={styles.okText}>Patch OK</Text>
-          </View>
-        )}
+        </TouchableOpacity>
 
         <Text style={styles.section}>Visits</Text>
         {visits.length === 0 ? null : (
           visits.map((v) => (
-            <View key={v.id} style={styles.visitCard}>
-              <Text style={styles.visitTitle}>{v.procedure_name}</Text>
-              <Text style={styles.visitDate}>{v.visit_date}</Text>
+            <TouchableOpacity
+              key={v.id}
+              style={styles.visitCard}
+              activeOpacity={0.88}
+              onPress={() => navigation.navigate('VisitDetail', { visitId: v.id })}
+            >
+              <View style={styles.visitCardTop}>
+                <View style={styles.visitCardMain}>
+                  <Text style={styles.visitTitle}>{v.procedure_name}</Text>
+                  <Text style={styles.visitDate}>{formatDisplayDate(v.visit_date)}</Text>
+                  {formatUsdFromCents(v.amount_paid_cents) ? (
+                    <Text style={styles.visitPaid}>{formatUsdFromCents(v.amount_paid_cents)}</Text>
+                  ) : null}
+                  {VISIT_SOURCE_LABEL[v.source] ? (
+                    <Text style={styles.visitSource}>{VISIT_SOURCE_LABEL[v.source]}</Text>
+                  ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
+              </View>
               {v.chair_label ? <Text style={styles.visitSub}>{v.chair_label}</Text> : null}
               {v.formula_lines?.length ? (
                 <View style={styles.formulaBox}>
@@ -136,13 +265,38 @@ export default function ClientDetailScreen({route, navigation}) {
                   ))}
                 </View>
               ) : null}
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
         <Text style={styles.section}>Photos</Text>
-        <View style={styles.placeholder}>
-          <Ionicons name="images-outline" size={28} color="#8E8E93" />
+        <View style={styles.photoGrid}>
+          {photos.map((p) => (
+            <View key={p.id} style={[styles.photoCell, { width: thumbW, height: thumbW }]}>
+              <Image source={{ uri: p.url }} style={styles.photoImage} />
+              <TouchableOpacity
+                style={styles.photoDeleteBtn}
+                onPress={() => confirmRemovePhoto(p)}
+                hitSlop={10}
+                accessibilityLabel="Delete photo"
+                activeOpacity={0.85}
+              >
+                <Ionicons name="trash-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity
+            style={[styles.addPhotoCell, { width: thumbW, height: thumbW }]}
+            onPress={pickAndUpload}
+            disabled={uploading}
+            activeOpacity={0.85}
+          >
+            {uploading ? (
+              <ActivityIndicator color="#5E35B1" />
+            ) : (
+              <Ionicons name="add" size={32} color={BRAND_PURPLE} />
+            )}
+          </TouchableOpacity>
         </View>
         <View style={{ height: 48 }} />
       </ScrollView>
@@ -151,9 +305,9 @@ export default function ClientDetailScreen({route, navigation}) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F5FA' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  miss: { textAlign: 'center', marginTop: 48, color: '#8E8E93' },
+  miss: { textAlign: 'center', marginTop: 48, color: '#1C1C1E' },
   top: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -162,14 +316,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   back: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...glassPurpleIconBtn,
   },
-  topTitle: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
+  topTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
   hero: {
     width: '100%',
@@ -178,8 +327,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ddd',
     marginTop: 8,
   },
-  name: { marginTop: 20, fontSize: 24, fontWeight: '800', color: '#1C1C1E' },
-  meta: { marginTop: 6, fontSize: 15, color: '#8E8E93' },
+  name: { marginTop: 20, fontSize: 24, fontWeight: '400', color: '#1C1C1E' },
+  meta: { marginTop: 6, fontSize: 15, color: '#1C1C1E' },
   cta: {
     marginTop: 18,
     flexDirection: 'row',
@@ -195,29 +344,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  alert: {
-    marginTop: 16,
+  ctaText: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  patchTouch: {
     flexDirection: 'row',
-    gap: 10,
     alignItems: 'center',
-    backgroundColor: '#FFEBEE',
+    gap: 10,
+    marginTop: 16,
     padding: 14,
     borderRadius: 16,
   },
-  alertText: { flex: 1, color: '#B71C1C', fontWeight: '600', fontSize: 14 },
-  okBadge: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#E8F5E9',
-    padding: 12,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-  },
-  okText: { color: '#2E7D32', fontWeight: '600' },
-  section: { marginTop: 28, fontSize: 18, fontWeight: '800', color: '#1C1C1E', marginBottom: 12 },
+  patchRowWarn: { backgroundColor: '#FFEBEE' },
+  patchRowOk: { backgroundColor: '#E8F5E9' },
+  patchMid: { flex: 1 },
+  patchTitle: { fontSize: 14, fontWeight: '400' },
+  patchDate: { fontSize: 13, color: '#1C1C1E', marginTop: 4 },
+  section: { marginTop: 28, fontSize: 18, fontWeight: '400', color: '#1C1C1E', marginBottom: 12 },
   visitCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -229,20 +370,47 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  visitTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  visitDate: { marginTop: 6, fontSize: 14, color: '#8E8E93' },
-  visitSub: { marginTop: 4, fontSize: 13, color: '#555' },
+  visitCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  visitCardMain: { flex: 1 },
+  visitTitle: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
+  visitDate: { marginTop: 6, fontSize: 14, color: '#1C1C1E' },
+  visitPaid: { marginTop: 6, fontSize: 14, fontWeight: '500', color: '#2E7D32' },
+  visitSource: { marginTop: 4, fontSize: 12, color: '#007AFF' },
+  visitSub: { marginTop: 4, fontSize: 13, color: '#1C1C1E' },
   formulaBox: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E5EA' },
-  formulaLine: { fontSize: 13, color: '#333', marginBottom: 6, lineHeight: 18 },
-  formulaSec: { fontWeight: '800', color: '#5E35B1' },
-  placeholder: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
+  formulaLine: { fontSize: 13, color: '#1C1C1E', marginBottom: 6, lineHeight: 18 },
+  formulaSec: { fontWeight: '400', color: '#5E35B1' },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  photoCell: { borderRadius: 12, overflow: 'hidden', backgroundColor: '#eee', position: 'relative' },
+  photoImage: { width: '100%', height: '100%' },
+  photoDeleteBtn: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.52)',
     alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    justifyContent: 'center',
+  },
+  addPhotoCell: {
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#D1C4E9',
     borderStyle: 'dashed',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { View, Pressable, useWindowDimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import NetInfo from '@react-native-community/netinfo';
 
 import HomeScreen from './src/screens/HomeScreen';
 import ClientsScreen from './src/screens/ClientsScreen';
@@ -15,6 +16,11 @@ import InventoryScreen from './src/screens/InventoryScreen';
 import InventoryItemScreen from './src/screens/InventoryItemScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import FormulaBuilderScreen from './src/screens/FormulaBuilderScreen';
+import VisitDetailScreen from './src/screens/VisitDetailScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { loadStoredToken, flushOutbox } from './src/api/client';
+import { registerExpoPushIfPossible } from './src/push/registerPush';
+import { BRAND_PURPLE, glassPurpleTabBar } from './src/theme/glassUi';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -79,14 +85,14 @@ function MainTabs() {
       paddingHorizontal: 12,
       paddingTop: 0,
       paddingBottom: 0,
-      backgroundColor: '#000000',
       borderRadius: TAB_H / 2,
       borderTopWidth: 0,
-      elevation: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.18,
-      shadowRadius: 20,
+      ...glassPurpleTabBar,
+      elevation: 18,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.4,
+      shadowRadius: 16,
     },
     tabBarIcon: ({ focused }) => {
       let iconName;
@@ -112,12 +118,19 @@ function MainTabs() {
                 width: ICON_KNOB,
                 height: ICON_KNOB,
                 borderRadius: ICON_KNOB / 2,
-                backgroundColor: '#FFFFFF',
+                backgroundColor: 'rgba(255, 255, 255, 0.92)',
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.65)',
                 justifyContent: 'center',
                 alignItems: 'center',
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.45,
+                shadowRadius: 6,
+                elevation: 10,
               }}
             >
-              <Ionicons name={iconName} size={size} color="#000000" />
+              <Ionicons name={iconName} size={size} color={BRAND_PURPLE} />
             </View>
           ) : (
             <Ionicons name={iconName} size={size} color="#FFFFFF" />
@@ -156,16 +169,54 @@ function MainTabs() {
 }
 
 export default function App() {
+  const [authReady, setAuthReady] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+
+  const refreshAuth = useCallback(async () => {
+    const t = await loadStoredToken();
+    setSignedIn(Boolean(t));
+    setAuthReady(true);
+    if (t) {
+      await flushOutbox();
+      registerExpoPushIfPossible();
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAuth();
+    const sub = NetInfo.addEventListener(() => {
+      flushOutbox();
+    });
+    return () => sub();
+  }, [refreshAuth]);
+
+  if (!authReady) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: '#fff' }} />
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen name="ClientDetail" component={ClientDetailScreen} />
-          <Stack.Screen name="ClientForm" component={ClientFormScreen} />
-          <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-          <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
-          <Stack.Screen name="FormulaBuilder" component={FormulaBuilderScreen} />
+          {!signedIn ? (
+            <Stack.Screen name="Login">
+              {() => <LoginScreen onLoggedIn={() => setSignedIn(true)} />}
+            </Stack.Screen>
+          ) : (
+            <>
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen name="ClientDetail" component={ClientDetailScreen} />
+              <Stack.Screen name="ClientForm" component={ClientFormScreen} />
+              <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+              <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
+              <Stack.Screen name="FormulaBuilder" component={FormulaBuilderScreen} />
+              <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />
+            </>
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

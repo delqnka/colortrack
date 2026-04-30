@@ -13,9 +13,27 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.colortrack.app",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Attach reference photos to the client dossier.",
+        "NSCalendarsUsageDescription": "ColorTrack shows your device calendar next to salon appointments (e.g. hours from Fresha, Booksy, iCloud).",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_CALENDAR",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.WRITE_CALENDAR"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -24,6 +42,35 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ColorTrack to add photos to the dossier."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#5E35B1",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "ColorTrack reads calendar events to show Booksy, Fresha and other bookings next to your salon schedule."
+        }
+      ],
+      "expo-apple-authentication"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3a128fae-e2c1-4eef-94e3-efcf80c30f69"
+      }
     }
   }
 }

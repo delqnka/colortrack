@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
+import { glassPurpleIconBtn } from '../theme/glassUi';
 
 const CAT_OPTIONS = [
   { key: 'dye', label: 'Color' },
@@ -190,13 +191,13 @@ export default function InventoryItemScreen({ route, navigation }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
-            <Ionicons name="close" size={26} color="#1C1C1E" />
-          </TouchableOpacity>
+          <View style={styles.headerSide} />
           <Text style={styles.headerTitle} numberOfLines={1}>
             {isEdit ? item.name : 'New'}
           </Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
+            <Ionicons name="close" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -210,7 +211,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={nameStr}
                 onChangeText={setNameStr}
               />
@@ -237,7 +238,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={categoryCustom}
                 onChangeText={(text) => {
                   setCategoryCustom(text);
@@ -266,7 +267,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={brandStr}
                 onChangeText={setBrandStr}
               />
@@ -274,7 +275,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={shadeStr}
                 onChangeText={setShadeStr}
               />
@@ -282,7 +283,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={supplierStr}
                 onChangeText={setSupplierStr}
               />
@@ -300,7 +301,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={qtyStr}
             onChangeText={setQtyStr}
             keyboardType="decimal-pad"
@@ -310,7 +311,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={threshStr}
             onChangeText={setThreshStr}
             keyboardType="decimal-pad"
@@ -322,7 +323,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor="#1C1C1E"
                 value={reasonStr}
                 onChangeText={setReasonStr}
               />
@@ -366,9 +367,17 @@ export default function InventoryItemScreen({ route, navigation }) {
   );
 }
 
+const reliefShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.14,
+  shadowRadius: 5,
+  elevation: 4,
+};
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safe: { flex: 1, backgroundColor: '#F5F5FA' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
@@ -377,19 +386,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  headerSide: { width: 40, height: 40 },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...glassPurpleIconBtn,
   },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: '#1C1C1E' },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  subMeta: { fontSize: 14, color: '#8E8E93', marginBottom: 4 },
-  supplier: { fontSize: 13, fontWeight: '600', color: '#5E35B1', marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '700', color: '#8E8E93', marginBottom: 8, marginTop: 4 },
+  subMeta: { fontSize: 14, color: '#1C1C1E', marginBottom: 4 },
+  supplier: { fontSize: 13, fontWeight: '400', color: '#5E35B1', marginBottom: 16 },
+  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -398,6 +403,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1C1C1E',
     marginBottom: 4,
+    ...reliefShadow,
   },
   chips: {
     flexDirection: 'row',
@@ -412,12 +418,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#E5E5EA',
+    ...reliefShadow,
   },
   chipOn: {
     backgroundColor: '#5E35B1',
     borderColor: '#5E35B1',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  chipTxt: { fontSize: 14, fontWeight: '700', color: '#1C1C1E' },
+  chipTxt: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
   chipTxtOn: { color: '#fff' },
   saveBtn: {
     marginTop: 28,
@@ -425,14 +437,19 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 6,
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '400' },
   histSection: { marginTop: 32 },
   histTitle: {
     fontSize: 15,
-    fontWeight: '800',
-    color: '#8E8E93',
+    fontWeight: '400',
+    color: '#1C1C1E',
     marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -444,10 +461,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     marginBottom: 8,
+    ...reliefShadow,
   },
-  histDelta: { fontSize: 16, fontWeight: '800', color: '#2E7D32', minWidth: 56 },
+  histDelta: { fontSize: 16, fontWeight: '400', color: '#2E7D32', minWidth: 56 },
   histDeltaNeg: { color: '#C62828' },
   histMid: { flex: 1, paddingLeft: 8 },
-  histReason: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
-  histWhen: { marginTop: 4, fontSize: 12, color: '#8E8E93' },
+  histReason: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
+  histWhen: { marginTop: 4, fontSize: 12, color: '#1C1C1E' },
 });

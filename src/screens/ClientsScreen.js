@@ -9,12 +9,20 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { apiGet } from '../api/client';
+import { glassPurpleFabBar } from '../theme/glassUi';
 
 export default function ClientsScreen({ navigation }) {
+  const route = useRoute();
+  const pickPayload = route.params?.pickForCalendarVisit;
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const clearPickMode = useCallback(() => {
+    navigation.setParams({ pickForCalendarVisit: undefined });
+  }, [navigation]);
 
   const fetchClients = useCallback(async () => {
     try {
@@ -41,11 +49,31 @@ export default function ClientsScreen({ navigation }) {
         <TouchableOpacity
           style={styles.addBtn}
           activeOpacity={0.85}
-          onPress={() => navigation.navigate('ClientForm')}
+          onPress={() => {
+            if (pickPayload) {
+              navigation.navigate('ClientForm', {
+                fromDeviceCalendarEventId: pickPayload.deviceCalendarEventId,
+                initialFullName: pickPayload.suggestedClientName || '',
+                initialNotesFromCalendar: pickPayload.initialNotes || '',
+              });
+            } else {
+              navigation.navigate('ClientForm');
+            }
+          }}
         >
-          <Ionicons name="add" size={26} color="#1C1C1E" />
+          <Ionicons name="add" size={26} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+      {pickPayload ? (
+        <View style={styles.pickBanner}>
+          <Text style={styles.pickBannerTxt} numberOfLines={2}>
+            Choose a client for this calendar visit ({pickPayload.suggestedClientName || 'event'}).
+          </Text>
+          <TouchableOpacity onPress={clearPickMode} hitSlop={10}>
+            <Text style={styles.pickCancel}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator />
@@ -60,7 +88,28 @@ export default function ClientsScreen({ navigation }) {
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.88}
-              onPress={() => navigation.navigate('ClientDetail', { clientId: item.id })}
+              onPress={() => {
+                if (pickPayload) {
+                  const {
+                    deviceCalendarEventId,
+                    initialProcedure,
+                    initialDate,
+                    initialNotes,
+                    initialChair,
+                  } = pickPayload;
+                  navigation.navigate('FormulaBuilder', {
+                    clientId: item.id,
+                    deviceCalendarEventId,
+                    initialProcedure,
+                    initialDate,
+                    initialNotes,
+                    initialChair,
+                  });
+                  clearPickMode();
+                } else {
+                  navigation.navigate('ClientDetail', { clientId: item.id });
+                }
+              }}
             >
               <Image
                 source={{
@@ -80,7 +129,7 @@ export default function ClientsScreen({ navigation }) {
                   <Text style={styles.patchText}>Patch</Text>
                 </View>
               ) : (
-                <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+                <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
               )}
             </TouchableOpacity>
           )}
@@ -93,7 +142,7 @@ export default function ClientsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F5FA' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -103,18 +152,20 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: { fontSize: 28, fontWeight: '800', color: '#1C1C1E' },
-  addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff',
+  pickBanner: {
+    marginHorizontal: 24,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#EDE7F6',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    gap: 12,
+  },
+  pickBannerTxt: { flex: 1, fontSize: 14, color: '#1C1C1E' },
+  pickCancel: { fontSize: 14, fontWeight: '600', color: '#5E35B1' },
+  addBtn: {
+    ...glassPurpleFabBar,
   },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { paddingHorizontal: 24, paddingBottom: 24 },
@@ -136,11 +187,11 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     marginRight: 14,
-    backgroundColor: '#eee',
+    backgroundColor: '#FFFFFF',
   },
   rowBody: { flex: 1 },
-  name: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
-  phone: { marginTop: 4, fontSize: 14, color: '#8E8E93' },
+  name: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  phone: { marginTop: 4, fontSize: 14, color: '#1C1C1E' },
   patchBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -150,5 +201,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  patchText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  patchText: { color: '#fff', fontWeight: '400', fontSize: 12 },
 });

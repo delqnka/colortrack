@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,13 @@ import {
   FlatList,
   Alert,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../api/client';
+import { glassPurpleIconBtn } from '../theme/glassUi';
+import { formatDisplayDate } from '../lib/formatDate';
 
 function todayYMD() {
   const d = new Date();
@@ -24,6 +27,40 @@ function todayYMD() {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function parseYMD(s) {
+  const t = (s || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    return d;
+  }
+  const [y, mo, day] = t.split('-').map(Number);
+  const d = new Date(y, mo - 1, day, 12, 0, 0, 0);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+function formatYMD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Fixed calendar date for time-only picker values */
+const T0 = { y: 2000, m: 0, d: 1 };
+
+function parseHM(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((s || '').trim());
+  if (!m) return new Date(T0.y, T0.m, T0.d, 9, 0, 0, 0);
+  const h = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const min = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return new Date(T0.y, T0.m, T0.d, h, min, 0, 0);
+}
+
+function formatHM(d) {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 export default function AppointmentFormScreen({ route, navigation }) {
@@ -43,7 +80,9 @@ export default function AppointmentFormScreen({ route, navigation }) {
 
   const [clients, setClients] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [dateTimePickerMode, setDateTimePickerMode] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [linkedVisitId, setLinkedVisitId] = useState(() => (appt?.visit_id != null ? appt.visit_id : null));
 
   const loadClients = useCallback(async () => {
     try {
@@ -86,6 +125,31 @@ export default function AppointmentFormScreen({ route, navigation }) {
     }, [isEdit, appt, route.params?.initialDate]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!isEdit || !appointmentId) {
+        setLinkedVisitId(null);
+        return undefined;
+      }
+      const day = dateStr;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return undefined;
+      let cancelled = false;
+      (async () => {
+        try {
+          const rows = await apiGet(`/api/appointments?date=${encodeURIComponent(day)}`);
+          if (cancelled || !Array.isArray(rows)) return;
+          const row = rows.find((r) => Number(r.id) === Number(appointmentId));
+          setLinkedVisitId(row?.visit_id ?? null);
+        } catch {
+          if (!cancelled) setLinkedVisitId(null);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [isEdit, appointmentId, dateStr]),
+  );
+
   const pickClient = (c) => {
     setClientId(c.id);
     setClientLabel(c.full_name);
@@ -97,6 +161,36 @@ export default function AppointmentFormScreen({ route, navigation }) {
     setClientLabel('');
   };
 
+  const applyPickerSelection = useCallback((mode, selectedDate) => {
+    if (!selectedDate || !mode) return;
+    if (mode === 'date') setDateStr(formatYMD(selectedDate));
+    else if (mode === 'start') setStartTime(formatHM(selectedDate));
+    else if (mode === 'end') setEndTime(formatHM(selectedDate));
+  }, []);
+
+  const pickerValue = useMemo(() => {
+    if (dateTimePickerMode === 'date') return parseYMD(dateStr);
+    if (dateTimePickerMode === 'start') return parseHM(startTime);
+    if (dateTimePickerMode === 'end') return parseHM(endTime);
+    return new Date();
+  }, [dateTimePickerMode, dateStr, startTime, endTime]);
+
+  const onDateTimePickerChange = useCallback(
+    (event, selectedDate) => {
+      const mode = dateTimePickerMode;
+      if (Platform.OS === 'android') {
+        setDateTimePickerMode(null);
+        if (event.type === 'dismissed') return;
+        applyPickerSelection(mode, selectedDate);
+        return;
+      }
+      if (selectedDate) applyPickerSelection(mode, selectedDate);
+    },
+    [dateTimePickerMode, applyPickerSelection],
+  );
+
+  const iosPickerTitle =
+    dateTimePickerMode === 'date' ? 'Date' : dateTimePickerMode === 'start' ? 'Start' : 'End';
   const save = async () => {
     const t = title.trim();
     if (!t) {
@@ -162,11 +256,11 @@ export default function AppointmentFormScreen({ route, navigation }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
-            <Ionicons name="close" size={26} color="#1C1C1E" />
-          </TouchableOpacity>
+          <View style={styles.headerSide} />
           <Text style={styles.htitle}>{isEdit ? 'Edit' : 'New'}</Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
+            <Ionicons name="close" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -178,7 +272,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={title}
             onChangeText={setTitle}
           />
@@ -187,41 +281,43 @@ export default function AppointmentFormScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={procedureName}
             onChangeText={setProcedureName}
           />
 
-          <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#C7C7CC"
-            value={dateStr}
-            onChangeText={setDateStr}
-            autoCapitalize="none"
-          />
+          <Text style={styles.label}>Date</Text>
+          <TouchableOpacity
+            style={styles.pickerField}
+            onPress={() => setDateTimePickerMode('date')}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.pickerFieldText}>{formatDisplayDate(dateStr)}</Text>
+            <Ionicons name="calendar-outline" size={22} color="#1C1C1E" />
+          </TouchableOpacity>
 
           <View style={styles.row2}>
             <View style={[styles.row2col, styles.row2colPad]}>
               <Text style={styles.label}>Start</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#C7C7CC"
-                value={startTime}
-                onChangeText={setStartTime}
-              />
+              <TouchableOpacity
+                style={styles.pickerField}
+                onPress={() => setDateTimePickerMode('start')}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.pickerFieldText}>{startTime}</Text>
+                <Ionicons name="time-outline" size={22} color="#1C1C1E" />
+              </TouchableOpacity>
             </View>
             <View style={styles.row2col}>
               <Text style={styles.label}>End</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#C7C7CC"
-                value={endTime}
-                onChangeText={setEndTime}
-              />
+              <TouchableOpacity
+                style={styles.pickerField}
+                onPress={() => setDateTimePickerMode('end')}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.pickerFieldText}>{endTime}</Text>
+                <Ionicons name="time-outline" size={22} color="#1C1C1E" />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -232,10 +328,10 @@ export default function AppointmentFormScreen({ route, navigation }) {
             </Text>
             {clientId ? (
               <TouchableOpacity onPress={clearClient} hitSlop={8}>
-                <Ionicons name="close-circle" size={22} color="#8E8E93" />
+                <Ionicons name="close-circle" size={22} color="#1C1C1E" />
               </TouchableOpacity>
             ) : (
-              <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
             )}
           </TouchableOpacity>
 
@@ -243,7 +339,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={chairLabel}
             onChangeText={setChairLabel}
           />
@@ -252,7 +348,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder=""
-            placeholderTextColor="#C7C7CC"
+            placeholderTextColor="#1C1C1E"
             value={notes}
             onChangeText={setNotes}
             multiline
@@ -266,6 +362,35 @@ export default function AppointmentFormScreen({ route, navigation }) {
           >
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveTxt}>Save</Text>}
           </TouchableOpacity>
+
+          {isEdit && clientId ? (
+            linkedVisitId ? (
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => navigation.navigate('VisitDetail', { visitId: linkedVisitId })}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.secondaryBtnTxt}>Open visit record</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() =>
+                  navigation.navigate('FormulaBuilder', {
+                    clientId,
+                    appointmentId,
+                    initialProcedure: procedureName.trim() || title.trim(),
+                    initialDate: dateStr,
+                    initialChair: chairLabel,
+                    initialNotes: notes,
+                  })
+                }
+                activeOpacity={0.88}
+              >
+                <Text style={styles.secondaryBtnTxt}>Log visit (formula)</Text>
+              </TouchableOpacity>
+            )
+          ) : null}
 
           {isEdit ? (
             <TouchableOpacity style={styles.delBtn} onPress={remove} activeOpacity={0.88}>
@@ -293,20 +418,69 @@ export default function AppointmentFormScreen({ route, navigation }) {
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.stockRow} onPress={() => pickClient(item)} activeOpacity={0.85}>
                   <Text style={styles.stockName}>{item.full_name}</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+                  <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
                 </TouchableOpacity>
               )}
             />
           </View>
         </View>
       </Modal>
+
+      {Platform.OS === 'ios' && dateTimePickerMode != null ? (
+        <Modal visible animationType="slide" transparent>
+          <View style={styles.iosPickerRoot}>
+            <TouchableOpacity
+              style={styles.iosPickerBackdrop}
+              activeOpacity={1}
+              onPress={() => setDateTimePickerMode(null)}
+            />
+            <View style={styles.iosPickerSheet}>
+              <View style={styles.iosPickerToolbar}>
+                <View style={{ width: 72 }} />
+                <Text style={[styles.iosPickerTitleText, { flex: 1, textAlign: 'center' }]}>{iosPickerTitle}</Text>
+                <TouchableOpacity
+                  style={{ width: 72, alignItems: 'flex-end' }}
+                  onPress={() => setDateTimePickerMode(null)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.modalClose}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={pickerValue}
+                mode={dateTimePickerMode === 'date' ? 'date' : 'time'}
+                display="spinner"
+                onChange={onDateTimePickerChange}
+                themeVariant="light"
+              />
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+
+      {Platform.OS === 'android' && dateTimePickerMode != null ? (
+        <DateTimePicker
+          value={pickerValue}
+          mode={dateTimePickerMode === 'date' ? 'date' : 'time'}
+          display="default"
+          onChange={onDateTimePickerChange}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
 
+const reliefShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.14,
+  shadowRadius: 5,
+  elevation: 4,
+};
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safe: { flex: 1, backgroundColor: '#F5F5FA' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,17 +488,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  headerSide: { width: 40, height: 40 },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...glassPurpleIconBtn,
   },
-  htitle: { fontSize: 18, fontWeight: '800', color: '#1C1C1E' },
+  htitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  label: { fontSize: 14, fontWeight: '700', color: '#8E8E93', marginBottom: 8, marginTop: 4 },
+  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -333,7 +503,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1C1C1E',
     marginBottom: 4,
+    ...reliefShadow,
   },
+  pickerField: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...reliefShadow,
+  },
+  pickerFieldText: { fontSize: 16, color: '#1C1C1E' },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   row2: { flexDirection: 'row' },
   row2col: { flex: 1 },
@@ -347,31 +530,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginBottom: 4,
+    ...reliefShadow,
   },
   clientTxt: { fontSize: 16, color: '#1C1C1E', flex: 1 },
-  clientPh: { fontSize: 16, color: '#C7C7CC', flex: 1 },
+  clientPh: { fontSize: 16, color: '#1C1C1E', flex: 1 },
   saveBtn: {
     marginTop: 28,
     backgroundColor: '#5E35B1',
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 6,
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  secondaryBtn: {
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#5E35B1',
+    alignItems: 'center',
+  },
+  secondaryBtnTxt: { fontSize: 16, fontWeight: '400', color: '#5E35B1' },
   delBtn: {
     marginTop: 16,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  delTxt: { color: '#C62828', fontSize: 16, fontWeight: '700' },
+  delTxt: { color: '#C62828', fontSize: 16, fontWeight: '400' },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#F5F5FA',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '72%',
@@ -386,8 +584,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { fontSize: 17, fontWeight: '800', color: '#1C1C1E' },
-  modalClose: { fontSize: 17, fontWeight: '600', color: '#5E35B1' },
+  modalTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  modalClose: { fontSize: 17, fontWeight: '400', color: '#5E35B1' },
   stockRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -397,5 +595,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  stockName: { fontSize: 16, fontWeight: '600', color: '#1C1C1E', flex: 1 },
+  stockName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E', flex: 1 },
+  iosPickerRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  iosPickerBackdrop: { flex: 1 },
+  iosPickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 8,
+  },
+  iosPickerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  iosPickerTitleText: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
 });

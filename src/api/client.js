@@ -106,9 +106,6 @@ function humanizeApiError(text, res) {
   if (res.status === 503 && msg.toLowerCase() === 'unavailable') {
     return 'Service unavailable (database or file storage may be missing on the server).';
   }
-  if (res.status === 401) {
-    return 'Session expired or not signed in. Log out and log in again.';
-  }
   return msg;
 }
 

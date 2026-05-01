@@ -6,6 +6,8 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Pressable,
+  Animated,
   ActivityIndicator,
   KeyboardAvoidingView,
   Keyboard,
@@ -18,10 +20,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { apiGet, apiPost } from '../api/client';
 import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
-import { formatDisplayDate, parseISODateToLocal } from '../lib/formatDate';
+import {
+  SCHEDULE_BANNER_GRADIENT,
+  SCHEDULE_BANNER_GRADIENT_END,
+  SCHEDULE_BANNER_GRADIENT_START,
+  SCHEDULE_BANNER_LEAD_PINK,
+  SCHEDULE_BANNER_LOCATIONS,
+} from '../theme/scheduleBannerGradient';
+import { FontFamily } from '../theme/fonts';
+import IsoDatePickField from '../components/IsoDatePickField';
 
 const COLOUR_SECTIONS = [
   { key: 'roots', label: 'Roots' },
@@ -65,15 +75,25 @@ function isLineEmpty(line) {
   );
 }
 
+function englishOrdinalSuffix(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  if (mod10 === 1) return `${n}st`;
+  if (mod10 === 2) return `${n}nd`;
+  if (mod10 === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
 function lineTabLabel(lines, idx) {
   const line = lines[idx];
   if (!line) return '';
   if (line.section === 'developer') {
     const oxNum = lines.slice(0, idx + 1).filter((l) => l.section === 'developer').length;
-    return oxNum <= 1 ? 'Oxidant' : `Oxidant ${oxNum}`;
+    return oxNum <= 1 ? 'Developer' : `Developer ${oxNum}`;
   }
   const colourNum = lines.slice(0, idx).filter((l) => l.section !== 'developer').length + 1;
-  return `Colour ${colourNum}`;
+  return `${englishOrdinalSuffix(colourNum)} color`;
 }
 
 function toYMD(d) {
@@ -83,8 +103,123 @@ function toYMD(d) {
   return `${y}-${m}-${day}`;
 }
 
+function parseRouteClientId(raw) {
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const ADD_LINE_THEME = {
+  pink: {
+    fg: '#FFFFFF',
+    bg: SCHEDULE_BANNER_LEAD_PINK,
+    bgPressed: '#DF5186',
+    border: '#C4477E',
+    borderPressed: '#AE3D71',
+  },
+  blue: {
+    fg: '#FFFFFF',
+    bg: '#0D74FF',
+    bgPressed: '#0060E6',
+    border: '#004FC4',
+    borderPressed: '#003DA3',
+  },
+};
+
+function AddLineBouncyButton({ onPress, iconName, label, variant }) {
+  const theme = ADD_LINE_THEME[variant];
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const pressIn = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: 0.93,
+      useNativeDriver: true,
+      friction: 5,
+      tension: 320,
+    }).start();
+  }, [scale]);
+
+  const pressOut = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 4,
+      tension: 200,
+    }).start();
+  }, [scale]);
+
+  return (
+    <Pressable onPress={onPress} onPressIn={pressIn} onPressOut={pressOut} style={{ flex: 1 }}>
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.addLineBtn,
+            {
+              transform: [{ scale }],
+              backgroundColor: pressed ? theme.bgPressed : theme.bg,
+              borderColor: pressed ? theme.borderPressed : theme.border,
+            },
+          ]}
+        >
+          <Ionicons name={iconName} size={18} color={theme.fg} />
+          <Text style={[styles.addLineBtnTxt, { color: theme.fg }]}>{label}</Text>
+        </Animated.View>
+      )}
+    </Pressable>
+  );
+}
+
 export default function FormulaBuilderScreen({ route, navigation }) {
-  const clientId = route.params?.clientId;
+  const [clientId, setClientId] = useState(() => parseRouteClientId(route.params?.clientId));
+  const [pickedClientLabel, setPickedClientLabel] = useState('');
+  const [clientPickQuery, setClientPickQuery] = useState('');
+  const [clientPickHits, setClientPickHits] = useState([]);
+  const [clientPickLoading, setClientPickLoading] = useState(false);
+  const clientPickTimerRef = useRef(null);
+  const openedWithPresetClientRef = useRef(parseRouteClientId(route.params?.clientId) != null);
+
+  useEffect(() => {
+    const next = parseRouteClientId(route.params?.clientId);
+    if (next != null) setClientId(next);
+  }, [route.params?.clientId]);
+
+  useEffect(() => {
+    return () => {
+      if (clientPickTimerRef.current) clearTimeout(clientPickTimerRef.current);
+    };
+  }, []);
+
+  const runClientPickSearch = useCallback(async (q) => {
+    const t = q.trim();
+    setClientPickLoading(true);
+    try {
+      let rows;
+      if (!t) {
+        rows = await apiGet('/api/clients');
+      } else {
+        rows = await apiGet(`/api/clients?q=${encodeURIComponent(t)}`);
+      }
+      setClientPickHits(Array.isArray(rows) ? rows : []);
+    } catch {
+      setClientPickHits([]);
+    } finally {
+      setClientPickLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (clientId != null) return;
+    runClientPickSearch('');
+  }, [clientId, runClientPickSearch]);
+
+  const onClientPickQueryChange = useCallback(
+    (text) => {
+      setClientPickQuery(text);
+      if (clientPickTimerRef.current) clearTimeout(clientPickTimerRef.current);
+      clientPickTimerRef.current = setTimeout(() => runClientPickSearch(text), 280);
+    },
+    [runClientPickSearch],
+  );
 
   const [procedureName, setProcedureName] = useState('');
   const [chairLabel, setChairLabel] = useState('');
@@ -104,8 +239,6 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   const [pickerForKey, setPickerForKey] = useState(null);
   const [inventoryQuery, setInventoryQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [datePickMode, setDatePickMode] = useState(null);
-
   useEffect(() => {
     setActiveLineIndex((i) => Math.max(0, Math.min(i, lines.length - 1)));
   }, [lines.length]);
@@ -297,6 +430,24 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     });
   };
 
+  const promptRemoveLineAtIndex = (idx) => {
+    Keyboard.dismiss();
+    const line = lines[idx];
+    if (!line || lines.length <= 1) {
+      Alert.alert("Can't delete", 'Your formula needs at least one row.');
+      return;
+    }
+    const label = lineTabLabel(lines, idx);
+    if (isLineEmpty(line)) {
+      removeLineByKey(line.key);
+      return;
+    }
+    Alert.alert('Remove row?', `"${label}" will be cleared.`, [
+      { text: 'Not now', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => removeLineByKey(line.key) },
+    ]);
+  };
+
   const convertDeveloperToColourLine = (lineKey) => {
     Keyboard.dismiss();
     updateLine(lineKey, { section: 'roots' });
@@ -335,12 +486,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   };
 
   const submit = async () => {
+    if (!clientId) return;
     const proc = procedureName.trim();
     if (!proc) {
-      Alert.alert(
-        'Procedure name required',
-        'Enter what you did on this visit (e.g. full colour, root touch-up, balayage).',
-      );
+      Alert.alert('Procedure', 'Enter a procedure for this visit.');
       return;
     }
     const validLines = lines
@@ -354,10 +503,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       .filter((l) => l.brand && Number.isFinite(l.amount) && l.amount > 0);
 
     if (validLines.length === 0) {
-      Alert.alert(
-        'Formula lines',
-        'Add at least one line: choose a product from inventory (or enter brand manually), then enter amount (greater than 0).',
-      );
+      Alert.alert('', 'Add at least one line with quantity.');
       return;
     }
 
@@ -393,10 +539,78 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     }
   };
 
+  const quickCountSelected = useMemo(() => {
+    const c = lines.filter((l) => l.section !== 'developer').length;
+    if (c >= 1 && c <= 6) return c;
+    return null;
+  }, [lines]);
+
   if (!clientId) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <Text style={styles.err}>Missing client.</Text>
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        >
+          <View style={styles.header}>
+            <View style={styles.headerSide} />
+            <Text style={styles.navHeadline}>Choose Client</Text>
+            <TouchableOpacity
+              onPress={() => {
+                Keyboard.dismiss();
+                navigation.goBack();
+              }}
+              style={styles.iconBtn}
+              hitSlop={12}
+            >
+              <Ionicons name="close" size={26} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.stepMarker}>Step 1 of 2</Text>
+          <Text style={styles.pickPurpose}>Pick who this formula visit is for.</Text>
+          <View style={styles.pickSearchRow}>
+            <Ionicons name="search-outline" size={20} color="#1C1C1E" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.pickSearchField}
+              placeholder="Search"
+              placeholderTextColor="#8E8E93"
+              value={clientPickQuery}
+              onChangeText={onClientPickQueryChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+          {clientPickLoading ? <ActivityIndicator style={{ marginVertical: 10 }} /> : null}
+          <FlatList
+            style={styles.pickList}
+            data={clientPickHits}
+            keyExtractor={(it) => String(it.id)}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickRow}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setClientId(item.id);
+                  setPickedClientLabel(String(item.full_name || '').trim() || '');
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.pickRowName}>{item.full_name}</Text>
+                {item.phone ? <Text style={styles.pickRowPhone}>{item.phone}</Text> : null}
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              !clientPickLoading && clientPickHits.length === 0 ? (
+                <Text style={styles.pickEmpty}>
+                  {clientPickQuery.trim() ? 'No matching clients.' : 'No clients yet.'}
+                </Text>
+              ) : null
+            }
+          />
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -423,7 +637,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       >
         <View style={styles.header}>
           <View style={styles.headerSide} />
-          <Text style={styles.title}>Formula</Text>
+          <Text style={styles.navHeadline}>New Formula</Text>
           <TouchableOpacity
             onPress={() => {
               Keyboard.dismiss();
@@ -435,17 +649,24 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             <Ionicons name="close" size={26} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-
+        {!openedWithPresetClientRef.current ? (
+          <Text style={styles.stepMarker}>Step 2 of 2 · formula & lines</Text>
+        ) : null}
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
         >
+          {pickedClientLabel ? (
+            <Text style={styles.forClientTitle} numberOfLines={2}>
+              For {pickedClientLabel}
+            </Text>
+          ) : null}
           <Text style={styles.label}>Procedure</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Full colour, root touch-up, toner refresh"
+            placeholder=""
             placeholderTextColor="#8E8E93"
             value={procedureName}
             onChangeText={setProcedureName}
@@ -456,17 +677,12 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           />
 
           <Text style={styles.label}>Date</Text>
-          <TouchableOpacity
+          <IsoDatePickField
+            value={visitDate}
+            onChange={setVisitDate}
             style={[styles.input, styles.datePickRow]}
-            onPress={() => {
-              Keyboard.dismiss();
-              setDatePickMode('date');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.datePickText}>{formatDisplayDate(visitDate)}</Text>
-            <Ionicons name="calendar-outline" size={22} color="#1C1C1E" />
-          </TouchableOpacity>
+            textStyle={styles.datePickText}
+          />
 
           <Text style={styles.label}>Chair</Text>
           <TextInput
@@ -504,7 +720,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           />
 
           <View style={styles.linesHeader}>
-            <Text style={styles.sectionTitle}>Formula lines</Text>
+            <Text style={styles.sectionTitle}>How many colors did you mix?</Text>
           </View>
 
           <ScrollView
@@ -512,49 +728,111 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickCountRow}
           >
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <TouchableOpacity
-                key={n}
-                style={styles.quickCountChip}
-                onPress={() => applyColourCountQuickStart(n)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.quickCountChipTxt}>{n}</Text>
-              </TouchableOpacity>
-            ))}
+            {[1, 2, 3, 4, 5, 6].map((n) => {
+              const isSel = quickCountSelected === n;
+              return (
+                <TouchableOpacity
+                  key={n}
+                  style={styles.quickCountTouchable}
+                  onPress={() => applyColourCountQuickStart(n)}
+                  activeOpacity={0.88}
+                  accessibilityState={{ selected: isSel }}
+                >
+                  {isSel ? (
+                    <View style={styles.quickCountRing}>
+                      <LinearGradient
+                        colors={SCHEDULE_BANNER_GRADIENT}
+                        locations={SCHEDULE_BANNER_LOCATIONS}
+                        start={SCHEDULE_BANNER_GRADIENT_START}
+                        end={SCHEDULE_BANNER_GRADIENT_END}
+                        style={styles.quickCountGradInset}
+                      >
+                        <Text style={styles.quickCountChipTxt}>{n}</Text>
+                      </LinearGradient>
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={SCHEDULE_BANNER_GRADIENT}
+                      locations={SCHEDULE_BANNER_LOCATIONS}
+                      start={SCHEDULE_BANNER_GRADIENT_START}
+                      end={SCHEDULE_BANNER_GRADIENT_END}
+                      style={styles.quickCountGradDim}
+                    >
+                      <Text style={styles.quickCountChipTxt}>{n}</Text>
+                    </LinearGradient>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator
-            contentContainerStyle={styles.tabRow}
+            showsHorizontalScrollIndicator={false}
+            style={styles.lineSegScroller}
+            contentContainerStyle={styles.lineSegScrollContent}
+            keyboardShouldPersistTaps="handled"
           >
-            {lines.map((line, idx) => (
-              <TouchableOpacity
-                key={line.key}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setActiveLineIndex(idx);
-                }}
-                style={[styles.tabPill, idx === activeLineIndex && styles.tabPillOn]}
-                activeOpacity={0.88}
-              >
-                <Text style={[styles.tabPillTxt, idx === activeLineIndex && styles.tabPillTxtOn]}>
-                  {lineTabLabel(lines, idx)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <View style={styles.lineSegTrack}>
+              {lines.map((line, idx) => {
+                const sel = idx === activeLineIndex;
+                return (
+                  <View
+                    key={line.key}
+                    style={[styles.lineSegSegment, sel && styles.lineSegSegmentOn]}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setActiveLineIndex(idx);
+                      }}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: sel }}
+                      accessibilityLabel={lineTabLabel(lines, idx)}
+                      style={styles.lineSegLabelPress}
+                    >
+                      <Text
+                        style={[styles.lineSegTxt, sel && styles.lineSegTxtOn]}
+                        numberOfLines={1}
+                      >
+                        {lineTabLabel(lines, idx)}
+                      </Text>
+                    </Pressable>
+                    {lines.length > 1 ? (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${lineTabLabel(lines, idx)}`}
+                        hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
+                        onPress={() => promptRemoveLineAtIndex(idx)}
+                        style={styles.lineSegRemovePress}
+                        activeOpacity={0.65}
+                      >
+                        <Ionicons
+                          name="close"
+                          size={18}
+                          color={sel ? '#E53935' : 'rgba(255,255,255,0.88)'}
+                        />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
           </ScrollView>
 
           <View style={styles.addLineRow}>
-            <TouchableOpacity style={styles.addLineBtn} onPress={appendColourLine} activeOpacity={0.88}>
-              <Ionicons name="color-fill-outline" size={18} color={BRAND_PURPLE} />
-              <Text style={styles.addLineBtnTxt}>+ Colour</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addLineBtn} onPress={appendOxidantLine} activeOpacity={0.88}>
-              <Ionicons name="flask-outline" size={18} color={BRAND_PURPLE} />
-              <Text style={styles.addLineBtnTxt}>+ Oxidant</Text>
-            </TouchableOpacity>
+            <AddLineBouncyButton
+              onPress={appendColourLine}
+              iconName="color-fill-outline"
+              label="+ Colour"
+              variant="pink"
+            />
+            <AddLineBouncyButton
+              onPress={appendOxidantLine}
+              iconName="flask-outline"
+              label="+ Developer"
+              variant="blue"
+            />
           </View>
 
           {activeLine ? (
@@ -566,14 +844,24 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 <View style={styles.lineTopLeft}>
                   <Text style={styles.lineTitle}>{lineTabLabel(lines, activeLineIndex)}</Text>
                   {activeLine.section === 'developer' ? (
-                    <TouchableOpacity onPress={() => convertDeveloperToColourLine(activeLine.key)} hitSlop={8}>
-                      <Text style={styles.lineTypeSwitch}>As colour</Text>
+                    <TouchableOpacity
+                      onPress={() => convertDeveloperToColourLine(activeLine.key)}
+                      hitSlop={8}
+                      accessibilityRole="link"
+                      accessibilityLabel="Switch this row to colour"
+                    >
+                      <Text style={styles.lineTypeSwitch}>Switch to colour</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
                 {lines.length > 1 ? (
-                  <TouchableOpacity onPress={() => removeLineByKey(activeLine.key)} hitSlop={10}>
-                    <Ionicons name="trash-outline" size={20} color="#E53935" />
+                  <TouchableOpacity
+                    onPress={() => promptRemoveLineAtIndex(activeLineIndex)}
+                    accessibilityLabel="Remove row"
+                    hitSlop={14}
+                    activeOpacity={0.65}
+                  >
+                    <Ionicons name="trash-outline" size={22} color="#E53935" />
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -615,7 +903,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 <Ionicons
                   name={activeLine.section === 'developer' ? 'flask-outline' : 'cube-outline'}
                   size={20}
-                  color={activeLine.section === 'developer' ? '#6A1B9A' : '#5E35B1'}
+                  color={activeLine.section === 'developer' ? ADD_LINE_THEME.blue.bg : ADD_LINE_THEME.pink.bg}
                   style={styles.productIcon}
                 />
                 <Text
@@ -717,60 +1005,13 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveTxt}>Save</Text>
+              <Text style={styles.saveTxt}>Save visit</Text>
             )}
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {Platform.OS === 'ios' && datePickMode != null ? (
-        <Modal visible animationType="slide" transparent>
-          <View style={styles.iosPickerRoot}>
-            <TouchableOpacity
-              style={styles.iosPickerBackdrop}
-              activeOpacity={1}
-              onPress={() => setDatePickMode(null)}
-            />
-            <View style={styles.iosPickerSheet}>
-              <View style={styles.iosPickerToolbar}>
-                <View style={{ width: 72 }} />
-                <Text style={[styles.iosPickerTitleText, { flex: 1, textAlign: 'center' }]}>Date</Text>
-                <TouchableOpacity
-                  style={{ width: 72, alignItems: 'flex-end' }}
-                  onPress={() => setDatePickMode(null)}
-                  hitSlop={8}
-                >
-                  <Text style={styles.modalClose}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={parseISODateToLocal(visitDate)}
-                mode="date"
-                display="spinner"
-                themeVariant="light"
-                onChange={(_, selected) => {
-                  if (selected) setVisitDate(toYMD(selected));
-                }}
-              />
-            </View>
-          </View>
-        </Modal>
-      ) : null}
-
-      {Platform.OS === 'android' && datePickMode != null ? (
-        <DateTimePicker
-          value={parseISODateToLocal(visitDate)}
-          mode="date"
-          display="default"
-          onChange={(event, selected) => {
-            setDatePickMode(null);
-            if (event.type === 'dismissed') return;
-            if (selected) setVisitDate(toYMD(selected));
-          }}
-        />
-      ) : null}
 
       <Modal visible={!!pickerForKey} animationType="slide" transparent onRequestClose={closeProductPicker}>
         <View style={styles.modalBackdrop}>
@@ -783,7 +1024,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             </View>
             <TextInput
               style={styles.inventorySearch}
-              placeholder="Search name, brand, shade…"
+              placeholder="Search…"
               placeholderTextColor="#8E8E93"
               value={inventoryQuery}
               onChangeText={setInventoryQuery}
@@ -820,8 +1061,8 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                   !loadingStock ? (
                     <Text style={styles.invEmptyText}>
                       {inventory.length === 0
-                        ? 'No products in inventory. Add items under the Inventory tab.'
-                        : 'No matches. Try another search.'}
+                        ? 'No products in inventory.'
+                        : 'No matches.'}
                     </Text>
                   ) : null
                 }
@@ -848,8 +1089,65 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   kbAccessoryDoneBtn: { paddingVertical: 6, paddingHorizontal: 12 },
-  kbAccessoryDoneTxt: { fontSize: 17, fontWeight: '600', color: '#5E35B1' },
-  err: { textAlign: 'center', marginTop: 40, color: '#1C1C1E' },
+  kbAccessoryDoneTxt: { fontSize: 17, fontFamily: FontFamily.semibold, color: BRAND_PURPLE },
+  pickEmpty: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    color: '#8E8E93',
+    textAlign: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    lineHeight: 20,
+  },
+  stepMarker: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#8E8E93',
+    paddingHorizontal: 24,
+    marginTop: 4,
+    marginBottom: 20,
+    letterSpacing: -0.08,
+  },
+  pickPurpose: {
+    fontFamily: FontFamily.regular,
+    fontSize: 17,
+    color: '#000000',
+    paddingHorizontal: 24,
+    marginTop: 6,
+    marginBottom: 10,
+    lineHeight: 22,
+    letterSpacing: -0.41,
+  },
+  forClientTitle: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 22,
+    color: '#000000',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 16,
+    letterSpacing: -0.45,
+    lineHeight: 28,
+    paddingHorizontal: 8,
+  },
+  pickSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 24,
+    marginBottom: 8,
+  },
+  pickSearchField: { flex: 1, fontSize: 17, fontFamily: FontFamily.regular, color: '#000000', padding: 0 },
+  pickList: { flex: 1, paddingHorizontal: 24 },
+  pickRow: {
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  pickRowName: { fontSize: 17, fontFamily: FontFamily.regular, color: '#000000' },
+  pickRowPhone: { fontSize: 15, fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 2 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -861,16 +1159,38 @@ const styles = StyleSheet.create({
   iconBtn: {
     ...glassPurpleIconBtn,
   },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
+  navHeadline: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: FontFamily.bold,
+    fontSize: 17,
+    letterSpacing: -0.41,
+    color: '#000000',
+  },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
-  sectionTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  label: {
+    fontSize: 13,
+    fontFamily: FontFamily.medium,
+    color: '#000000',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '400',
+    color: '#1C1C1E',
+    flex: 1,
+    flexWrap: 'wrap',
+    lineHeight: 23,
+    letterSpacing: -0.3,
+    paddingRight: 8,
+  },
   linesHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginTop: 20,
-    marginBottom: 6,
+    marginBottom: 10,
   },
   quickCountRow: {
     flexDirection: 'row',
@@ -879,32 +1199,112 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingRight: 8,
   },
-  quickCountChip: {
-    minWidth: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#EDE7F6',
+  quickCountTouchable: {
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
   },
-  quickCountChipTxt: { fontSize: 17, fontWeight: '600', color: BRAND_PURPLE },
-  tabRow: {
-    flexDirection: 'row',
+  /** Ясна „избрана“ рамка: бяло около по-малък градиент */
+  quickCountRing: {
+    padding: 4,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    shadowColor: BRAND_PURPLE,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.38,
+    shadowRadius: 7,
+    elevation: 6,
+  },
+  quickCountGradInset: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingRight: 8,
+    justifyContent: 'center',
   },
-  tabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  /** Неизбраните — по-слаби, избраният се откроява */
+  quickCountGradDim: {
+    width: 50,
+    height: 50,
     borderRadius: 16,
-    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.68,
   },
-  tabPillOn: { backgroundColor: '#1C1C1E' },
-  tabPillTxt: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
-  tabPillTxtOn: { color: '#fff' },
+  quickCountChipTxt: {
+    fontSize: 17,
+    fontFamily: FontFamily.semibold,
+    color: '#FFFFFF',
+    letterSpacing: 0.25,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  lineSegScroller: {
+    alignSelf: 'stretch',
+    marginBottom: 12,
+  },
+  lineSegScrollContent: {
+    paddingRight: 8,
+    alignItems: 'flex-start',
+  },
+  /** UISegmentedControl-style track */
+  lineSegTrack: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 10,
+    padding: 3,
+    gap: 2,
+  },
+  /** One pill: tap label → select tab; ✕ removes row when there are 2+ rows */
+  lineSegSegment: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderRadius: 7,
+    overflow: 'hidden',
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    backgroundColor: 'transparent',
+  },
+  lineSegSegmentOn: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  lineSegLabelPress: {
+    flexGrow: 0,
+    flexShrink: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingLeft: 12,
+    paddingRight: 4,
+    minHeight: 36,
+  },
+  lineSegRemovePress: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingRight: 8,
+    paddingLeft: 4,
+    minWidth: 30,
+  },
+  lineSegTxt: {
+    fontSize: 13,
+    fontFamily: FontFamily.medium,
+    color: 'rgba(255, 255, 255, 0.92)',
+    letterSpacing: -0.08,
+  },
+  lineSegTxtOn: {
+    fontFamily: FontFamily.semibold,
+    color: '#000000',
+  },
   addLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -918,20 +1318,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  addLineBtnTxt: { fontSize: 14, fontWeight: '600', color: BRAND_PURPLE },
+  addLineBtnTxt: { fontSize: 14, fontFamily: FontFamily.semibold },
   input: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
-    color: '#1C1C1E',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    fontSize: 17,
+    fontFamily: FontFamily.regular,
+    color: '#000000',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#C6C6C8',
   },
   inputMulti: { minHeight: 88, textAlignVertical: 'top' },
   datePickRow: {
@@ -941,12 +1342,12 @@ const styles = StyleSheet.create({
   },
   datePickText: { fontSize: 16, color: '#1C1C1E', flex: 1 },
   lineCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#EDE7F6',
+    borderWidth: 2,
+    borderColor: ADD_LINE_THEME.pink.bg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -954,8 +1355,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   lineCardDev: {
-    borderColor: '#CE93D8',
-    backgroundColor: '#FDF8FF',
+    borderColor: ADD_LINE_THEME.blue.bg,
   },
   lineTop: {
     flexDirection: 'row',
@@ -968,7 +1368,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
     fontWeight: '600',
-    color: '#5E35B1',
+    color: ADD_LINE_THEME.blue.bg,
   },
   lineTitle: { fontWeight: '400', color: '#1C1C1E', fontSize: 15 },
   segScroll: { gap: 8, marginBottom: 14 },
@@ -988,11 +1388,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   productPickRowDev: {
-    borderColor: '#CE93D8',
+    borderColor: ADD_LINE_THEME.blue.border,
     backgroundColor: '#FFFFFF',
   },
   inputDevManual: {
-    borderColor: '#CE93D8',
+    borderColor: ADD_LINE_THEME.blue.border,
     backgroundColor: '#FFFFFF',
   },
   productIcon: { marginRight: 2 },
@@ -1018,7 +1418,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 17, fontWeight: '400' },
+  saveTxt: { color: '#fff', fontSize: 17, fontFamily: FontFamily.semibold },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -1049,26 +1449,4 @@ const styles = StyleSheet.create({
   },
   stockName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
   stockMeta: { marginTop: 4, fontSize: 13, color: '#1C1C1E' },
-  iosPickerRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  iosPickerBackdrop: { flex: 1 },
-  iosPickerSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingBottom: 8,
-  },
-  iosPickerToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5EA',
-  },
-  iosPickerTitleText: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
 });

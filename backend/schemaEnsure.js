@@ -42,6 +42,8 @@ async function ensureSchema(sql) {
   `;
 
   await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS apple_sub TEXT`;
+  await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS display_name TEXT`;
+  await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
   await sql`ALTER TABLE staff ALTER COLUMN password_hash DROP NOT NULL`;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_apple_sub

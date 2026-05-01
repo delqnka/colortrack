@@ -12,31 +12,36 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
+  AppState,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { apiGet } from '../api/client';
 import { glassPurpleFab, BRAND_PURPLE } from '../theme/glassUi';
+import { FontFamily } from '../theme/fonts';
 import {
-  LAB_ACCENT,
   LAB_GRADIENT_COLORS,
   LAB_GRADIENT_END,
   LAB_GRADIENT_LOCATIONS,
   LAB_GRADIENT_START,
   LAB_ON_GRADIENT_TEXT,
 } from '../theme/labGradient';
-/** Mid stops stay saturated — very light lilacs (#B899F5–type) interpolate to a whitish band in RGB. */
-const SCHEDULE_BANNER_GRADIENT = [
-  '#EA4A8F',
-  '#E055B0',
-  '#D045C8',
-  '#B84AE0',
-  '#8F52E6',
-  BRAND_PURPLE,
-];
-const SCHEDULE_BANNER_LOCATIONS = [0, 0.17, 0.34, 0.5, 0.74, 1];
+import {
+  SCHEDULE_BANNER_GRADIENT,
+  SCHEDULE_BANNER_GRADIENT_END,
+  SCHEDULE_BANNER_GRADIENT_START,
+  SCHEDULE_BANNER_LOCATIONS,
+  SCHEDULE_BANNER_LEAD_PINK,
+} from '../theme/scheduleBannerGradient';
+
+const FINANCE_CARD_GRADIENT_COLORS = ['#BFDBFE', '#5AA7F7', '#2563EB', '#0E4788'];
+const FINANCE_CARD_GRADIENT_LOCATIONS = [0, 0.32, 0.68, 1];
+const FINANCE_CARD_GRADIENT_START = { x: 0.35, y: 0 };
+const FINANCE_CARD_GRADIENT_END = { x: 0.65, y: 1 };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -110,6 +115,9 @@ function weekDaysForContainingMonday(selected) {
   return out;
 }
 
+const HEADER_AVATAR_FALLBACK =
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
+
 const FALLBACK_DASH = {
   banner: { title: "Today's Schedule", subtitle: '' },
   dashboardDate: null,
@@ -139,25 +147,84 @@ const FALLBACK_DASH = {
   lowStockCount: 2,
 };
 
-/** Plan row height (Lab | right column). */
-const PLAN_GRID_ROW_H = 372;
+/** Must match `styles.gridTopRow` horizontal margin (4 + 4). */
+const PLAN_GRID_ROW_MARGIN_H = 8;
+/** Must match `styles.gridTopRow` gap. */
+const PLAN_GRID_COL_GAP = 10;
+
+/** Keep in sync with `App.js` (`MainTabs`) — `TAB_H` + `bottomOffset` footprint. */
+const TAB_BAR_SURFACE_H = 64;
+const TAB_BAR_BOTTOM_OFFSET_EXTRA = 20;
+const TAB_ABOVE_PLAN_AIR = 14;
+
+/**
+ * Padding under the plan row inside the ScrollView — ends content just above the
+ * floating tab (see `App.js` MainTabs absolute tab bar).
+ * Safe-area bottom is already applied on the screen inset, so subtract it here.
+ */
+function homeScrollReserveBottom(insetBottom) {
+  const bottomOffset = Math.max(insetBottom, 12) + TAB_BAR_BOTTOM_OFFSET_EXTRA;
+  return Math.max(bottomOffset + TAB_BAR_SURFACE_H - insetBottom + TAB_ABOVE_PLAN_AIR, 72);
+}
+
+/**
+ * Plan row fallback (before layout): Lab column width × ~1.42, clamped — no “stretched” column.
+ */
+function planGridRowHeight(windowWidth) {
+  const gridRowW = Math.max(0, windowWidth - 48 - PLAN_GRID_ROW_MARGIN_H);
+  const inner = Math.max(0, gridRowW - PLAN_GRID_COL_GAP);
+  const leftColW = inner * (27 / 48);
+  const h = Math.round(leftColW * 1.42);
+  return Math.min(Math.max(h, 278), 336);
+}
+
 const STOCK_SPLIT_LOW_FLEX = 7;
 const STOCK_SPLIT_COMPACT_FLEX = 3;
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [labStats, setLabStats] = useState(null);
   const hasFetchedOnce = useRef(false);
+  const selectedDateRef = useRef(selectedDate);
+  const homeFocusedRef = useRef(false);
+
+  useEffect(() => {
+    selectedDateRef.current = selectedDate;
+  }, [selectedDate]);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimer = useRef(null);
+
+  const [profileMe, setProfileMe] = useState(null);
+  const loadProfileMe = useCallback(() => {
+    apiGet('/api/me', { allowStaleCache: false })
+      .then(setProfileMe)
+      .catch(() => setProfileMe(null));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      homeFocusedRef.current = true;
+      return () => {
+        homeFocusedRef.current = false;
+      };
+    }, []),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileMe();
+    }, [loadProfileMe]),
+  );
 
   const strip = useMemo(() => weekDaysForContainingMonday(selectedDate), [selectedDate]);
 
@@ -188,6 +255,43 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [selectedDate]);
+
+  const refreshHomeDataSilent = useCallback(async () => {
+    const ymd = toYMDLocal(selectedDateRef.current);
+    try {
+      const dashP = apiGet(`/api/dashboard/day?date=${encodeURIComponent(ymd)}`, {
+        allowStaleCache: false,
+      }).catch(() => null);
+      const labP = apiGet('/api/lab/stats', { allowStaleCache: false }).catch(() => null);
+      const [dash, lab] = await Promise.all([dashP, labP]);
+      if (toYMDLocal(selectedDateRef.current) !== ymd) return;
+      setData(dash || FALLBACK_DASH);
+      setLabStats(lab);
+    } catch {
+      if (toYMDLocal(selectedDateRef.current) !== ymd) return;
+      setData(FALLBACK_DASH);
+      setLabStats(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || !homeFocusedRef.current) return;
+      refreshHomeDataSilent();
+      loadProfileMe();
+    });
+    return () => sub.remove();
+  }, [refreshHomeDataSilent, loadProfileMe]);
+
+  const onPullRefresh = useCallback(async () => {
+    setPullRefreshing(true);
+    try {
+      await refreshHomeDataSilent();
+      loadProfileMe();
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [refreshHomeDataSilent, loadProfileMe]);
 
   const runSearch = useCallback(async (q) => {
     const t = q.trim();
@@ -261,7 +365,37 @@ export default function HomeScreen() {
     navigation.navigate('Calendar', { openDate: toYMDLocal(selectedDate) });
 
   const nowTick = new Date();
-  const planGridRowH = PLAN_GRID_ROW_H;
+
+  const [homeViewportH, setHomeViewportH] = useState(0);
+  const [abovePlanH, setAbovePlanH] = useState(0);
+
+  const scrollReserveBottom = useMemo(
+    () => homeScrollReserveBottom(insets.bottom),
+    [insets.bottom],
+  );
+
+  const planGridRowH = useMemo(() => {
+    const fallback = planGridRowHeight(windowWidth);
+    const viewH =
+      homeViewportH > 20
+        ? homeViewportH
+        : Math.max(0, windowHeight - insets.top - insets.bottom);
+    if (viewH > 40 && abovePlanH > 24) {
+      const fill = Math.round(viewH - abovePlanH - scrollReserveBottom);
+      if (fill >= 248) {
+        return Math.min(Math.max(fill, fallback - 28), 398);
+      }
+    }
+    return fallback;
+  }, [
+    windowWidth,
+    windowHeight,
+    homeViewportH,
+    abovePlanH,
+    scrollReserveBottom,
+    insets.top,
+    insets.bottom,
+  ]);
 
   const lowStockLine =
     lowCount === 1
@@ -270,17 +404,15 @@ export default function HomeScreen() {
 
   const lowStockCompactInner = (
     <View style={styles.stockCompactStack}>
-      <View style={styles.badgeBlueCompact}>
-        <Text style={styles.badgeTextBlueCompact}>Low stock</Text>
-      </View>
-      <Text style={styles.stockCompactSummary} numberOfLines={2}>
+      <Text style={styles.lowStockBadgeText}>Low stock</Text>
+      <Text style={styles.lowStockSummary} numberOfLines={2}>
         {lowStockLine}
       </Text>
       <View style={styles.stockCompactFooter}>
-        <View style={[styles.iconCircle, styles.iconCircleStockCompact]}>
+        <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
           <Ionicons name="cube" size={13} color="#fff" />
         </View>
-        <View style={[styles.iconCircle, styles.iconCircleStockCompact]}>
+        <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
           <Ionicons name="cart" size={13} color="#fff" />
         </View>
       </View>
@@ -289,144 +421,164 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled
-      >
+      <View style={styles.viewportFill} onLayout={(e) => setHomeViewportH(e.nativeEvent.layout.height)}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[
+            homeViewportH > 0 ? { minHeight: homeViewportH } : null,
+            { paddingBottom: scrollReserveBottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          refreshControl={
+            <RefreshControl
+              refreshing={pullRefreshing}
+              onRefresh={onPullRefresh}
+              tintColor={BRAND_PURPLE}
+            />
+          }
+        >
+          <View onLayout={(e) => setAbovePlanH(e.nativeEvent.layout.height)}>
         <View style={styles.header}>
           <View style={styles.userInfo}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
-              }}
-              style={styles.avatar}
-            />
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Profile"
+            >
+              <Image
+                source={{
+                  uri: profileMe?.avatar_url || HEADER_AVATAR_FALLBACK,
+                }}
+                style={styles.avatar}
+              />
+            </TouchableOpacity>
             <View>
               <Text style={styles.greeting}>Hello</Text>
               <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
-            <Ionicons name="search" size={20} color="#1C1C1E" />
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
+                <Ionicons name="search" size={20} color="#1C1C1E" />
+              </TouchableOpacity>
+            </View>
 
-        {loading && !hasFetchedOnce.current ? (
-          <View style={styles.loadingBanner}>
-            <ActivityIndicator color="#1C1C1E" />
-          </View>
-        ) : null}
+            {loading && !hasFetchedOnce.current ? (
+              <View style={styles.loadingBanner}>
+                <ActivityIndicator color="#1C1C1E" />
+              </View>
+            ) : null}
 
-        <TouchableOpacity
-          style={styles.bannerTouchable}
-          activeOpacity={0.9}
-          onPress={openCalendarForSelection}
-          accessibilityRole="button"
-          accessibilityLabel={`Calendar for ${toYMDLocal(selectedDate)}`}
-        >
-          <LinearGradient
-            colors={SCHEDULE_BANNER_GRADIENT}
-            locations={SCHEDULE_BANNER_LOCATIONS}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0.82, y: 1 }}
-            style={styles.bannerGradient}
-          >
-            <View style={styles.bannerInnerRow}>
-              <View style={styles.bannerTextContainer}>
-                <Text style={styles.bannerTitle}>{bannerTitleDisplay}</Text>
-                <Text style={styles.bannerSubtitle}>{scheduleBannerSubtitle}</Text>
-                {appointmentCount != null && appointmentCount > 0 && !isDashboardStale ? (
-                  <View style={styles.avatarGroup}>
-                    {avatars.slice(0, 3).map((uri, i) => (
-                      <Image
-                        key={uri + i}
-                        source={{ uri }}
-                        style={[styles.miniAvatar, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]}
-                      />
-                    ))}
-                    {extra > 0 ? (
-                      <View style={[styles.miniAvatarPlaceholder, { marginLeft: -10, zIndex: 0 }]}>
-                        <Text style={styles.miniAvatarText}>+{extra}</Text>
+            <TouchableOpacity
+              style={styles.bannerTouchable}
+              activeOpacity={0.9}
+              onPress={openCalendarForSelection}
+              accessibilityRole="button"
+              accessibilityLabel={`Calendar for ${toYMDLocal(selectedDate)}`}
+            >
+              <LinearGradient
+                colors={SCHEDULE_BANNER_GRADIENT}
+                locations={SCHEDULE_BANNER_LOCATIONS}
+                start={SCHEDULE_BANNER_GRADIENT_START}
+                end={SCHEDULE_BANNER_GRADIENT_END}
+                style={styles.bannerGradient}
+              >
+                <View style={styles.bannerInnerRow}>
+                  <View style={styles.bannerTextContainer}>
+                    <Text style={styles.bannerTitle}>{bannerTitleDisplay}</Text>
+                    <Text style={styles.bannerSubtitle}>{scheduleBannerSubtitle}</Text>
+                    {appointmentCount != null && appointmentCount > 0 && !isDashboardStale ? (
+                      <View style={styles.avatarGroup}>
+                        {avatars.slice(0, 3).map((uri, i) => (
+                          <Image
+                            key={uri + i}
+                            source={{ uri }}
+                            style={[styles.miniAvatar, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]}
+                          />
+                        ))}
+                        {extra > 0 ? (
+                          <View style={[styles.miniAvatarPlaceholder, { marginLeft: -10, zIndex: 0 }]}>
+                            <Text style={styles.miniAvatarText}>+{extra}</Text>
+                          </View>
+                        ) : null}
                       </View>
                     ) : null}
                   </View>
-                ) : null}
-              </View>
-              <View style={styles.bannerCalendarCue}>
-                <Ionicons name="calendar-outline" size={26} color="rgba(255,255,255,0.98)" />
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color="rgba(255,255,255,0.82)"
-                  style={{ marginTop: 4 }}
-                />
-              </View>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateStrip}
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-        >
-          {strip.map((item) => {
-            const cellDate = parseYMD(item.ymd);
-            const isSelected = sameCalendarLocal(cellDate, selectedDate);
-            const isToday = sameCalendarLocal(cellDate, nowTick);
-            return (
-              <TouchableOpacity
-                key={item.key}
-                style={styles.dateCell}
-                onPress={() => {
-                  setSelectedDate((prev) => {
-                    if (sameCalendarLocal(cellDate, prev)) return prev;
-                    return new Date(cellDate.getTime());
-                  });
-                }}
-                activeOpacity={0.85}
-                delayPressIn={0}
-                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-              >
-                {isSelected ? (
-                  <View style={styles.dateActiveBubble}>
-                    <Text style={styles.dateTextDayActive}>{item.day}</Text>
-                    <Text style={styles.dateTextNumActive}>{item.num}</Text>
+                  <View style={styles.bannerCalendarCue}>
+                    <Ionicons name="calendar-outline" size={26} color="rgba(255,255,255,0.98)" />
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color="rgba(255,255,255,0.82)"
+                      style={{ marginTop: 4 }}
+                    />
                   </View>
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.dateTextDayIdle,
-                        isToday && styles.dateTextDayToday,
-                      ]}
-                    >
-                      {item.day}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.dateTextNumIdle,
-                        isToday && styles.dateTextNumToday,
-                      ]}
-                    >
-                      {item.num}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Your plan</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dateStrip}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {strip.map((item) => {
+                const cellDate = parseYMD(item.ymd);
+                const isSelected = sameCalendarLocal(cellDate, selectedDate);
+                const isToday = sameCalendarLocal(cellDate, nowTick);
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={styles.dateCell}
+                    onPress={() => {
+                      setSelectedDate((prev) => {
+                        if (sameCalendarLocal(cellDate, prev)) return prev;
+                        return new Date(cellDate.getTime());
+                      });
+                    }}
+                    activeOpacity={0.85}
+                    delayPressIn={0}
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                  >
+                    {isSelected ? (
+                      <View style={styles.dateActiveBubble}>
+                        <Text style={styles.dateTextDayActive}>{item.day}</Text>
+                        <Text style={styles.dateTextNumActive}>{item.num}</Text>
+                      </View>
+                    ) : (
+                      <>
+                        <Text
+                          style={[
+                            styles.dateTextDayIdle,
+                            isToday && styles.dateTextDayToday,
+                          ]}
+                        >
+                          {item.day}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dateTextNumIdle,
+                            isToday && styles.dateTextNumToday,
+                          ]}
+                        >
+                          {item.num}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-        <View>
-          <View style={[styles.gridTopRow, { height: planGridRowH }]}>
+            <Text style={styles.sectionTitle}>Your plan</Text>
+          </View>
+
+          <View>
+            <View style={[styles.gridTopRow, { height: planGridRowH }]}>
             <View style={styles.gridLeft}>
               <TouchableOpacity
                 style={[styles.labCardOuter, styles.gridTallCard, styles.gridTallCardFill]}
@@ -440,23 +592,43 @@ export default function HomeScreen() {
                   end={LAB_GRADIENT_END}
                   style={styles.labCardGradient}
                 >
-                  <View style={styles.badgeLab}>
-                    <Text style={styles.badgeTextLab}>My lab</Text>
-                  </View>
-                  <Text style={[styles.cardTitle, styles.labCardTitle, styles.labPromoText]}>
-                    Formulas & templates
-                  </Text>
-                  <Text style={[styles.cardSubtitle, styles.labPromoText]} numberOfLines={4}>
+                  <Text style={styles.badgeTextLab}>Lab</Text>
+                  <Text style={[styles.labPlanTitle, styles.labPromoText]}>Formulas & templates</Text>
+                  <Text style={[styles.labPlanMeta, styles.labPromoText]} numberOfLines={2}>
                     {labStats?.visits_with_formula_this_month != null
                       ? `${labStats.visits_with_formula_this_month} visits with formulas this month`
                       : 'Search, duplicate, save templates'}
                   </Text>
-                  <View style={styles.labCardSpacer} />
-                  <View style={styles.labRowCompact}>
-                    <View style={styles.labIconCircle}>
-                      <Ionicons name="flask-outline" size={18} color="#fff" />
+                  <View style={styles.labIconCenter}>
+                    <View style={styles.labReliefPlate}>
+                      <View style={styles.labReliefStack}>
+                        <View
+                          style={[styles.labReliefInset, { alignItems: 'center', justifyContent: 'center' }]}
+                          pointerEvents="none"
+                        >
+                          <Ionicons
+                            name="flask"
+                            size={56}
+                            color="rgba(2,54,43,0.42)"
+                            style={{ transform: [{ translateX: 3 }, { translateY: 4 }] }}
+                          />
+                        </View>
+                        <View
+                          style={[styles.labReliefInset, { alignItems: 'center', justifyContent: 'center' }]}
+                          pointerEvents="none"
+                        >
+                          <Ionicons
+                            name="flask"
+                            size={56}
+                            color="rgba(255,255,255,0.72)"
+                            style={{ transform: [{ translateX: -2.5 }, { translateY: -3 }] }}
+                          />
+                        </View>
+                        <View style={[styles.labReliefInset, styles.labReliefFaceWrap]}>
+                          <Ionicons name="flask" size={56} color="#F1FEE2" style={styles.labReliefFace} />
+                        </View>
+                      </View>
                     </View>
-                    <Text style={[styles.labHint, styles.labPromoText]}>Open lab</Text>
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -466,7 +638,7 @@ export default function HomeScreen() {
               <View style={styles.stockVerticalStack}>
                 <TouchableOpacity
                   style={[
-                    styles.clientsShortcutCard,
+                    styles.financeCardOuter,
                     styles.stockCardSized,
                     styles.stockLowInStack,
                     { flex: STOCK_SPLIT_LOW_FLEX },
@@ -476,20 +648,26 @@ export default function HomeScreen() {
                     navigation.navigate('Finance', { date: toYMDLocal(selectedDate) })
                   }
                 >
-                  <View style={styles.clientsShortcutHead}>
-                    <View style={styles.clientsShortcutBadge}>
-                      <Text style={styles.clientsShortcutBadgeText}>Finance</Text>
+                  <LinearGradient
+                    colors={FINANCE_CARD_GRADIENT_COLORS}
+                    locations={FINANCE_CARD_GRADIENT_LOCATIONS}
+                    start={FINANCE_CARD_GRADIENT_START}
+                    end={FINANCE_CARD_GRADIENT_END}
+                    style={styles.financeCardGradient}
+                  >
+                    <View style={styles.financeCardHead}>
+                      <Text style={styles.financeBadgeText}>Finance</Text>
+                      <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.92)" />
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#C7C7CC" />
-                  </View>
-                  <View style={styles.clientsShortcutBody}>
-                    <Ionicons name="wallet-outline" size={44} color="#C7C7CC" />
-                  </View>
+                    <View style={styles.financeCardBody}>
+                      <Ionicons name="wallet-outline" size={36} color="rgba(255,255,255,0.94)" />
+                    </View>
+                  </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.stockCompactSecondary,
-                    styles.cardBlue,
+                    styles.lowStockCard,
                     styles.stockCardSized,
                     styles.stockCompactInStack,
                     { flex: STOCK_SPLIT_COMPACT_FLEX },
@@ -501,9 +679,10 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       <Modal visible={searchOpen} animationType="slide" transparent>
         <KeyboardAvoidingView
@@ -570,6 +749,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  viewportFill: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     paddingHorizontal: 24,
@@ -583,8 +765,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 30,
+    marginTop: 16,
+    marginBottom: 18,
   },
   userInfo: {
     flexDirection: 'row',
@@ -614,7 +796,7 @@ const styles = StyleSheet.create({
   bannerTouchable: {
     borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 24,
+    marginBottom: 18,
     shadowColor: '#5E35B1',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
@@ -622,8 +804,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   bannerGradient: {
-    paddingVertical: 24,
-    paddingHorizontal: 24,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
   },
   bannerInnerRow: {
     flexDirection: 'row',
@@ -634,19 +816,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bannerTitle: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 2,
     textShadowColor: 'rgba(0,0,0,0.18)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   bannerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.94)',
     fontWeight: '400',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   bannerCalendarCue: {
     width: 72,
@@ -688,7 +870,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
     paddingRight: 8,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   dateCell: {
     minWidth: 48,
@@ -735,10 +917,10 @@ const styles = StyleSheet.create({
     color: '#5E35B1',
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '400',
     color: '#1C1C1E',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   /**
    * Row `height` = `planGridRowH` — Lab | (Finance + compact low-stock).
@@ -746,7 +928,7 @@ const styles = StyleSheet.create({
   gridTopRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 12,
+    gap: 10,
     marginHorizontal: 4,
   },
   gridLeft: {
@@ -773,38 +955,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  clientsShortcutCard: {
+  financeCardOuter: {
     borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
+    overflow: 'hidden',
+    shadowColor: '#0F4C9B',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.32,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  clientsShortcutHead: {
+  financeCardGradient: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 0,
+  },
+  financeCardHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 6,
   },
-  clientsShortcutBadge: {
-    backgroundColor: 'rgba(94, 53, 177, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-  },
-  clientsShortcutBadgeText: {
+  financeBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: BRAND_PURPLE,
+    fontFamily: FontFamily.bold,
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
-  clientsShortcutBody: {
+  financeCardBody: {
     flex: 1,
     minHeight: 0,
     justifyContent: 'center',
@@ -816,20 +994,32 @@ const styles = StyleSheet.create({
   /** Fill column when parent has explicit height (grid row). */
   gridTallCardFill: {
     flex: 1,
-    minHeight: 100,
+    minHeight: 96,
   },
-  badgeBlueCompact: {
-    backgroundColor: '#64B5F6',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 5,
+  lowStockCard: {
+    backgroundColor: SCHEDULE_BANNER_LEAD_PINK,
+    shadowColor: '#B8326E',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 0,
   },
-  badgeTextBlueCompact: {
+  lowStockBadgeText: {
     fontSize: 9,
-    fontWeight: '600',
-    color: '#FFF',
+    fontFamily: FontFamily.semibold,
+    color: '#FFFFFF',
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  lowStockSummary: {
+    fontSize: 12,
+    fontFamily: FontFamily.semibold,
+    color: 'rgba(255,255,255,0.96)',
+    lineHeight: 16,
+  },
+  iconCircleLowStock: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
   stockCompactStack: {
     flex: 1,
@@ -837,17 +1027,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     justifyContent: 'center',
   },
-  stockCompactSummary: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    lineHeight: 16,
-  },
   stockCompactFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 6,
+    marginTop: 5,
   },
   iconCircleStockCompact: {
     width: 23,
@@ -859,22 +1043,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   stockCompactSecondary: {
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 9,
+    borderRadius: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     justifyContent: 'center',
   },
   cardStockCompact: {
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 11,
   },
   card: {
     width: '48%',
     borderRadius: 24,
     padding: 20,
-  },
-  cardBlue: {
-    backgroundColor: '#BBDEFB',
   },
   labCardOuter: {
     borderRadius: 24,
@@ -886,57 +1067,64 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   labCardGradient: {
-    padding: 18,
+    padding: 13,
     flex: 1,
+    flexDirection: 'column',
   },
   labPromoText: {
     color: LAB_ON_GRADIENT_TEXT,
   },
-  labCardTitle: {
-    fontSize: 20,
-    fontWeight: '500',
-    lineHeight: 26,
-    marginBottom: 6,
+  labPlanTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: 18,
+    lineHeight: 23,
+    marginBottom: 4,
   },
-  badgeLab: {
-    backgroundColor: 'rgba(15, 31, 23, 0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginBottom: 12,
+  labPlanMeta: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: 17,
+    marginBottom: 2,
   },
   badgeTextLab: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontFamily: FontFamily.semibold,
+    color: LAB_ON_GRADIENT_TEXT,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
   },
-  labRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 18,
-  },
-  labRowCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  labCardSpacer: {
+  labIconCenter: {
     flex: 1,
-    minHeight: 4,
-  },
-  labIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: LAB_ACCENT,
-    alignItems: 'center',
+    minHeight: 0,
     justifyContent: 'center',
-    marginRight: 10,
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 2,
   },
-  labHint: {
-    fontSize: 13,
-    flex: 1,
-    fontWeight: '500',
+  labReliefPlate: {
+    width: 84,
+    height: 84,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labReliefStack: {
+    width: 72,
+    height: 72,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labReliefInset: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  labReliefFaceWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labReliefFace: {
+    textShadowColor: 'rgba(8,71,53,0.28)',
+    textShadowOffset: { width: 0.5, height: 1.25 },
+    textShadowRadius: 0,
   },
   badgeBlue: {
     backgroundColor: '#64B5F6',

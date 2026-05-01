@@ -29596,6 +29596,8 @@ var require_schemaEnsure = __commonJS({
     )
   `;
       await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS apple_sub TEXT`;
+      await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS display_name TEXT`;
+      await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
       await sql`ALTER TABLE staff ALTER COLUMN password_hash DROP NOT NULL`;
       await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_apple_sub
@@ -29830,6 +29832,9 @@ var require_r2 = __commonJS({
     function keyPrefixForClient(clientId) {
       return `clients/${clientId}/`;
     }
+    function keyPrefixForStaff(staffId) {
+      return `staff/${staffId}/`;
+    }
     function buildObjectKey(clientId, contentType) {
       const ext = extForType(contentType);
       if (!ext) return null;
@@ -29850,6 +29855,18 @@ var require_r2 = __commonJS({
     function keyBelongsToClientAvatar(clientId, key) {
       if (typeof key !== "string" || key.includes("..")) return false;
       const prefix = keyPrefixForClient(clientId);
+      if (!key.startsWith(prefix)) return false;
+      const rest = key.slice(prefix.length);
+      return /^avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i.test(rest);
+    }
+    function buildStaffAvatarKey(staffId, contentType) {
+      const ext = extForType(contentType);
+      if (!ext) return null;
+      return `${keyPrefixForStaff(staffId)}avatar-${randomUUID()}.${ext}`;
+    }
+    function keyBelongsToStaffAvatar(staffId, key) {
+      if (typeof key !== "string" || key.includes("..")) return false;
+      const prefix = keyPrefixForStaff(staffId);
       if (!key.startsWith(prefix)) return false;
       const rest = key.slice(prefix.length);
       return /^avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i.test(rest);
@@ -29885,8 +29902,10 @@ var require_r2 = __commonJS({
       normalizeContentType,
       buildObjectKey,
       buildAvatarKey,
+      buildStaffAvatarKey,
       keyBelongsToClient,
       keyBelongsToClientAvatar,
+      keyBelongsToStaffAvatar,
       presignPut,
       presignGet,
       deleteObject
@@ -43240,6 +43259,183 @@ app.post("/api/push/register", async (req, res, next) => {
     next(e);
   }
 });
+function sanitizeStaffDisplayName(raw) {
+  if (raw === null || raw === void 0) return null;
+  if (typeof raw !== "string") return null;
+  const t = raw.trim().replace(/\s+/g, " ");
+  return t.slice(0, 160);
+}
+app.get("/api/me", async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT
+        s.id,
+        s.email,
+        s.display_name,
+        s.avatar_url,
+        s.role,
+        (s.password_hash IS NOT NULL)::boolean AS has_password,
+        (s.apple_sub IS NOT NULL)::boolean AS has_apple,
+        sal.name AS salon_name
+      FROM staff s
+      JOIN salons sal ON sal.id = s.salon_id
+      WHERE s.id = ${req.auth.userId} AND s.salon_id = ${req.auth.salonId}
+      LIMIT 1
+    `;
+    if (!rows.length) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    res.json(rows[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+app.patch("/api/me", async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!Object.prototype.hasOwnProperty.call(b, "display_name")) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    let displayNamePayload;
+    if (b.display_name === null) {
+      displayNamePayload = null;
+    } else {
+      const sanitized = sanitizeStaffDisplayName(b.display_name);
+      displayNamePayload = sanitized && sanitized.length ? sanitized : null;
+    }
+    const sql = getSql();
+    const rows = await sql`
+      UPDATE staff
+      SET display_name = ${displayNamePayload}
+      WHERE id = ${req.auth.userId} AND salon_id = ${req.auth.salonId}
+      RETURNING id, email, display_name, avatar_url, role
+    `;
+    if (!rows.length) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    res.json(rows[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+app.post("/api/me/avatar/presign", async (req, res, next) => {
+  try {
+    if (!r2.r2Configured()) {
+      return res.status(503).json({ error: "unavailable" });
+    }
+    const uid = Number(req.auth.userId);
+    if (!Number.isFinite(uid)) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const sql = getSql();
+    const exists = await sql`
+      SELECT id FROM staff WHERE id = ${uid} AND salon_id = ${req.auth.salonId} LIMIT 1
+    `;
+    if (!exists.length) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const b = req.body || {};
+    const ct = r2.normalizeContentType(b.contentType ?? b.content_type);
+    if (!ct) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const key = r2.buildStaffAvatarKey(uid, ct);
+    if (!key) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const uploadUrl = await r2.presignPut(key, ct);
+    res.json({ uploadUrl, key, contentType: ct });
+  } catch (e) {
+    next(e);
+  }
+});
+app.post("/api/me/avatar/commit", async (req, res, next) => {
+  try {
+    if (!r2.r2Configured()) {
+      return res.status(503).json({ error: "unavailable" });
+    }
+    const uid = Number(req.auth.userId);
+    if (!Number.isFinite(uid)) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const key = typeof (req.body || {}).key === "string" ? req.body.key.trim() : "";
+    if (!key || !r2.keyBelongsToStaffAvatar(uid, key)) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const b = req.body || {};
+    const ct = r2.normalizeContentType(b.contentType ?? b.content_type);
+    if (!ct) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const sql = getSql();
+    const existing = await sql`
+      SELECT id, avatar_url FROM staff WHERE id = ${uid} AND salon_id = ${req.auth.salonId} LIMIT 1
+    `;
+    if (!existing.length) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const prevUrl = existing[0].avatar_url;
+    const avatarUrl = mediaUrlForKey(req, key);
+    await sql`UPDATE staff SET avatar_url = ${avatarUrl} WHERE id = ${uid} AND salon_id = ${req.auth.salonId}`;
+    const oldKey = extractR2KeyFromAvatarUrl(prevUrl);
+    if (oldKey && oldKey !== key && r2.keyBelongsToStaffAvatar(uid, oldKey)) {
+      try {
+        await r2.deleteObject(oldKey);
+      } catch (_) {
+      }
+    }
+    res.json({ avatar_url: avatarUrl });
+  } catch (e) {
+    next(e);
+  }
+});
+app.delete("/api/me", async (req, res, next) => {
+  try {
+    const uid = Number(req.auth.userId);
+    const sid = Number(req.auth.salonId);
+    const role = String(req.auth.role || "staff");
+    if (!Number.isFinite(uid) || !Number.isFinite(sid)) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const sql = getSql();
+    const salonStaff = await sql`
+      SELECT COUNT(*)::int AS n FROM staff WHERE salon_id = ${sid}
+    `;
+    if (Number(salonStaff[0]?.n || 0) <= 1) {
+      return res.status(403).json({ error: "last_staff" });
+    }
+    if (role === "admin") {
+      const otherAdmins = await sql`
+        SELECT COUNT(*)::int AS n FROM staff
+        WHERE salon_id = ${sid} AND role = 'admin' AND id <> ${uid}
+      `;
+      if (Number(otherAdmins[0]?.n || 0) < 1) {
+        return res.status(403).json({ error: "last_admin" });
+      }
+    }
+    const selfRows = await sql`
+      SELECT id, avatar_url FROM staff WHERE id = ${uid} AND salon_id = ${sid} LIMIT 1
+    `;
+    if (!selfRows.length) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const prevUrl = selfRows[0].avatar_url;
+    if (prevUrl && r2.r2Configured()) {
+      const oldKey = extractR2KeyFromAvatarUrl(prevUrl);
+      if (oldKey && r2.keyBelongsToStaffAvatar(uid, oldKey)) {
+        try {
+          await r2.deleteObject(oldKey);
+        } catch (_) {
+        }
+      }
+    }
+    await sql`DELETE FROM staff WHERE id = ${uid} AND salon_id = ${sid}`;
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
 function publicBaseUrl(req) {
   const env = process.env.API_PUBLIC_URL;
   if (env && String(env).trim()) {
@@ -43262,9 +43458,9 @@ function extractR2KeyFromAvatarUrl(url) {
 }
 function isAllowedR2MediaKey(key) {
   if (typeof key !== "string" || key.includes("..")) return false;
-  return /^clients\/\d+\/(avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(jpg|png|webp)$/i.test(
-    key
-  );
+  const clientKey = /^clients\/\d+\/(avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(jpg|png|webp)$/i;
+  const staffAvatar = /^staff\/\d+\/avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i;
+  return clientKey.test(key) || staffAvatar.test(key);
 }
 function getSql() {
   const url = process.env.DATABASE_URL;

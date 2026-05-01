@@ -51,6 +51,10 @@ function keyPrefixForClient(clientId) {
   return `clients/${clientId}/`;
 }
 
+function keyPrefixForStaff(staffId) {
+  return `staff/${staffId}/`;
+}
+
 function buildObjectKey(clientId, contentType) {
   const ext = extForType(contentType);
   if (!ext) return null;
@@ -74,6 +78,20 @@ function buildAvatarKey(clientId, contentType) {
 function keyBelongsToClientAvatar(clientId, key) {
   if (typeof key !== 'string' || key.includes('..')) return false;
   const prefix = keyPrefixForClient(clientId);
+  if (!key.startsWith(prefix)) return false;
+  const rest = key.slice(prefix.length);
+  return /^avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i.test(rest);
+}
+
+function buildStaffAvatarKey(staffId, contentType) {
+  const ext = extForType(contentType);
+  if (!ext) return null;
+  return `${keyPrefixForStaff(staffId)}avatar-${randomUUID()}.${ext}`;
+}
+
+function keyBelongsToStaffAvatar(staffId, key) {
+  if (typeof key !== 'string' || key.includes('..')) return false;
+  const prefix = keyPrefixForStaff(staffId);
   if (!key.startsWith(prefix)) return false;
   const rest = key.slice(prefix.length);
   return /^avatar-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i.test(rest);
@@ -113,8 +131,10 @@ module.exports = {
   normalizeContentType,
   buildObjectKey,
   buildAvatarKey,
+  buildStaffAvatarKey,
   keyBelongsToClient,
   keyBelongsToClientAvatar,
+  keyBelongsToStaffAvatar,
   presignPut,
   presignGet,
   deleteObject,

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  AppState,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -55,6 +57,7 @@ export default function CalendarScreen() {
   const [deviceMark, setDeviceMark] = useState(new Set());
   const [calPerm, setCalPerm] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
 
   const ymd = useMemo(() => toYMD(selected), [selected]);
 
@@ -64,6 +67,117 @@ export default function CalendarScreen() {
     const last = `${cursor.y}-${String(cursor.m + 1).padStart(2, '0')}-${String(lastD).padStart(2, '0')}`;
     return [first, last];
   }, [cursor]);
+
+  const ymdRef = useRef(ymd);
+  const fromToRef = useRef(fromTo);
+  const scheduleFocusedRef = useRef(false);
+  const monthFetchGen = useRef(0);
+  const dayFetchGen = useRef(0);
+
+  useEffect(() => {
+    ymdRef.current = ymd;
+  }, [ymd]);
+  useEffect(() => {
+    fromToRef.current = fromTo;
+  }, [fromTo]);
+
+  const loadMonthMarks = useCallback(async () => {
+    const myGen = ++monthFetchGen.current;
+    const [from, to] = fromToRef.current;
+    let days = [];
+    try {
+      days = await apiGet(
+        `/api/appointments/days?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      );
+    } catch {
+      days = [];
+    }
+    let dMarks = new Set();
+    try {
+      dMarks = await fetchDeviceEventDatesInRange(from, to);
+    } catch {
+      dMarks = new Set();
+    }
+    if (myGen !== monthFetchGen.current) return;
+    setMarked(new Set(Array.isArray(days) ? days : []));
+    setDeviceMark(dMarks && typeof dMarks.has === 'function' ? dMarks : new Set());
+    try {
+      const st = await getDeviceCalendarPermissionStatus();
+      if (myGen === monthFetchGen.current) setCalPerm(st);
+    } catch {
+      if (myGen === monthFetchGen.current) setCalPerm(null);
+    }
+  }, []);
+
+  const loadDayAgendaOverlay = useCallback(async () => {
+    const myGen = ++dayFetchGen.current;
+    const day = ymdRef.current;
+    setLoading(true);
+    try {
+      let rows = [];
+      let dev = [];
+      try {
+        ;[rows, dev] = await Promise.all([
+          apiGet(`/api/appointments?date=${encodeURIComponent(day)}`),
+          fetchDeviceEventsForDay(day),
+        ]);
+      } catch {
+        try {
+          rows = await apiGet(`/api/appointments?date=${encodeURIComponent(day)}`);
+        } catch {
+          rows = [];
+        }
+        try {
+          dev = await fetchDeviceEventsForDay(day);
+        } catch {
+          dev = [];
+        }
+      }
+      if (myGen !== dayFetchGen.current) return;
+      setItems(Array.isArray(rows) ? rows : []);
+      setDeviceEvents(Array.isArray(dev) ? dev : []);
+    } finally {
+      if (myGen === dayFetchGen.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  /** Foreground / pull — does not touch `dayFetchGen` (avoids fighting the overlay loader). */
+  const refreshDayAgendaSilent = useCallback(async () => {
+    const dayAtStart = ymdRef.current;
+    let rows = [];
+    let dev = [];
+    try {
+      ;[rows, dev] = await Promise.all([
+        apiGet(`/api/appointments?date=${encodeURIComponent(dayAtStart)}`),
+        fetchDeviceEventsForDay(dayAtStart),
+      ]);
+    } catch {
+      try {
+        rows = await apiGet(`/api/appointments?date=${encodeURIComponent(dayAtStart)}`);
+      } catch {
+        rows = [];
+      }
+      try {
+        dev = await fetchDeviceEventsForDay(dayAtStart);
+      } catch {
+        dev = [];
+      }
+    }
+    if (ymdRef.current !== dayAtStart) return;
+    setItems(Array.isArray(rows) ? rows : []);
+    setDeviceEvents(Array.isArray(dev) ? dev : []);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      scheduleFocusedRef.current = true;
+      return () => {
+        scheduleFocusedRef.current = false;
+      };
+    }, []),
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -81,73 +195,43 @@ export default function CalendarScreen() {
     useCallback(() => {
       let cancelled = false;
       (async () => {
-        const [from, to] = fromTo;
-        let days = [];
-        try {
-          days = await apiGet(
-            `/api/appointments/days?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-          );
-        } catch {
-          days = [];
-        }
-        let dMarks = new Set();
-        try {
-          dMarks = await fetchDeviceEventDatesInRange(from, to);
-        } catch {
-          dMarks = new Set();
-        }
-        if (!cancelled) {
-          setMarked(new Set(Array.isArray(days) ? days : []));
-          setDeviceMark(dMarks && typeof dMarks.has === 'function' ? dMarks : new Set());
-        }
-        try {
-          const st = await getDeviceCalendarPermissionStatus();
-          if (!cancelled) setCalPerm(st);
-        } catch {
-          if (!cancelled) setCalPerm(null);
-        }
+        await loadMonthMarks();
+        if (cancelled) return;
       })();
       return () => {
         cancelled = true;
+        monthFetchGen.current += 1;
       };
-    }, [fromTo]),
+    }, [fromTo, loadMonthMarks]),
   );
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      (async () => {
-        setLoading(true);
-        let rows = [];
-        let dev = [];
-        try {
-          ;[rows, dev] = await Promise.all([
-            apiGet(`/api/appointments?date=${encodeURIComponent(ymd)}`),
-            fetchDeviceEventsForDay(ymd),
-          ]);
-        } catch {
-          try {
-            rows = await apiGet(`/api/appointments?date=${encodeURIComponent(ymd)}`);
-          } catch {
-            rows = [];
-          }
-          try {
-            dev = await fetchDeviceEventsForDay(ymd);
-          } catch {
-            dev = [];
-          }
-        }
-        if (!cancelled) {
-          setItems(Array.isArray(rows) ? rows : []);
-          setDeviceEvents(Array.isArray(dev) ? dev : []);
-        }
-        if (!cancelled) setLoading(false);
-      })();
+      loadDayAgendaOverlay();
       return () => {
-        cancelled = true;
+        dayFetchGen.current += 1;
+        setLoading(false);
       };
-    }, [ymd]),
+    }, [ymd, loadDayAgendaOverlay]),
   );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || !scheduleFocusedRef.current) return;
+      loadMonthMarks();
+      refreshDayAgendaSilent();
+    });
+    return () => sub.remove();
+  }, [loadMonthMarks, refreshDayAgendaSilent]);
+
+  const onPullRefresh = useCallback(async () => {
+    setPullRefreshing(true);
+    try {
+      await Promise.all([loadMonthMarks(), refreshDayAgendaSilent()]);
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [loadMonthMarks, refreshDayAgendaSilent]);
 
   const grid = useMemo(() => padMonthGrid(cursor.y, cursor.m), [cursor]);
 
@@ -332,7 +416,17 @@ export default function CalendarScreen() {
           <ActivityIndicator />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={pullRefreshing}
+              onRefresh={onPullRefresh}
+              tintColor={BRAND_PURPLE}
+            />
+          }
+        >
           {mergedRows.map((row) =>
             row.kind === 'salon' ? (
               <View key={row.key} style={styles.card}>

@@ -22,6 +22,7 @@ import VisitDetailScreen from './src/screens/VisitDetailScreen';
 import LabScreen from './src/screens/LabScreen';
 import FinanceScreen from './src/screens/FinanceScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import { CurrencyProvider } from './src/context/CurrencyContext';
 import { loadStoredToken, flushOutbox } from './src/api/client';
 import { registerExpoPushIfPossible } from './src/push/registerPush';
@@ -261,6 +262,7 @@ export default function App() {
                 <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />
                 <Stack.Screen name="Finance" component={FinanceScreen} />
                 <Stack.Screen name="Lab" component={LabScreen} />
+                <Stack.Screen name="Profile" component={ProfileScreen} />
               </>
             )}
           </Stack.Navigator>

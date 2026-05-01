@@ -39,6 +39,8 @@ CREATE TABLE staff (
   email TEXT NOT NULL,
   password_hash TEXT,
   apple_sub TEXT,
+  display_name TEXT,
+  avatar_url TEXT,
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (salon_id, email)

@@ -26,6 +26,7 @@ import {
   splitPhoneForForm,
   flagEmoji,
 } from '../lib/phoneCountries';
+import IsoDatePickField from '../components/IsoDatePickField';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 
 function patchDateToInput(v) {
@@ -58,7 +59,7 @@ async function uploadAvatarToR2(clientId, pending) {
 
 const DEFAULT_ISO = 'BG';
 
-/** Първа дума → име, останалото → фамилия (и две имена BG). */
+/** First word → first name, remainder → last name (works for compound given names too). */
 function splitFullName(full) {
   const s = String(full || '').trim();
   if (!s) return { first: '', last: '' };
@@ -383,14 +384,14 @@ export default function ClientFormScreen({ route, navigation }) {
             </View>
           </View>
 
-          <Text style={styles.label}>Patch test (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#1C1C1E"
+          <Text style={styles.label}>Patch test</Text>
+          <IsoDatePickField
             value={patchTest}
-            onChangeText={setPatchTest}
-            autoCapitalize="none"
+            onChange={setPatchTest}
+            nullable
+            toolbarTitle="Patch test"
+            style={styles.input}
+            textStyle={{ fontSize: 16, color: '#1C1C1E' }}
           />
 
           <Text style={styles.label}>Notes</Text>

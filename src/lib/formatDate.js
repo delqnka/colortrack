@@ -13,7 +13,7 @@ export function parseISODateToLocal(isoYmd) {
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
-/** Localized “day month year” (e.g. 1 януари 2026 г. / January 1, 2026). */
+/** Long date in fixed US locale so UI stays English regardless of device language. */
 export function formatDisplayDate(value) {
   if (value == null || value === '') return '—';
   const s = typeof value === 'string' ? value : String(value);
@@ -31,12 +31,12 @@ export function formatDisplayDate(value) {
   }
   const local = new Date(y, mo - 1, day, 12, 0, 0, 0);
   try {
-    return local.toLocaleDateString(undefined, {
+    return local.toLocaleDateString('en-US', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
   } catch {
-    return `${day}.${mo}.${y}`;
+    return `${mo}/${day}/${y}`;
   }
 }

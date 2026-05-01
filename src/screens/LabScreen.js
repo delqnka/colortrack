@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,15 +18,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPost } from '../api/client';
-import { glassPurpleIconBtn } from '../theme/glassUi';
+import { BRAND_PURPLE, glassPurpleFabBar } from '../theme/glassUi';
 import {
-  LAB_ACCENT,
-  LAB_GRADIENT_COLORS,
-  LAB_GRADIENT_END,
-  LAB_GRADIENT_LOCATIONS,
-  LAB_GRADIENT_START,
-} from '../theme/labGradient';
+  SCHEDULE_BANNER_GRADIENT,
+  SCHEDULE_BANNER_GRADIENT_END,
+  SCHEDULE_BANNER_GRADIENT_START,
+  SCHEDULE_BANNER_LOCATIONS,
+} from '../theme/scheduleBannerGradient';
+import { FontFamily } from '../theme/fonts';
 import { formatDisplayDate } from '../lib/formatDate';
+import IsoDatePickField from '../components/IsoDatePickField';
 
 function toYMDLocal(d) {
   const y = d.getFullYear();
@@ -58,12 +59,16 @@ export default function LabScreen({ navigation }) {
   const [stats, setStats] = useState(null);
   const [visits, setVisits] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [bootstrapped, setBootstrapped] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [range, setRange] = useState('month');
   const [searchQ, setSearchQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const listSearchTimer = useRef(null);
   const clientSearchTimer = useRef(null);
+  const bootstrappedRef = useRef(false);
+  const visitFetchSeq = useRef(0);
 
   const [useModal, setUseModal] = useState(null);
   const [pickContext, setPickContext] = useState(null);
@@ -81,36 +86,59 @@ export default function LabScreen({ navigation }) {
 
   const { from, to } = useMemo(() => boundsForRange(range), [range]);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('limit', '60');
-      if (from) params.set('from', from);
-      if (to) params.set('to', to);
-      if (debouncedQ.trim()) params.set('q', debouncedQ.trim());
-      const [st, list, tpls] = await Promise.all([
-        apiGet('/api/lab/stats'),
-        apiGet(`/api/lab/visits?${params.toString()}`),
-        apiGet('/api/lab/templates'),
-      ]);
-      setStats(st);
-      setVisits(Array.isArray(list) ? list : []);
-      setTemplates(Array.isArray(tpls) ? tpls : []);
-    } catch {
-      setStats(null);
-      setVisits([]);
-      setTemplates([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [from, to, debouncedQ]);
+  const loadAll = useCallback(
+    async (opts = {}) => {
+      const { pullToRefresh = false } = opts;
+      const firstEver = !bootstrappedRef.current;
+      visitFetchSeq.current += 1;
+      const seq = visitFetchSeq.current;
+
+      if (pullToRefresh) setPullRefreshing(true);
+      else if (firstEver) setLoading(true);
+
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '60');
+        if (from) params.set('from', from);
+        if (to) params.set('to', to);
+        if (debouncedQ.trim()) params.set('q', debouncedQ.trim());
+        const [st, list, tpls] = await Promise.all([
+          apiGet('/api/lab/stats'),
+          apiGet(`/api/lab/visits?${params.toString()}`),
+          apiGet('/api/lab/templates'),
+        ]);
+        if (seq !== visitFetchSeq.current) return;
+        setStats(st);
+        setVisits(Array.isArray(list) ? list : []);
+        setTemplates(Array.isArray(tpls) ? tpls : []);
+      } catch {
+        if (seq !== visitFetchSeq.current) return;
+        setStats(null);
+        setVisits([]);
+        setTemplates([]);
+      } finally {
+        if (seq === visitFetchSeq.current) {
+          setLoading(false);
+          setPullRefreshing(false);
+          bootstrappedRef.current = true;
+          setBootstrapped(true);
+        }
+      }
+    },
+    [from, to, debouncedQ],
+  );
 
   useFocusEffect(
     useCallback(() => {
       loadAll();
     }, [loadAll]),
   );
+
+  useEffect(() => {
+    if (!useModal) return;
+    setClientQuery('');
+    runClientSearch('');
+  }, [useModal, runClientSearch]);
 
   const onSearchChange = useCallback((text) => {
     setSearchQ(text);
@@ -150,13 +178,14 @@ export default function LabScreen({ navigation }) {
 
   const runClientSearch = useCallback(async (q) => {
     const t = q.trim();
-    if (!t) {
-      setClientHits([]);
-      return;
-    }
     setClientLoading(true);
     try {
-      const rows = await apiGet(`/api/clients?q=${encodeURIComponent(t)}`);
+      let rows;
+      if (!t) {
+        rows = await apiGet('/api/clients');
+      } else {
+        rows = await apiGet(`/api/clients?q=${encodeURIComponent(t)}`);
+      }
       setClientHits(Array.isArray(rows) ? rows : []);
     } catch {
       setClientHits([]);
@@ -180,7 +209,7 @@ export default function LabScreen({ navigation }) {
     try {
       const vd = visitDate.trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(vd)) {
-        Alert.alert('Date', 'Use YYYY-MM-DD.');
+        Alert.alert('Invalid Date', 'Use the format YYYY-MM-DD.');
         return;
       }
       const proc = procedureOverride.trim() || pickContext.defaultProcedure || 'Visit';
@@ -200,7 +229,7 @@ export default function LabScreen({ navigation }) {
         });
       }
       if (res && res.queued) {
-        Alert.alert('Offline', 'This action was queued and will sync when you are online.');
+        Alert.alert(`You're Offline`, 'This visit will finish syncing when you reconnect.');
         closeUseModal();
         return;
       }
@@ -210,7 +239,7 @@ export default function LabScreen({ navigation }) {
         navigation.navigate('VisitDetail', { visitId: res.id });
       }
     } catch (e) {
-      Alert.alert('Could not create visit', e && e.message ? String(e.message) : 'Error');
+      Alert.alert("Couldn't Save Visit", (e && e.message ? String(e.message) : '').trim() || 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -232,14 +261,14 @@ export default function LabScreen({ navigation }) {
         name,
       });
       if (res && res.queued) {
-        Alert.alert('Offline', 'Connect to the internet to save a template.');
+        Alert.alert(`You're Offline`, 'Connect to the internet to save a mix.');
         return;
       }
       setSaveTplOpen(false);
       setSaveTplVisitId(null);
       await loadAll();
     } catch (e) {
-      Alert.alert('Save failed', e && e.message ? String(e.message) : 'Error');
+      Alert.alert('Save Failed', (e && e.message ? String(e.message) : '').trim() || 'Try again.');
     } finally {
       setSaveTplBusy(false);
     }
@@ -248,26 +277,28 @@ export default function LabScreen({ navigation }) {
   const listHeader = useMemo(
     () => (
       <View>
-        <LinearGradient
-          colors={LAB_GRADIENT_COLORS}
-          locations={LAB_GRADIENT_LOCATIONS}
-          start={LAB_GRADIENT_START}
-          end={LAB_GRADIENT_END}
-          style={styles.statRow}
-        >
-          <Text style={styles.statLabel}>This month</Text>
-          <Text style={styles.statValue}>
-            {stats?.visits_with_formula_this_month != null
-              ? `${stats.visits_with_formula_this_month} formula visits`
-              : '—'}
-          </Text>
-        </LinearGradient>
+        <View style={styles.statOuter}>
+          <LinearGradient
+            colors={SCHEDULE_BANNER_GRADIENT}
+            locations={SCHEDULE_BANNER_LOCATIONS}
+            start={SCHEDULE_BANNER_GRADIENT_START}
+            end={SCHEDULE_BANNER_GRADIENT_END}
+            style={styles.statGradient}
+          >
+            <Text style={styles.statLabel}>Formula visits · this month</Text>
+            <Text style={styles.statValue}>
+              {stats?.visits_with_formula_this_month != null
+                ? String(stats.visits_with_formula_this_month)
+                : '—'}
+            </Text>
+          </LinearGradient>
+        </View>
 
         <View style={styles.searchRow}>
           <Ionicons name="search" size={20} color="#1C1C1E" style={{ marginRight: 8 }} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search client, procedure, brand, shade"
+            placeholder="Search"
             placeholderTextColor="#8E8E93"
             value={searchQ}
             onChangeText={onSearchChange}
@@ -280,7 +311,7 @@ export default function LabScreen({ navigation }) {
           {[
             { key: 'week', label: 'This week' },
             { key: 'month', label: 'This month' },
-            { key: 'all', label: 'All (to today)' },
+            { key: 'all', label: 'All' },
           ].map((c) => (
             <TouchableOpacity
               key={c.key}
@@ -293,10 +324,7 @@ export default function LabScreen({ navigation }) {
           ))}
         </ScrollView>
 
-        <Text style={styles.sectionLabel}>Recent formula visits</Text>
-        <Text style={styles.sectionHint}>
-          Tap a row to open the visit. Cube = inventory-linked line on that visit.
-        </Text>
+        <Text style={styles.sectionLabel}>Recent activity</Text>
       </View>
     ),
     [stats, searchQ, onSearchChange, range],
@@ -305,28 +333,29 @@ export default function LabScreen({ navigation }) {
   const listFooter = useMemo(
     () => (
       <View style={styles.tplBlock}>
-        <Text style={styles.sectionLabel}>Templates</Text>
-        <Text style={styles.sectionHint}>
-          Apply a saved mix to a client and date (does not deduct stock).
-        </Text>
+        <Text style={styles.sectionLabel}>Mix library</Text>
         {templates.length === 0 ? (
-          <Text style={styles.tplEmpty}>No templates yet. Save one from a visit row.</Text>
+          <Text style={styles.libraryEmpty}>
+            Save a mix from a visit row above, then tap Apply to use it on someone else.
+          </Text>
         ) : (
           templates.map((t) => (
-            <View key={t.id} style={styles.tplRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.tplName}>{t.name}</Text>
-                <Text style={styles.tplMeta}>
-                  {t.line_count} lines · {formatDisplayDate(t.created_at)}
-                </Text>
+            <View key={t.id} style={styles.tplRowOuter}>
+              <View style={styles.tplRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tplName}>{t.name}</Text>
+                  <Text style={styles.tplMeta}>
+                    {t.line_count} lines · {formatDisplayDate(t.created_at)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.tplApply}
+                  onPress={() => openApplyTemplate(t)}
+                  activeOpacity={0.88}
+                >
+                  <Text style={styles.tplApplyTxt}>Apply</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.tplApply}
-                onPress={() => openApplyTemplate(t)}
-                activeOpacity={0.88}
-              >
-                <Text style={styles.tplApplyTxt}>Apply</Text>
-              </TouchableOpacity>
             </View>
           ))
         )}
@@ -338,48 +367,52 @@ export default function LabScreen({ navigation }) {
 
   const renderVisit = useCallback(
     ({ item }) => (
-      <View style={styles.visitCard}>
-        <TouchableOpacity
-          style={styles.visitMain}
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('VisitDetail', { visitId: item.id })}
-        >
-          <View style={styles.visitTop}>
-            <Text style={styles.visitClient} numberOfLines={1}>
-              {item.client_name}
+      <View style={styles.visitCardOuter}>
+        <View style={styles.visitCard}>
+          <TouchableOpacity
+            style={styles.visitMain}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('VisitDetail', { visitId: item.id })}
+          >
+            <View style={styles.visitTop}>
+              <Text style={styles.visitClient} numberOfLines={1}>
+                {item.client_name}
+              </Text>
+              {item.has_inventory_link ? (
+                <Ionicons name="cube-outline" size={18} color={BRAND_PURPLE} />
+              ) : null}
+            </View>
+            <Text style={styles.visitProc} numberOfLines={2}>
+              {item.procedure_name}
             </Text>
-            {item.has_inventory_link ? (
-              <Ionicons name="cube-outline" size={18} color={LAB_ACCENT} />
+            <Text style={styles.visitDate}>{formatDisplayDate(item.visit_date)}</Text>
+            {item.preview_text ? (
+              <Text style={styles.visitPreview} numberOfLines={2}>
+                {item.preview_text}
+              </Text>
             ) : null}
+            <Text style={styles.visitMeta}>{item.formula_line_count} lines</Text>
+          </TouchableOpacity>
+          <View style={styles.visitActions}>
+            <TouchableOpacity
+              style={styles.visitAct}
+              onPress={() => openDuplicate(item)}
+              activeOpacity={0.85}
+              accessibilityLabel={`Open a new visit with the same formula lines${item.client_name ? ` as for ${item.client_name}` : ''}`}
+            >
+              <Ionicons name="person-add-outline" size={20} color="#1C1C1E" />
+              <Text style={styles.visitActLabel}>New visit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.visitAct}
+              onPress={() => openSaveTemplate(item.id)}
+              activeOpacity={0.85}
+              accessibilityLabel="Save this formula to Mix library"
+            >
+              <Ionicons name="bookmark-outline" size={20} color={BRAND_PURPLE} />
+              <Text style={[styles.visitActLabel, styles.visitActLabelAccent]}>Save mix</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.visitProc} numberOfLines={2}>
-            {item.procedure_name}
-          </Text>
-          <Text style={styles.visitDate}>{formatDisplayDate(item.visit_date)}</Text>
-          {item.preview_text ? (
-            <Text style={styles.visitPreview} numberOfLines={2}>
-              {item.preview_text}
-            </Text>
-          ) : null}
-          <Text style={styles.visitMeta}>{item.formula_line_count} lines</Text>
-        </TouchableOpacity>
-        <View style={styles.visitActions}>
-          <TouchableOpacity
-            style={styles.iconAct}
-            onPress={() => openDuplicate(item)}
-            hitSlop={8}
-            accessibilityLabel="Duplicate visit"
-          >
-            <Ionicons name="copy-outline" size={22} color="#1C1C1E" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconAct}
-            onPress={() => openSaveTemplate(item.id)}
-            hitSlop={8}
-            accessibilityLabel="Save as template"
-          >
-            <Ionicons name="bookmark-outline" size={22} color="#1C1C1E" />
-          </TouchableOpacity>
         </View>
       </View>
     ),
@@ -388,19 +421,23 @@ export default function LabScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.topBar}>
+      <View style={styles.header}>
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.largeTitle}>Lab</Text>
+          <Text style={styles.pageSubhead}>Formula visits above. Reusable mixes below.</Text>
+        </View>
         <TouchableOpacity
-          style={glassPurpleIconBtn}
-          onPress={() => navigation.goBack()}
+          style={styles.addBtn}
           activeOpacity={0.85}
+          accessibilityHint="Opens a screen to choose a client, then enter the visit formula."
+          accessibilityLabel="Add formula visit"
+          onPress={() => navigation.navigate('FormulaBuilder')}
         >
-          <Ionicons name="chevron-back" size={22} color="#1C1C1E" />
+          <Ionicons name="add" size={26} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.title}>My lab</Text>
-        <View style={{ width: 40 }} />
       </View>
 
-      {loading && visits.length === 0 ? (
+      {!bootstrapped && loading ? (
         <View style={styles.centered}>
           <ActivityIndicator color="#1C1C1E" />
         </View>
@@ -412,10 +449,12 @@ export default function LabScreen({ navigation }) {
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
           contentContainerStyle={styles.listContent}
-          refreshing={loading}
-          onRefresh={loadAll}
+          refreshing={pullRefreshing}
+          onRefresh={() => loadAll({ pullToRefresh: true })}
           ListEmptyComponent={
-            <Text style={styles.emptyList}>No formula visits match this filter.</Text>
+            bootstrapped && visits.length === 0 && !loading && !pullRefreshing ? (
+              <Text style={styles.emptyList}>No visits in this time range.</Text>
+            ) : null
           }
         />
       )}
@@ -427,27 +466,30 @@ export default function LabScreen({ navigation }) {
         >
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeUseModal} />
           <View style={styles.modalSheet}>
+            <View style={styles.sheetGrabber} />
             <Text style={styles.modalTitle}>
-              {useModal === 'template' ? 'Apply template' : 'Duplicate formula visit'}
+              {useModal === 'template' ? 'Use saved mix' : 'Same formula, new visit'}
             </Text>
-            <Text style={styles.modalLabel}>Visit date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.modalInput}
+            <Text style={styles.modalSubtitle}>
+              When you pick a client below, a new visit is saved and opened for you.
+            </Text>
+            <Text style={styles.modalLabel}>Date</Text>
+            <IsoDatePickField
               value={visitDate}
-              onChangeText={setVisitDate}
-              autoCapitalize="none"
-              autoCorrect={false}
+              onChange={(ymd) => setVisitDate(ymd)}
+              style={styles.modalDatePick}
+              textStyle={{ fontFamily: FontFamily.regular, fontSize: 17, color: '#000000' }}
             />
-            <Text style={styles.modalLabel}>Procedure name</Text>
+            <Text style={styles.modalLabel}>Procedure</Text>
             <TextInput
               style={styles.modalInput}
               value={procedureOverride}
               onChangeText={setProcedureOverride}
             />
-            <Text style={styles.modalLabel}>Client</Text>
+            <Text style={styles.modalLabel}>Client · tap a row</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Search name or phone"
+              placeholder="Search"
               placeholderTextColor="#8E8E93"
               value={clientQuery}
               onChangeText={onClientQueryChange}
@@ -489,10 +531,15 @@ export default function LabScreen({ navigation }) {
             onPress={() => !saveTplBusy && setSaveTplOpen(false)}
           />
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Save as template</Text>
+            <View style={styles.sheetGrabber} />
+            <Text style={styles.modalTitle}>Save mix to library</Text>
+            <Text style={styles.modalSubtitle}>
+              You will find it under Mix library. Use Apply when you start the next visit.
+            </Text>
+            <Text style={styles.modalLabel}>Name</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Template name"
+              placeholder="Required"
               placeholderTextColor="#8E8E93"
               value={saveTplName}
               onChangeText={setSaveTplName}
@@ -519,35 +566,82 @@ export default function LabScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
-  topBar: {
+  header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 4,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  title: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
+  headerTitleBlock: { flex: 1, paddingRight: 12 },
+  largeTitle: {
+    fontFamily: FontFamily.heavy,
+    fontSize: 34,
+    letterSpacing: 0.35,
+    color: '#000000',
+  },
+  pageSubhead: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    color: '#8E8E93',
+    marginTop: 6,
+    lineHeight: 20,
+    letterSpacing: -0.24,
+  },
+  emptyList: {
+    fontFamily: FontFamily.regular,
+    fontSize: 17,
+    color: '#8E8E93',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 40,
+    lineHeight: 22,
+  },
+  addBtn: { ...glassPurpleFabBar },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
-  statRow: {
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 14,
+  listContent: { paddingHorizontal: 20, paddingBottom: 24, flexGrow: 1 },
+  statOuter: {
+    borderRadius: 12,
     overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: BRAND_PURPLE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  statLabel: { fontSize: 12, color: 'rgba(15, 31, 23, 0.8)', marginBottom: 4, fontWeight: '600' },
-  statValue: { fontSize: 16, color: '#0F1F17', fontWeight: '600' },
+  statGradient: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  statLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.92)',
+    marginBottom: 4,
+    letterSpacing: -0.08,
+  },
+  statValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: 28,
+    color: '#FFFFFF',
+    letterSpacing: 0.25,
+    lineHeight: 34,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F2F2F7',
-    borderRadius: 14,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
   },
-  searchInput: { flex: 1, fontSize: 16, color: '#1C1C1E', padding: 0 },
+  searchInput: { flex: 1, fontSize: 17, fontFamily: FontFamily.regular, color: '#000000', padding: 0 },
   chipsScroll: { marginBottom: 16 },
   chip: {
     paddingHorizontal: 14,
@@ -556,89 +650,187 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
     marginRight: 8,
   },
-  chipOn: { backgroundColor: LAB_ACCENT },
+  chipOn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#1C1C1E',
+  },
   chipTxt: { fontSize: 14, color: '#1C1C1E' },
-  chipTxtOn: { color: '#FFFFFF' },
-  sectionLabel: { fontSize: 17, fontWeight: '600', color: '#1C1C1E', marginBottom: 4 },
-  sectionHint: { fontSize: 13, color: '#8E8E93', marginBottom: 12 },
+  chipTxtOn: { fontWeight: '700', color: '#1C1C1E' },
+  sectionLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 20,
+    color: '#000000',
+    marginBottom: 10,
+    letterSpacing: -0.45,
+  },
+  visitCardOuter: {
+    marginBottom: 12,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   visitCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: '#FAFAFA',
-    borderRadius: 16,
-    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
+    borderColor: '#EDEDED',
   },
   visitMain: { flex: 1, padding: 14 },
   visitTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  visitClient: { fontSize: 16, fontWeight: '600', color: '#1C1C1E', flex: 1, marginRight: 8 },
+  visitClient: {
+    fontSize: 17,
+    fontFamily: FontFamily.semibold,
+    color: '#000000',
+    flex: 1,
+    marginRight: 8,
+    letterSpacing: -0.41,
+  },
   visitProc: { fontSize: 15, color: '#1C1C1E', marginTop: 4 },
   visitDate: { fontSize: 13, color: '#8E8E93', marginTop: 4 },
   visitPreview: { fontSize: 13, color: '#636366', marginTop: 8 },
   visitMeta: { fontSize: 12, color: '#8E8E93', marginTop: 6 },
   visitActions: {
-    width: 48,
-    alignItems: 'center',
+    width: 92,
+    alignItems: 'stretch',
     justifyContent: 'center',
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: '#E5E5EA',
-    paddingVertical: 8,
-    gap: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    gap: 4,
   },
-  iconAct: { padding: 4 },
-  emptyList: { textAlign: 'center', color: '#8E8E93', marginTop: 24 },
+  visitAct: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  visitActLabel: {
+    fontSize: 10,
+    fontFamily: FontFamily.semibold,
+    color: '#636366',
+    marginTop: 3,
+    textAlign: 'center',
+  },
+  visitActLabelAccent: { color: BRAND_PURPLE },
   tplBlock: { marginTop: 28 },
-  tplEmpty: { color: '#8E8E93', fontSize: 14, marginTop: 8 },
+  libraryEmpty: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    color: '#8E8E93',
+    lineHeight: 20,
+    marginBottom: 8,
+    letterSpacing: -0.24,
+  },
+  tplRowOuter: {
+    marginBottom: 10,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   tplRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5EA',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#EDEDED',
   },
-  tplName: { fontSize: 16, color: '#1C1C1E', fontWeight: '500' },
-  tplMeta: { fontSize: 13, color: '#8E8E93', marginTop: 2 },
+  tplName: { fontSize: 17, fontFamily: FontFamily.medium, color: '#000000' },
+  tplMeta: { fontSize: 15, fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 2 },
   tplApply: {
-    backgroundColor: LAB_ACCENT,
+    backgroundColor: BRAND_PURPLE,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
   },
-  tplApplyTxt: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+  tplApplyTxt: { color: '#FFFFFF', fontFamily: FontFamily.semibold, fontSize: 15 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   modalSheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 32,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 34,
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#1C1C1E', marginBottom: 16 },
-  modalLabel: { fontSize: 13, color: '#8E8E93', marginBottom: 6 },
+  sheetGrabber: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#C7C7CC',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 20,
+    color: '#000000',
+    marginBottom: 8,
+    letterSpacing: -0.45,
+  },
+  modalSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    color: '#636366',
+    lineHeight: 20,
+    marginBottom: 16,
+    letterSpacing: -0.24,
+  },
+  modalLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#8E8E93',
+    marginBottom: 6,
+    letterSpacing: -0.08,
+  },
   modalInput: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    marginBottom: 12,
-    color: '#1C1C1E',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#C6C6C8',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 17,
+    fontFamily: FontFamily.regular,
+    marginBottom: 14,
+    color: '#000000',
+  },
+  modalDatePick: {
+    marginBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#C6C6C8',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 48,
   },
   clientHit: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F2F2F7' },
-  clientHitName: { fontSize: 16, color: '#1C1C1E' },
-  clientHitPhone: { fontSize: 13, color: '#8E8E93' },
+  clientHitName: { fontSize: 17, fontFamily: FontFamily.regular, color: '#000000' },
+  clientHitPhone: { fontSize: 15, fontFamily: FontFamily.regular, color: '#8E8E93' },
   modalCancel: { marginTop: 12, alignItems: 'center' },
-  modalCancelTxt: { fontSize: 16, color: LAB_ACCENT, fontWeight: '600' },
+  modalCancelTxt: { fontSize: 17, fontFamily: FontFamily.regular, color: BRAND_PURPLE },
   modalPrimary: {
-    backgroundColor: LAB_ACCENT,
-    borderRadius: 14,
+    backgroundColor: BRAND_PURPLE,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8,
   },
-  modalPrimaryTxt: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
+  modalPrimaryTxt: { color: '#FFFFFF', fontFamily: FontFamily.semibold, fontSize: 17 },
 });

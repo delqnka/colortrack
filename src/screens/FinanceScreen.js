@@ -19,6 +19,7 @@ import { apiDelete, apiGet, apiPost, getApiBaseUrl, getApiResolvedUrl } from '..
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCentsOrDash } from '../format/moneyDisplay';
 import CurrencyPickerModal from '../components/CurrencyPickerModal';
+import IsoDatePickField from '../components/IsoDatePickField';
 
 const CHIP_BORDER_ON = '#5E35B1';
 
@@ -229,7 +230,17 @@ export default function FinanceScreen() {
         <TouchableOpacity onPress={() => setDateYmd((d) => shiftYMD(d, -1))} hitSlop={8}>
           <Ionicons name="chevron-back" size={22} color="#5E35B1" />
         </TouchableOpacity>
-        <Text style={styles.dateLabel}>{dateLabel}</Text>
+        <View style={styles.datePickSlot}>
+          <IsoDatePickField
+            value={dateYmd}
+            onChange={setDateYmd}
+            displayText={dateLabel}
+            showCalendarIcon={false}
+            toolbarTitle="Date"
+            style={styles.datePickField}
+            textStyle={styles.dateLabel}
+          />
+        </View>
         <TouchableOpacity onPress={() => setDateYmd((d) => shiftYMD(d, 1))} hitSlop={8}>
           <Ionicons name="chevron-forward" size={22} color="#5E35B1" />
         </TouchableOpacity>
@@ -461,6 +472,8 @@ const styles = StyleSheet.create({
     gap: 28,
     marginBottom: 16,
   },
+  datePickSlot: { flex: 1, minWidth: 0, alignItems: 'center' },
+  datePickField: { minHeight: 40, paddingVertical: 4, justifyContent: 'center' },
   dateLabel: { fontSize: 17, fontWeight: '500', color: '#1C1C1E' },
   scroll: { paddingHorizontal: 20, paddingBottom: 24 },
   summaryHeading: { fontSize: 13, fontWeight: '600', color: '#636366', marginBottom: 10 },

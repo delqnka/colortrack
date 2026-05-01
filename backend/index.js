@@ -180,6 +180,7 @@ async function buildDashboard(sql, dateYmd, salonId) {
   const extraClientCount = appointments.length > maxAvatars ? appointments.length - maxAvatars : 0;
 
   return {
+    appointmentCount: appointments.length,
     bannerAvatars: avatars,
     extraClientCount,
     upcoming,
@@ -1424,6 +1425,638 @@ app.get('/api/visits/:id', async (req, res, next) => {
   } catch (e) {
     next(e);
   }
+});
+
+app.get('/api/lab/stats', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const row = await sql`
+      WITH bounds AS (
+        SELECT
+          (date_trunc('month', (now() AT TIME ZONE ${TZ})::timestamp))::date AS start_m,
+          ((date_trunc('month', (now() AT TIME ZONE ${TZ})::timestamp) + interval '1 month'))::date AS end_m
+      )
+      SELECT COUNT(DISTINCT v.id)::int AS visits_with_formula_this_month
+      FROM visits v
+      JOIN formula_lines fl ON fl.visit_id = v.id
+      JOIN clients c ON c.id = v.client_id AND c.salon_id = ${sid}
+      CROSS JOIN bounds b
+      WHERE v.salon_id = ${sid}
+        AND v.visit_date >= b.start_m
+        AND v.visit_date < b.end_m
+    `;
+    res.json({ visits_with_formula_this_month: row[0]?.visits_with_formula_this_month ?? 0 });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/lab/visits', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    let limit = Number(req.query.limit);
+    if (!Number.isFinite(limit) || limit < 1) limit = 30;
+    if (limit > 100) limit = 100;
+    const from =
+      typeof req.query.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? req.query.from : null;
+    const to =
+      typeof req.query.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.to) ? req.query.to : null;
+    const qraw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const pat = qraw.length > 0 ? `%${qraw}%` : null;
+
+    const rows = await sql`
+      SELECT
+        v.id,
+        v.visit_date,
+        v.procedure_name,
+        v.client_id,
+        c.full_name AS client_name,
+        COUNT(fl.id)::int AS formula_line_count,
+        BOOL_OR(fl.inventory_item_id IS NOT NULL) AS has_inventory_link,
+        (
+          SELECT string_agg(sub.p, ' · ' ORDER BY sub.ord)
+          FROM (
+            SELECT fl3.id AS ord,
+              LEFT(BTRIM(fl3.brand::text) || ' ' || BTRIM(fl3.shade_code::text), 40) AS p
+            FROM formula_lines fl3
+            WHERE fl3.visit_id = v.id
+            ORDER BY fl3.id
+            LIMIT 4
+          ) sub
+        ) AS preview_text
+      FROM visits v
+      JOIN clients c ON c.id = v.client_id AND c.salon_id = ${sid}
+      JOIN formula_lines fl ON fl.visit_id = v.id
+      WHERE v.salon_id = ${sid}
+        AND (${from}::text IS NULL OR v.visit_date >= ${from}::date)
+        AND (${to}::text IS NULL OR v.visit_date <= ${to}::date)
+        AND (
+          ${pat}::text IS NULL
+          OR v.procedure_name ILIKE ${pat}
+          OR c.full_name ILIKE ${pat}
+          OR EXISTS (
+            SELECT 1 FROM formula_lines fls
+            WHERE fls.visit_id = v.id
+              AND (fls.brand ILIKE ${pat} OR fls.shade_code ILIKE ${pat})
+          )
+        )
+      GROUP BY v.id, v.visit_date, v.procedure_name, v.client_id, c.full_name
+      ORDER BY v.visit_date DESC, v.id DESC
+      LIMIT ${limit}
+    `;
+
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        visit_date: r.visit_date,
+        procedure_name: r.procedure_name,
+        client_id: r.client_id,
+        client_name: r.client_name,
+        formula_line_count: r.formula_line_count,
+        has_inventory_link: Boolean(r.has_inventory_link),
+        preview_text: r.preview_text || '',
+      })),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/lab/duplicate-visit', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const b = req.body || {};
+    const srcId = Number(b.source_visit_id);
+    const cid = Number(b.client_id);
+    if (!Number.isFinite(srcId) || srcId < 1 || !Number.isFinite(cid) || cid < 1) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const srcRows = await sql`
+      SELECT v.procedure_name, v.chair_label, v.notes
+      FROM visits v
+      JOIN clients c ON c.id = v.client_id AND c.salon_id = ${sid}
+      WHERE v.id = ${srcId} AND v.salon_id = ${sid}
+      LIMIT 1
+    `;
+    if (!srcRows.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    const lines = await sql`
+      SELECT section, brand, shade_code, amount
+      FROM formula_lines
+      WHERE visit_id = ${srcId}
+      ORDER BY id
+    `;
+    if (!lines.length) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const clientRow = await sql`
+      SELECT id FROM clients WHERE id = ${cid} AND salon_id = ${sid} LIMIT 1
+    `;
+    if (!clientRow.length) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    let vd;
+    if (typeof b.visit_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.visit_date)) {
+      vd = b.visit_date;
+    } else {
+      const todayRow = await sql`
+        SELECT to_char((now() AT TIME ZONE ${TZ})::date, 'YYYY-MM-DD') AS y
+      `;
+      vd = String(todayRow[0].y);
+    }
+
+    const proc =
+      typeof b.procedure_name === 'string' && b.procedure_name.trim()
+        ? b.procedure_name.trim()
+        : srcRows[0].procedure_name;
+    if (!proc || typeof proc !== 'string') {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const visitRows = await sql`
+      INSERT INTO visits (
+        salon_id, client_id, visit_date, procedure_name, chair_label, notes, source
+      )
+      VALUES (
+        ${sid},
+        ${cid},
+        ${vd}::date,
+        ${proc},
+        ${srcRows[0].chair_label || null},
+        ${srcRows[0].notes || null},
+        ${'manual'}
+      )
+      RETURNING id
+    `;
+    const visitId = visitRows[0].id;
+
+    for (const line of lines) {
+      const amount = Number(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      await sql`
+        INSERT INTO formula_lines (visit_id, section, brand, shade_code, amount, inventory_item_id)
+        VALUES (
+          ${visitId},
+          ${line.section}::formula_section,
+          ${String(line.brand)},
+          ${String(line.shade_code || '-')},
+          ${amount},
+          NULL
+        )
+      `;
+    }
+
+    res.status(201).json({ id: visitId });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/lab/templates', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const rows = await sql`
+      SELECT
+        id,
+        name,
+        created_at,
+        jsonb_array_length(lines)::int AS line_count
+      FROM lab_formula_templates
+      WHERE salon_id = ${sid}
+      ORDER BY created_at DESC
+      LIMIT 80
+    `;
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        line_count: r.line_count,
+        created_at: r.created_at,
+      })),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/lab/templates', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const uid = req.auth.userId;
+    const b = req.body || {};
+    const name = typeof b.name === 'string' ? b.name.trim() : '';
+    const linesIn = b.lines;
+    if (!name || !Array.isArray(linesIn) || linesIn.length === 0) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const clean = [];
+    for (const line of linesIn) {
+      if (!line || typeof line.section !== 'string' || !FORMULA_SECTIONS.has(line.section)) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      if (!line.brand || line.amount == null) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      const amount = Number(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      clean.push({
+        section: line.section,
+        brand: String(line.brand),
+        shade_code: line.shade_code != null && line.shade_code !== '' ? String(line.shade_code) : '-',
+        amount,
+      });
+    }
+
+    const ins = await sql`
+      INSERT INTO lab_formula_templates (salon_id, staff_id, name, lines)
+      VALUES (${sid}, ${uid}, ${name}, ${JSON.stringify(clean)}::jsonb)
+      RETURNING id
+    `;
+    res.status(201).json({ id: ins[0].id });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/lab/templates/from-visit', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const uid = req.auth.userId;
+    const b = req.body || {};
+    const vid = Number(b.visit_id);
+    const name = typeof b.name === 'string' ? b.name.trim() : '';
+    if (!Number.isFinite(vid) || vid < 1 || !name) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const ok = await sql`
+      SELECT v.id
+      FROM visits v
+      JOIN clients c ON c.id = v.client_id AND c.salon_id = ${sid}
+      WHERE v.id = ${vid} AND v.salon_id = ${sid}
+      LIMIT 1
+    `;
+    if (!ok.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    const lines = await sql`
+      SELECT section, brand, shade_code, amount
+      FROM formula_lines
+      WHERE visit_id = ${vid}
+      ORDER BY id
+    `;
+    if (!lines.length) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const clean = lines.map((line) => ({
+      section: String(line.section),
+      brand: String(line.brand),
+      shade_code: line.shade_code != null ? String(line.shade_code) : '-',
+      amount: Number(line.amount),
+    }));
+
+    const ins = await sql`
+      INSERT INTO lab_formula_templates (salon_id, staff_id, name, lines)
+      VALUES (${sid}, ${uid}, ${name}, ${JSON.stringify(clean)}::jsonb)
+      RETURNING id
+    `;
+    res.status(201).json({ id: ins[0].id });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/lab/templates/:id/apply', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const tid = Number(req.params.id);
+    const b = req.body || {};
+    const cid = Number(b.client_id);
+    if (!Number.isFinite(tid) || tid < 1 || !Number.isFinite(cid) || cid < 1) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const tpl = await sql`
+      SELECT lines FROM lab_formula_templates
+      WHERE id = ${tid} AND salon_id = ${sid}
+      LIMIT 1
+    `;
+    if (!tpl.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    const linesIn = tpl[0].lines;
+    if (!Array.isArray(linesIn) || linesIn.length === 0) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const clientRow = await sql`
+      SELECT id FROM clients WHERE id = ${cid} AND salon_id = ${sid} LIMIT 1
+    `;
+    if (!clientRow.length) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    let vd;
+    if (typeof b.visit_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.visit_date)) {
+      vd = b.visit_date;
+    } else {
+      const todayRow = await sql`
+        SELECT to_char((now() AT TIME ZONE ${TZ})::date, 'YYYY-MM-DD') AS y
+      `;
+      vd = String(todayRow[0].y);
+    }
+
+    const proc =
+      typeof b.procedure_name === 'string' && b.procedure_name.trim() ? b.procedure_name.trim() : 'Formula';
+    if (!proc) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+
+    const visitRows = await sql`
+      INSERT INTO visits (
+        salon_id, client_id, visit_date, procedure_name, chair_label, notes, source
+      )
+      VALUES (${sid}, ${cid}, ${vd}::date, ${proc}, ${null}, ${null}, ${'manual'})
+      RETURNING id
+    `;
+    const visitId = visitRows[0].id;
+
+    for (const line of linesIn) {
+      if (
+        !line ||
+        typeof line.section !== 'string' ||
+        !FORMULA_SECTIONS.has(line.section) ||
+        !line.brand ||
+        line.amount == null
+      ) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      const amount = Number(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      await sql`
+        INSERT INTO formula_lines (visit_id, section, brand, shade_code, amount, inventory_item_id)
+        VALUES (
+          ${visitId},
+          ${line.section}::formula_section,
+          ${String(line.brand)},
+          ${String(line.shade_code || '-')},
+          ${amount},
+          NULL
+        )
+      `;
+    }
+
+    res.status(201).json({ id: visitId });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const FINANCE_EXPENSE_CATEGORIES = new Set([
+  'rent',
+  'utilities',
+  'salary',
+  'supplies',
+  'inventory',
+  'equipment',
+  'marketing',
+  'taxes',
+  'other',
+]);
+
+function parseFinanceDate(q) {
+  const raw = typeof q === 'string' ? q.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  return raw;
+}
+
+function parsePositiveCents(v) {
+  if (v == null || v === '') return null;
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000) return null;
+  return n;
+}
+
+app.get('/api/finance/summary', async (req, res, next) => {
+  try {
+    const dateYmd = parseFinanceDate(req.query.date);
+    if (!dateYmd) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const [svc, retail, exp] = await Promise.all([
+      sql`
+        SELECT COALESCE(SUM(amount_paid_cents), 0)::bigint AS s
+        FROM visits
+        WHERE salon_id = ${sid} AND visit_date = ${dateYmd}::date
+      `,
+      sql`
+        SELECT COALESCE(SUM(amount_cents), 0)::bigint AS s
+        FROM salon_product_sales
+        WHERE salon_id = ${sid} AND sale_date = ${dateYmd}::date
+      `,
+      sql`
+        SELECT COALESCE(SUM(amount_cents), 0)::bigint AS s
+        FROM salon_expenses
+        WHERE salon_id = ${sid} AND expense_date = ${dateYmd}::date
+      `,
+    ]);
+    const service_income_cents = Number(svc[0]?.s || 0);
+    const product_sales_cents = Number(retail[0]?.s || 0);
+    const expenses_cents = Number(exp[0]?.s || 0);
+    const net_cents = service_income_cents + product_sales_cents - expenses_cents;
+    res.json({
+      date: dateYmd,
+      service_income_cents,
+      product_sales_cents,
+      expenses_cents,
+      net_cents,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/finance/lines', async (req, res, next) => {
+  try {
+    const dateYmd = parseFinanceDate(req.query.date);
+    if (!dateYmd) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const [expenses, product_sales] = await Promise.all([
+      sql`
+        SELECT id, category, title, amount_cents, notes, created_at
+        FROM salon_expenses
+        WHERE salon_id = ${sid} AND expense_date = ${dateYmd}::date
+        ORDER BY id DESC
+      `,
+      sql`
+        SELECT id, description, quantity, amount_cents, inventory_item_id, created_at
+        FROM salon_product_sales
+        WHERE salon_id = ${sid} AND sale_date = ${dateYmd}::date
+        ORDER BY id DESC
+      `,
+    ]);
+    res.json({ expenses, product_sales });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/finance/expenses', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const b = req.body || {};
+    const dateYmd =
+      typeof b.expense_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.expense_date.trim())
+        ? b.expense_date.trim()
+        : null;
+    const category = typeof b.category === 'string' ? b.category.trim() : '';
+    if (!dateYmd || !FINANCE_EXPENSE_CATEGORIES.has(category)) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const amount_cents = parsePositiveCents(b.amount_cents);
+    if (amount_cents == null) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const title = typeof b.title === 'string' ? b.title.trim().slice(0, 240) : '';
+    const notes = typeof b.notes === 'string' ? b.notes.trim().slice(0, 500) || null : null;
+    const rows = await sql`
+      INSERT INTO salon_expenses (salon_id, expense_date, category, title, amount_cents, notes)
+      VALUES (${sid}, ${dateYmd}::date, ${category}, ${title}, ${amount_cents}, ${notes})
+      RETURNING id
+    `;
+    res.status(201).json({ id: rows[0].id });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/finance/product-sales', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const b = req.body || {};
+    const dateYmd =
+      typeof b.sale_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.sale_date.trim())
+        ? b.sale_date.trim()
+        : null;
+    if (!dateYmd) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const amount_cents = parsePositiveCents(b.amount_cents);
+    if (amount_cents == null) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const description = typeof b.description === 'string' ? b.description.trim().slice(0, 240) : '';
+    let qty = 1;
+    if (b.quantity != null && b.quantity !== '') {
+      const qn = Number(b.quantity);
+      if (Number.isFinite(qn) && qn > 0 && qn <= 1e6) {
+        qty = qn;
+      }
+    }
+    let invId = null;
+    if (b.inventory_item_id != null && b.inventory_item_id !== '') {
+      const iid = Math.round(Number(b.inventory_item_id));
+      if (!Number.isFinite(iid) || iid < 1) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      const inv = await sql`
+        SELECT id FROM inventory_items WHERE id = ${iid} AND salon_id = ${sid} LIMIT 1
+      `;
+      if (!inv.length) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      invId = iid;
+    }
+    const rows = await sql`
+      INSERT INTO salon_product_sales (salon_id, sale_date, inventory_item_id, description, quantity, amount_cents)
+      VALUES (${sid}, ${dateYmd}::date, ${invId}, ${description}, ${qty}, ${amount_cents})
+      RETURNING id
+    `;
+    res.status(201).json({ id: rows[0].id });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/finance/expenses/:id', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const id = Math.round(Number(req.params.id));
+    if (!Number.isFinite(id) || id < 1) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const del = await sql`
+      DELETE FROM salon_expenses WHERE id = ${id} AND salon_id = ${sid} RETURNING id
+    `;
+    if (!del.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/finance/product-sales/:id', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const id = Math.round(Number(req.params.id));
+    if (!Number.isFinite(id) || id < 1) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const del = await sql`
+      DELETE FROM salon_product_sales WHERE id = ${id} AND salon_id = ${sid} RETURNING id
+    `;
+    if (!del.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.use((req, res) => {
+  const orig = String(req.originalUrl || req.url || '');
+  if (!orig.startsWith('/api')) {
+    res.status(404).type('text/plain').send('Not found');
+    return;
+  }
+  res.status(404).json({
+    error: 'not_found',
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    url: req.url,
+  });
 });
 
 app.use((err, req, res, next) => {

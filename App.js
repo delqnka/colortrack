@@ -1,5 +1,7 @@
-import React, { useEffect, useCallback, useState } from 'react';
-import { View, Pressable, useWindowDimensions, DeviceEventEmitter } from 'react-native';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
+import { View, Pressable, Text, TextInput, useWindowDimensions, DeviceEventEmitter } from 'react-native';
+import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans';
+import * as SplashScreen from 'expo-splash-screen';
 import { NavigationContainer } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -17,10 +19,16 @@ import InventoryItemScreen from './src/screens/InventoryItemScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import FormulaBuilderScreen from './src/screens/FormulaBuilderScreen';
 import VisitDetailScreen from './src/screens/VisitDetailScreen';
+import LabScreen from './src/screens/LabScreen';
+import FinanceScreen from './src/screens/FinanceScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import { CurrencyProvider } from './src/context/CurrencyContext';
 import { loadStoredToken, flushOutbox } from './src/api/client';
 import { registerExpoPushIfPossible } from './src/push/registerPush';
 import { BRAND_PURPLE, glassPurpleTabBar } from './src/theme/glassUi';
+import { FontFamily } from './src/theme/fonts';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -169,8 +177,17 @@ function MainTabs() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
   const [authReady, setAuthReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  const textFontDefaultsApplied = useRef(false);
 
   const refreshAuth = useCallback(async () => {
     const t = await loadStoredToken();
@@ -197,7 +214,26 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  if (!authReady) {
+  useEffect(() => {
+    if (!fontsLoaded || textFontDefaultsApplied.current) return;
+    textFontDefaultsApplied.current = true;
+    const base = { fontFamily: FontFamily.regular };
+    const merge = (Comp) => {
+      const prev = Comp.defaultProps?.style;
+      const nextStyle =
+        prev == null
+          ? base
+          : Array.isArray(prev)
+            ? [...prev, base]
+            : [prev, base];
+      Comp.defaultProps = { ...Comp.defaultProps, style: nextStyle };
+    };
+    merge(Text);
+    merge(TextInput);
+    SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded || !authReady) {
     return (
       <SafeAreaProvider>
         <View style={{ flex: 1, backgroundColor: '#fff' }} />
@@ -207,25 +243,29 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {!signedIn ? (
-            <Stack.Screen name="Login">
-              {() => <LoginScreen onLoggedIn={() => setSignedIn(true)} />}
-            </Stack.Screen>
-          ) : (
-            <>
-              <Stack.Screen name="Main" component={MainTabs} />
-              <Stack.Screen name="ClientDetail" component={ClientDetailScreen} />
-              <Stack.Screen name="ClientForm" component={ClientFormScreen} />
-              <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-              <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
-              <Stack.Screen name="FormulaBuilder" component={FormulaBuilderScreen} />
-              <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />
-            </>
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
+      <CurrencyProvider>
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            {!signedIn ? (
+              <Stack.Screen name="Login">
+                {() => <LoginScreen onLoggedIn={() => setSignedIn(true)} />}
+              </Stack.Screen>
+            ) : (
+              <>
+                <Stack.Screen name="Main" component={MainTabs} />
+                <Stack.Screen name="ClientDetail" component={ClientDetailScreen} />
+                <Stack.Screen name="ClientForm" component={ClientFormScreen} />
+                <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+                <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
+                <Stack.Screen name="FormulaBuilder" component={FormulaBuilderScreen} />
+                <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />
+                <Stack.Screen name="Finance" component={FinanceScreen} />
+                <Stack.Screen name="Lab" component={LabScreen} />
+              </>
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </CurrencyProvider>
     </SafeAreaProvider>
   );
 }

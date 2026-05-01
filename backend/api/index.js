@@ -30,6 +30,32 @@ function loadAppModule() {
 let app;
 let ensureInitialized;
 let backendLoadError;
+
+/** Same as repo-root `api/index.js` — Vercel forwards `/...` → `/api/index?vpath=$1`; Express must restore the path. */
+function restoreClientPathAfterVercelRewrite(req) {
+  if (!(process.env.VERCEL === '1' || process.env.VERCEL === 'true')) return;
+  if (!req || typeof req.url !== 'string' || req.url === '') return;
+  try {
+    const u = new URL(req.url, 'http://vercel.lambda');
+    const raw = u.searchParams.get('vpath');
+    if (raw === null || raw === '') return;
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {
+      decoded = raw;
+    }
+    const trimmed = decoded.replace(/^\/+|\/$/g, '');
+    if (trimmed.includes('..')) return;
+    const pathname = trimmed === '' ? '/' : `/${trimmed}`;
+    u.searchParams.delete('vpath');
+    const qs = u.searchParams.toString();
+    req.url = pathname + (qs ? `?${qs}` : '');
+  } catch (_) {
+    /* noop */
+  }
+}
+
 try {
   ({ app, ensureInitialized } = loadAppModule());
 } catch (e) {
@@ -58,6 +84,8 @@ module.exports = async (req, res) => {
       sendErrorJson(res, e);
       return;
     }
+
+    restoreClientPathAfterVercelRewrite(req);
 
     const done = untilResponseDone(res);
     try {

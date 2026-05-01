@@ -17,6 +17,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { apiGet, apiPost, apiDelete } from '../api/client';
 import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
+import { useCurrency } from '../context/CurrencyContext';
+import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 
 const SECTION_LABEL = {
   roots: 'Roots',
@@ -32,18 +34,8 @@ const VISIT_SOURCE_LABEL = {
   manual: null,
 };
 
-function formatUsdFromCents(cents) {
-  if (cents == null || cents === '') return null;
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n / 100);
-  } catch {
-    return `$${(n / 100).toFixed(2)}`;
-  }
-}
-
 export default function ClientDetailScreen({route, navigation}) {
+  const { currency } = useCurrency();
   const clientId = route.params?.clientId;
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -242,8 +234,8 @@ export default function ClientDetailScreen({route, navigation}) {
                 <View style={styles.visitCardMain}>
                   <Text style={styles.visitTitle}>{v.procedure_name}</Text>
                   <Text style={styles.visitDate}>{formatDisplayDate(v.visit_date)}</Text>
-                  {formatUsdFromCents(v.amount_paid_cents) ? (
-                    <Text style={styles.visitPaid}>{formatUsdFromCents(v.amount_paid_cents)}</Text>
+                  {formatMinorFromStoredCents(v.amount_paid_cents, currency) ? (
+                    <Text style={styles.visitPaid}>{formatMinorFromStoredCents(v.amount_paid_cents, currency)}</Text>
                   ) : null}
                   {VISIT_SOURCE_LABEL[v.source] ? (
                     <Text style={styles.visitSource}>{VISIT_SOURCE_LABEL[v.source]}</Text>

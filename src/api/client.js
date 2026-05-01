@@ -3,32 +3,102 @@ import NetInfo from '@react-native-community/netinfo';
 import { DeviceEventEmitter } from 'react-native';
 
 const PROD_API = 'https://colortrack.vercel.app';
-const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
-const BASE = fromEnv || (__DEV__ ? 'http://localhost:3001' : PROD_API);
+
+function apiPublicUrlFromExpoExtra() {
+  try {
+    const Constants = require('expo-constants');
+    const extra =
+      Constants.expoConfig?.extra ??
+      /** @type {any} */ (Constants).manifest?.extra ??
+      /** @type {any} */ (Constants).manifest2?.extra ??
+      null;
+    const u = extra?.apiPublicUrl;
+    return typeof u === 'string' ? u.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+const inlinedPublicApi =
+  typeof process.env.EXPO_PUBLIC_API_URL === 'string'
+    ? process.env.EXPO_PUBLIC_API_URL.trim()
+    : '';
+
+/**
+ * DEV: prefers .env (LAN IP) then localhost — never silently uses bundled production fallback.
+ * Release: prefers app.config.js `extra.apiPublicUrl`, then inlined EXPO_PUBLIC, then PROD.
+ */
+const RAW_BASE = __DEV__
+  ? inlinedPublicApi || 'http://localhost:3001'
+  : apiPublicUrlFromExpoExtra() || inlinedPublicApi || PROD_API;
+
+function isProbablyPrivateOrLocalHostname(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  if (!h || h === 'localhost') return true;
+  if (h.endsWith('.local')) return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
+    const parts = h.split('.').map(Number);
+    const [a, b] = parts;
+    if (a === 10) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 127) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+  }
+  return false;
+}
 
 function normalizeApiBase(url) {
   const raw = String(url || '').trim().replace(/\/$/, '');
   if (!raw) return '';
   try {
-    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
-    const path = (u.pathname || '/').replace(/\/$/, '');
-    return `${u.protocol}//${u.host}${path}`;
+    const withProto = raw.includes('://') ? raw : `https://${raw}`;
+    const u = new URL(withProto);
+    if (u.protocol === 'http:' && !isProbablyPrivateOrLocalHostname(u.hostname)) {
+      u.protocol = 'https:';
+    }
+    let pathname = (u.pathname || '/').replace(/\/$/, '');
+    while (pathname.length > 0 && /\/api$/i.test(pathname)) {
+      pathname = pathname.slice(0, -4).replace(/\/+$/, '');
+    }
+    if (pathname === '/') {
+      pathname = '';
+    }
+    return `${u.protocol}//${u.host}${pathname}`.replace(/\/$/, '');
   } catch {
-    return raw;
+    return raw.replace(/\/$/, '').replace(/\/api$/i, '').replace(/\/$/, '');
   }
 }
 
-const NORM_BASE = normalizeApiBase(BASE);
+/** Canonical origin (+ optional base path); use everywhere for fetch. */
+const BASE =
+  normalizeApiBase(RAW_BASE) || (__DEV__ ? 'http://localhost:3001' : normalizeApiBase(PROD_API));
+
+/** Full URL with no duplicated `/api/api/` segment (handles mis-set EXPO_PUBLIC_API_URL ending in `/api`). */
+function apiFetchUrl(path) {
+  const p = String(path || '').startsWith('/') ? String(path || '') : `/${path || ''}`;
+  const root = String(BASE || '').replace(/\/$/, '');
+  let url = `${root}${p}`;
+  while (url.includes('/api/api/')) {
+    url = url.replace('/api/api/', '/api/');
+  }
+  return url;
+}
 
 /** Helps confirm which host the bundle uses (e.g. after changing .env). */
 export function getApiBaseUrl() {
   return BASE;
 }
 
+/** Debug: resolved URL for a path (sanity checks against 404/HTML). */
+export function getApiResolvedUrl(path) {
+  return apiFetchUrl(path);
+}
+
 const TOKEN_KEY = 'auth_token';
 const API_BASE_KEY = 'colortrack_token_api_base';
 const OUTBOX_KEY = 'api_outbox';
-const CACHE_PREFIX = 'http_cache:';
+/** Keys include API host — never reuse JSON from another EXPO_PUBLIC / deployment. */
+const CACHE_PREFIX = 'http_cache:h:';
 
 let sessionToken = null;
 
@@ -36,9 +106,20 @@ export function getSessionToken() {
   return sessionToken;
 }
 
+async function clearHttpCaches() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const stale = keys.filter((k) => k.startsWith('http_cache'));
+    if (stale.length) await AsyncStorage.multiRemove(stale);
+  } catch {
+    /* noop */
+  }
+}
+
 async function clearTokenStorage() {
   const had = Boolean(await AsyncStorage.getItem(TOKEN_KEY));
   sessionToken = null;
+  await clearHttpCaches();
   await AsyncStorage.multiRemove([TOKEN_KEY, API_BASE_KEY]);
   if (had) {
     DeviceEventEmitter.emit('colortrack:session-cleared');
@@ -54,7 +135,7 @@ async function ensureTokenMatchesCurrentApi() {
   }
   const stored = await AsyncStorage.getItem(API_BASE_KEY);
   const sn = stored ? normalizeApiBase(stored) : '';
-  if (!sn || sn !== NORM_BASE) {
+  if (!sn || sn !== BASE) {
     await clearTokenStorage();
     return;
   }
@@ -70,7 +151,7 @@ export async function saveSessionToken(token) {
   if (token) {
     sessionToken = token;
     await AsyncStorage.setItem(TOKEN_KEY, token);
-    await AsyncStorage.setItem(API_BASE_KEY, NORM_BASE);
+    await AsyncStorage.setItem(API_BASE_KEY, BASE);
   } else {
     await clearTokenStorage();
   }
@@ -83,8 +164,16 @@ async function authHeaders() {
   return h;
 }
 
+function cacheHostSegment() {
+  try {
+    return new URL(BASE.includes('://') ? BASE : `https://${BASE}`).host;
+  } catch {
+    return '_';
+  }
+}
+
 function cacheKey(path) {
-  return CACHE_PREFIX + path;
+  return `${CACHE_PREFIX}${cacheHostSegment()}:${encodeURIComponent(path)}`;
 }
 
 async function readCache(path) {
@@ -123,7 +212,7 @@ export async function flushOutbox() {
     try {
       const headers = { ...(await authHeaders()) };
       if (item.body !== undefined) headers['Content-Type'] = 'application/json';
-      const res = await fetch(`${BASE}${item.path}`, {
+      const res = await fetch(apiFetchUrl(item.path), {
         method: item.method,
         headers,
         body: item.body !== undefined ? JSON.stringify(item.body) : undefined,
@@ -136,7 +225,16 @@ export async function flushOutbox() {
   await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(remain));
 }
 
+function responseLooksLikeHtml(text) {
+  const s = String(text || '').trimStart().slice(0, 160).toLowerCase();
+  return s.startsWith('<!doctype') || s.startsWith('<html') || s.startsWith('<head') || /^<\s*h1[\s>]/.test(s);
+}
+
 function parseErrorText(text, res) {
+  if (responseLooksLikeHtml(text)) {
+    const st = res && res.status != null ? res.status : '?';
+    return `HTTP ${st}: HTML from server — fix EXPO_PUBLIC_API_URL (use https origin only; do not append /api; paths already include /api/).`;
+  }
   let msg = text || res.statusText;
   try {
     const j = JSON.parse(text);
@@ -165,18 +263,31 @@ function throwAuthResponseError(text, res) {
   throw new Error(msg);
 }
 
-export async function apiGet(path) {
+export async function apiGet(path, options = {}) {
+  /** @type {{ allowStaleCache?: boolean }} */
+  const { allowStaleCache = true } = options;
   try {
-    const res = await fetch(`${BASE}${path}`, { headers: { ...(await authHeaders()) } });
+    const res = await fetch(apiFetchUrl(path), { headers: { ...(await authHeaders()) } });
     const text = await res.text();
     if (!res.ok) {
       if (res.status === 401) await clearTokenStorage();
       throw new Error(humanizeApiError(text, res));
     }
-    const data = JSON.parse(text);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (responseLooksLikeHtml(text)) {
+        throw new Error(
+          'Got HTML instead of JSON. Check API URL uses https without redirects on POST.',
+        );
+      }
+      throw new Error('Invalid response from server');
+    }
     await writeCache(path, data);
     return data;
   } catch (e) {
+    if (!allowStaleCache) throw e;
     const cached = await readCache(path);
     if (cached != null) return cached;
     throw e;
@@ -195,7 +306,7 @@ async function mutate(method, path, body, options = {}) {
     opts.body = JSON.stringify(body);
   }
   try {
-    const res = await fetch(`${BASE}${path}`, opts);
+    const res = await fetch(apiFetchUrl(path), opts);
     const text = await res.text();
     if (!res.ok) {
       if (res.status === 401 && clearSessionOn401) await clearTokenStorage();
@@ -211,6 +322,11 @@ async function mutate(method, path, body, options = {}) {
     try {
       return JSON.parse(text);
     } catch {
+      if (responseLooksLikeHtml(text)) {
+        throw new Error(
+          'Got HTML instead of JSON (often caused by HTTP→HTTPS redirects on POST). See EXPO_PUBLIC_API_URL.',
+        );
+      }
       throw new Error('Invalid response from server');
     }
   } catch (e) {
@@ -242,7 +358,7 @@ export async function apiDelete(path, options) {
 }
 
 export async function apiLogin(email, password) {
-  const res = await fetch(`${BASE}/api/auth/login`, {
+  const res = await fetch(apiFetchUrl('/api/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
@@ -253,7 +369,7 @@ export async function apiLogin(email, password) {
 }
 
 export async function apiRegister(email, password) {
-  const res = await fetch(`${BASE}/api/auth/register`, {
+  const res = await fetch(apiFetchUrl('/api/auth/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
@@ -265,7 +381,7 @@ export async function apiRegister(email, password) {
 
 /** Body: { identity_token, email? } — email helps first Sign in with Apple when relay wasn’t in JWT yet. */
 export async function apiLoginWithApple(body) {
-  const res = await fetch(`${BASE}/api/auth/apple`, {
+  const res = await fetch(apiFetchUrl('/api/auth/apple'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),

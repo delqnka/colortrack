@@ -65,7 +65,8 @@
           "calendarPermission": "ColorTrack reads calendar events to show Booksy, Fresha and other bookings next to your salon schedule."
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-font"
     ],
     "extra": {
       "eas": {

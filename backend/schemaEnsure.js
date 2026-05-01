@@ -208,6 +208,47 @@ async function ensureSchema(sql) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS salon_expenses (
+      id SERIAL PRIMARY KEY,
+      salon_id INT NOT NULL REFERENCES salons (id) ON DELETE CASCADE,
+      expense_date DATE NOT NULL,
+      category TEXT NOT NULL CHECK (category IN ('rent', 'utilities', 'salary', 'supplies', 'inventory', 'equipment', 'marketing', 'taxes', 'other')),
+      title TEXT NOT NULL DEFAULT '',
+      amount_cents INT NOT NULL CHECK (amount_cents >= 0 AND amount_cents <= 1000000000),
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_salon_expenses_salon_date ON salon_expenses (salon_id, expense_date DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS salon_product_sales (
+      id SERIAL PRIMARY KEY,
+      salon_id INT NOT NULL REFERENCES salons (id) ON DELETE CASCADE,
+      sale_date DATE NOT NULL,
+      inventory_item_id INT REFERENCES inventory_items (id) ON DELETE SET NULL,
+      description TEXT NOT NULL DEFAULT '',
+      quantity NUMERIC(12, 2) DEFAULT 1,
+      amount_cents INT NOT NULL CHECK (amount_cents >= 0 AND amount_cents <= 1000000000),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_salon_product_sales_salon_date ON salon_product_sales (salon_id, sale_date DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS lab_formula_templates (
+      id SERIAL PRIMARY KEY,
+      salon_id INT NOT NULL REFERENCES salons (id) ON DELETE CASCADE,
+      staff_id INT REFERENCES staff (id) ON DELETE SET NULL,
+      name TEXT NOT NULL CHECK (char_length(trim(name)) >= 1),
+      lines JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`CREATE INDEX IF NOT EXISTS idx_lab_templates_salon ON lab_formula_templates (salon_id)`;
 }
 
 module.exports = { ensureSchema };

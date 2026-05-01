@@ -13,6 +13,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { apiGet } from '../api/client';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
+import { useCurrency } from '../context/CurrencyContext';
+import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 
 const SECTION_LABEL = {
   roots: 'Roots',
@@ -22,17 +24,6 @@ const SECTION_LABEL = {
   other: 'Other',
 };
 
-function formatUsdFromCents(cents) {
-  if (cents == null || cents === '') return null;
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n / 100);
-  } catch {
-    return `$${(n / 100).toFixed(2)}`;
-  }
-}
-
 const VISIT_SOURCE_LABEL = {
   device_calendar: 'Device calendar',
   appointment: 'Salon booking',
@@ -40,6 +31,7 @@ const VISIT_SOURCE_LABEL = {
 };
 
 export default function VisitDetailScreen({ route, navigation }) {
+  const { currency } = useCurrency();
   const visitId = route.params?.visitId;
   const [visit, setVisit] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -117,8 +109,8 @@ export default function VisitDetailScreen({ route, navigation }) {
 
         <Text style={styles.proc}>{visit.procedure_name}</Text>
         <Text style={styles.date}>{formatDisplayDate(visit.visit_date)}</Text>
-        {formatUsdFromCents(visit.amount_paid_cents) ? (
-          <Text style={styles.paid}>{formatUsdFromCents(visit.amount_paid_cents)} paid</Text>
+        {formatMinorFromStoredCents(visit.amount_paid_cents, currency) ? (
+          <Text style={styles.paid}>{formatMinorFromStoredCents(visit.amount_paid_cents, currency)} paid</Text>
         ) : null}
         {visit.source ? (
           <Text style={styles.sourceHint}>{VISIT_SOURCE_LABEL[visit.source] || visit.source}</Text>

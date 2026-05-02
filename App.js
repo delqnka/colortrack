@@ -253,6 +253,7 @@ export default function App() {
                 <Stack.Screen name="ClientDetail" component={ClientDetailScreen} />
                 <Stack.Screen name="ClientForm" component={ClientFormScreen} />
                 <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+                <Stack.Screen name="InventoryStack" component={InventoryScreen} />
                 <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
                 <Stack.Screen name="FormulaBuilder" component={FormulaBuilderScreen} />
                 <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />

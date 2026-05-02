@@ -117,6 +117,7 @@ async function ensureSchema(sql) {
   `;
 
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS salon_id INT REFERENCES salons (id)`;
+  await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS package_size TEXT`;
   await sql`
     ALTER TABLE inventory_items
     DROP CONSTRAINT IF EXISTS inventory_items_unit_check

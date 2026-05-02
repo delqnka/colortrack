@@ -16,15 +16,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
 import { glassPurpleIconBtn } from '../theme/glassUi';
+import { useCurrency } from '../context/CurrencyContext';
 
-const CAT_OPTIONS = [
+const COLOR_CATEGORY_OPTIONS = [
   { key: 'dye', label: 'Color' },
   { key: 'oxidant', label: 'Developer' },
+  { key: 'mixtone', label: 'Mixtone' },
+  { key: 'toner', label: 'Toner' },
+];
+
+const GENERAL_CATEGORY_OPTIONS = [
+  ...COLOR_CATEGORY_OPTIONS,
   { key: 'retail', label: 'Retail' },
   { key: 'consumable', label: 'Consumables' },
 ];
 
-const PRESET_CATEGORY_KEYS = new Set(CAT_OPTIONS.map((c) => c.key));
+const PRESET_CATEGORY_KEYS = new Set(GENERAL_CATEGORY_OPTIONS.map((c) => c.key));
+const COLOR_CATEGORY_KEYS = new Set(COLOR_CATEGORY_OPTIONS.map((c) => c.key));
 
 const UNIT_OPTIONS = ['g', 'ml', 'pcs', 'oz'];
 
@@ -33,6 +41,21 @@ function numToStr(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return String(v);
   return String(n);
+}
+
+function priceTextFromCents(cents) {
+  if (cents == null || cents === '') return '';
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return '';
+  return String(n / 100).replace(/\.00$/, '');
+}
+
+function centsFromPriceText(text) {
+  const raw = String(text || '').trim().replace(',', '.');
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
 }
 
 function fmtWhen(iso) {
@@ -44,6 +67,7 @@ function fmtWhen(iso) {
 function labelForDetailField(categoryPreset, categoryCustom) {
   if (categoryCustom.trim()) return 'Product detail';
   if (categoryPreset === 'oxidant') return 'Volume / %';
+  if (categoryPreset === 'mixtone' || categoryPreset === 'toner') return 'Shade / code';
   if (categoryPreset === 'retail') return 'SKU / code';
   if (categoryPreset === 'consumable') return 'Size / spec';
   return 'Shade / code';
@@ -62,14 +86,21 @@ function customCategoriesFromInventory(rows) {
 }
 
 export default function InventoryItemScreen({ route, navigation }) {
+  const { currency } = useCurrency();
   const itemId = route.params?.itemId;
   const isEdit = Number.isFinite(Number(itemId)) && Number(itemId) > 0;
+  const initialCategory = typeof route.params?.initialCategory === 'string' ? route.params.initialCategory : '';
+  const initialPresetCategory = PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : 'dye';
+  const initialCategoryMode =
+    route.params?.categoryMode === 'colors' || COLOR_CATEGORY_KEYS.has(initialPresetCategory) ? 'colors' : 'general';
 
   const [item, setItem] = useState(null);
   const [movements, setMovements] = useState([]);
   const [nameStr, setNameStr] = useState('');
   const [brandStr, setBrandStr] = useState('');
   const [shadeStr, setShadeStr] = useState('');
+  const [packageSizeStr, setPackageSizeStr] = useState('');
+  const [priceStr, setPriceStr] = useState('');
   const [categoryPreset, setCategoryPreset] = useState('dye');
   const [categoryCustom, setCategoryCustom] = useState('');
   const [categoryDraft, setCategoryDraft] = useState('');
@@ -95,6 +126,8 @@ export default function InventoryItemScreen({ route, navigation }) {
       setNameStr(row.name || '');
       setBrandStr(row.brand || '');
       setShadeStr(row.shade_code || '');
+      setPackageSizeStr(row.package_size || '');
+      setPriceStr(priceTextFromCents(row.price_per_unit_cents));
       const rc = row.category || 'dye';
       if (PRESET_CATEGORY_KEYS.has(rc)) {
         setCategoryPreset(rc);
@@ -132,11 +165,13 @@ export default function InventoryItemScreen({ route, navigation }) {
       setNameStr('');
       setBrandStr('');
       setShadeStr('');
-      setCategoryPreset('dye');
-      setCategoryCustom('');
+      setPackageSizeStr('');
+      setPriceStr('');
+      setCategoryPreset(initialPresetCategory);
+      setCategoryCustom(initialCategory && !PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : '');
       setCategoryDraft('');
       setAddingCategory(false);
-      setUnit('g');
+      setUnit('pcs');
       setSupplierStr('');
       setQtyStr('0');
       setThreshStr('0');
@@ -153,7 +188,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       return () => {
         cancelled = true;
       };
-    }, [isEdit, load]),
+    }, [initialCategory, initialPresetCategory, isEdit, load]),
   );
 
   const save = async () => {
@@ -187,14 +222,24 @@ export default function InventoryItemScreen({ route, navigation }) {
           low_stock_threshold: t,
           brand: brandStr.trim() || null,
           shade_code: shadeStr.trim() || null,
+          package_size: packageSizeStr.trim() || null,
+          price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
         });
         navigation.replace('InventoryItem', { itemId: row.id });
       } else {
+        const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || item.category || 'dye';
         const body = {
           quantity: q,
           low_stock_threshold: t,
           unit,
+          category: resolvedCategory,
+          name: nameStr.trim() || item.name,
+          brand: brandStr.trim() || null,
+          shade_code: shadeStr.trim() || null,
+          package_size: packageSizeStr.trim() || null,
+          price_per_unit_cents: centsFromPriceText(priceStr),
+          supplier_hint: supplierStr.trim() || null,
         };
         const note = reasonStr.trim();
         if (note) body.reason = note;
@@ -203,6 +248,12 @@ export default function InventoryItemScreen({ route, navigation }) {
         setQtyStr(numToStr(row.quantity));
         setThreshStr(numToStr(row.low_stock_threshold));
         setUnit(row.unit || unit);
+        setNameStr(row.name || '');
+        setBrandStr(row.brand || '');
+        setShadeStr(row.shade_code || '');
+        setPackageSizeStr(row.package_size || '');
+        setPriceStr(priceTextFromCents(row.price_per_unit_cents));
+        setSupplierStr(row.supplier_hint || '');
         setReasonStr('');
         const hist = await apiGet(`/api/inventory/${itemId}/movements`);
         setMovements(Array.isArray(hist) ? hist : []);
@@ -227,6 +278,10 @@ export default function InventoryItemScreen({ route, navigation }) {
   const metaLine = [brandStr, shadeStr].filter(Boolean).join(' · ') || '—';
   const detailLabel = labelForDetailField(categoryPreset, categoryCustom);
   const customCategoryPills = addUniqueCategory(customCategoryOptions, categoryCustom);
+  const categoryOptions =
+    initialCategoryMode === 'colors' || COLOR_CATEGORY_KEYS.has(categoryPreset)
+      ? COLOR_CATEGORY_OPTIONS
+      : GENERAL_CATEGORY_OPTIONS;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -285,7 +340,7 @@ export default function InventoryItemScreen({ route, navigation }) {
                 </TouchableOpacity>
               </View>
               <View style={styles.chips}>
-                {CAT_OPTIONS.map((c) => {
+                {categoryOptions.map((c) => {
                   const chipOn = !categoryCustom.trim() && categoryPreset === c.key;
                   return (
                     <TouchableOpacity
@@ -345,6 +400,23 @@ export default function InventoryItemScreen({ route, navigation }) {
                 value={shadeStr}
                 onChangeText={setShadeStr}
               />
+              <Text style={styles.label}>Product size</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={packageSizeStr}
+                onChangeText={setPackageSizeStr}
+              />
+              <Text style={styles.label}>Price ({currency})</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={priceStr}
+                onChangeText={setPriceStr}
+                keyboardType="decimal-pad"
+              />
               <Text style={styles.label}>Supplier</Text>
               <TextInput
                 style={styles.input}
@@ -360,10 +432,128 @@ export default function InventoryItemScreen({ route, navigation }) {
               {item.supplier_hint ? (
                 <Text style={styles.supplier}>{item.supplier_hint}</Text>
               ) : null}
+              <View style={styles.labelRow}>
+                <Text style={styles.labelInRow}>Category</Text>
+                <TouchableOpacity
+                  style={styles.addCategoryBtn}
+                  onPress={() => {
+                    if (addingCategory) {
+                      const nextCategory = categoryDraft.trim();
+                      setAddingCategory(false);
+                      if (nextCategory) {
+                        setCategoryCustom(nextCategory);
+                        setCategoryPreset(null);
+                        setCustomCategoryOptions((prev) => addUniqueCategory(prev, nextCategory));
+                      }
+                      setCategoryDraft('');
+                    } else {
+                      setAddingCategory(true);
+                      setCategoryDraft('');
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.addCategoryTxt}>{addingCategory ? 'Done' : 'Add new'}</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.chips}>
+                {categoryOptions.map((c) => {
+                  const chipOn = !categoryCustom.trim() && categoryPreset === c.key;
+                  return (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[styles.chip, chipOn && styles.chipOn]}
+                      onPress={() => {
+                        setCategoryPreset(c.key);
+                        setCategoryCustom('');
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.chipTxt, chipOn && styles.chipTxtOn]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {customCategoryPills.map((category) => (
+                  <TouchableOpacity
+                    key={category}
+                    style={styles.chip}
+                    onPress={() => {
+                      setCategoryCustom(category);
+                      setCategoryPreset(null);
+                      setAddingCategory(false);
+                      setCategoryDraft('');
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.chipTxt}>{category}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {addingCategory ? (
+                <TextInput
+                  style={styles.input}
+                  placeholder=""
+                  placeholderTextColor="#1C1C1E"
+                  value={categoryDraft}
+                  onChangeText={(text) => {
+                    setCategoryDraft(text);
+                  }}
+                  autoCapitalize="sentences"
+                />
+              ) : null}
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={nameStr}
+                onChangeText={setNameStr}
+              />
+              <Text style={styles.label}>Brand</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={brandStr}
+                onChangeText={setBrandStr}
+              />
+              <Text style={styles.label}>{detailLabel}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={shadeStr}
+                onChangeText={setShadeStr}
+              />
+              <Text style={styles.label}>Product size</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={packageSizeStr}
+                onChangeText={setPackageSizeStr}
+              />
+              <Text style={styles.label}>Price ({currency})</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={priceStr}
+                onChangeText={setPriceStr}
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.label}>Supplier</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#1C1C1E"
+                value={supplierStr}
+                onChangeText={setSupplierStr}
+              />
             </>
           )}
 
-          <Text style={styles.label}>Unit</Text>
+          <Text style={styles.label}>Inventory unit</Text>
           <View style={styles.chips}>
             {UNIT_OPTIONS.map((u) => (
               <TouchableOpacity

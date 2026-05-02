@@ -29662,6 +29662,7 @@ var require_schemaEnsure = __commonJS({
     )
   `;
       await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS salon_id INT REFERENCES salons (id)`;
+      await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS package_size TEXT`;
       await sql`
     ALTER TABLE inventory_items
     DROP CONSTRAINT IF EXISTS inventory_items_unit_check
@@ -44083,6 +44084,7 @@ app.get("/api/inventory", async (req, res, next) => {
         category,
         brand,
         shade_code,
+        package_size,
         unit,
         quantity,
         low_stock_threshold,
@@ -44100,19 +44102,22 @@ app.get("/api/inventory", async (req, res, next) => {
 });
 var INVENTORY_UNITS = /* @__PURE__ */ new Set(["g", "ml", "pcs", "oz"]);
 var INVENTORY_CATEGORY_MAX = 80;
-var INVENTORY_CATEGORIES = /* @__PURE__ */ new Set(["dye", "oxidant", "retail", "consumable"]);
+var INVENTORY_CATEGORIES = /* @__PURE__ */ new Set(["dye", "oxidant", "mixtone", "toner", "retail", "consumable"]);
 function sanitizeInventoryText(raw, max = 200) {
   if (typeof raw !== "string") return null;
   const t = raw.trim().replace(/\s+/g, " ").slice(0, max);
   return t || null;
 }
 function normalizeInventoryCategory(raw) {
-  const c = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  const original = sanitizeInventoryText(raw, INVENTORY_CATEGORY_MAX);
+  const c = typeof original === "string" ? original.trim().toLowerCase() : "";
   if (INVENTORY_CATEGORIES.has(c)) return c;
   if (c === "developer" || c === "oxidants") return "oxidant";
   if (c === "color" || c === "colour" || c === "dyes") return "dye";
+  if (c === "mixtones") return "mixtone";
+  if (c === "toners") return "toner";
   if (c === "consumables") return "consumable";
-  return "dye";
+  return original || "consumable";
 }
 function normalizeInventoryUnit(raw) {
   const u = typeof raw === "string" ? raw.trim().toLowerCase() : "";
@@ -44157,6 +44162,7 @@ function normalizeInventoryImportCandidate(row) {
     category: normalizeInventoryCategory(row.category),
     brand: sanitizeInventoryText(row.brand || row.manufacturer, 200),
     shade_code: sanitizeInventoryText(row.shade_code || row.shade || row.code || row.sku || row.volume, 80),
+    package_size: sanitizeInventoryText(row.package_size || row.size || row.product_size, 80),
     unit,
     quantity,
     price_per_unit_cents: pricePerUnitCents == null ? null : Math.min(pricePerUnitCents, 1e9),
@@ -44189,7 +44195,14 @@ app.post("/api/inventory", async (req, res, next) => {
     }
     const brand = typeof b.brand === "string" && b.brand.trim() ? String(b.brand).trim().slice(0, 200) : null;
     const shade_code = typeof b.shade_code === "string" && b.shade_code.trim() ? String(b.shade_code).trim().slice(0, 80) : null;
+    const package_size = typeof b.package_size === "string" && b.package_size.trim() ? String(b.package_size).trim().slice(0, 80) : null;
     const supplier_hint = typeof b.supplier_hint === "string" && b.supplier_hint.trim() ? String(b.supplier_hint).trim().slice(0, 200) : null;
+    let price_per_unit_cents = null;
+    if (b.price_per_unit_cents !== void 0 && b.price_per_unit_cents !== null && b.price_per_unit_cents !== "") {
+      const cents = Math.round(Number(b.price_per_unit_cents));
+      if (!Number.isFinite(cents) || cents < 0) return res.status(400).json({ error: "bad_request" });
+      price_per_unit_cents = Math.min(cents, 1e9);
+    }
     const sql = getSql();
     const rows = await sql`
       INSERT INTO inventory_items (
@@ -44198,9 +44211,11 @@ app.post("/api/inventory", async (req, res, next) => {
         category,
         brand,
         shade_code,
+        package_size,
         unit,
         quantity,
         low_stock_threshold,
+        price_per_unit_cents,
         supplier_hint
       )
       VALUES (
@@ -44209,9 +44224,11 @@ app.post("/api/inventory", async (req, res, next) => {
         ${category},
         ${brand},
         ${shade_code},
+        ${package_size},
         ${unit},
         ${quantity},
         ${low_stock_threshold},
+        ${price_per_unit_cents},
         ${supplier_hint}
       )
       RETURNING
@@ -44220,6 +44237,7 @@ app.post("/api/inventory", async (req, res, next) => {
         category,
         brand,
         shade_code,
+        package_size,
         unit,
         quantity,
         low_stock_threshold,
@@ -44271,6 +44289,7 @@ app.get("/api/inventory/:id", async (req, res, next) => {
         category,
         brand,
         shade_code,
+        package_size,
         unit,
         quantity,
         low_stock_threshold,
@@ -44297,7 +44316,7 @@ app.patch("/api/inventory/:id", async (req, res, next) => {
     }
     const sql = getSql();
     const existing = await sql`
-      SELECT id, quantity, low_stock_threshold, unit
+      SELECT id, name, brand, shade_code, package_size, supplier_hint, price_per_unit_cents, quantity, low_stock_threshold, unit, category
       FROM inventory_items
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       LIMIT 1
@@ -44330,6 +44349,28 @@ app.patch("/api/inventory/:id", async (req, res, next) => {
         return res.status(400).json({ error: "bad_request" });
       }
     }
+    let newCategory = cur.category;
+    if (b.category !== void 0 && b.category !== null) {
+      newCategory = typeof b.category === "string" ? b.category.trim() : "";
+      if (!newCategory || newCategory.length > INVENTORY_CATEGORY_MAX) {
+        return res.status(400).json({ error: "bad_request" });
+      }
+    }
+    const newName = typeof b.name === "string" && b.name.trim() ? String(b.name).trim().slice(0, 200) : cur.name;
+    const newBrand = b.brand !== void 0 ? typeof b.brand === "string" && b.brand.trim() ? String(b.brand).trim().slice(0, 200) : null : cur.brand;
+    const newShade = b.shade_code !== void 0 ? typeof b.shade_code === "string" && b.shade_code.trim() ? String(b.shade_code).trim().slice(0, 80) : null : cur.shade_code;
+    const newPackageSize = b.package_size !== void 0 ? typeof b.package_size === "string" && b.package_size.trim() ? String(b.package_size).trim().slice(0, 80) : null : cur.package_size;
+    const newSupplier = b.supplier_hint !== void 0 ? typeof b.supplier_hint === "string" && b.supplier_hint.trim() ? String(b.supplier_hint).trim().slice(0, 200) : null : cur.supplier_hint;
+    let newPrice = cur.price_per_unit_cents;
+    if (b.price_per_unit_cents !== void 0) {
+      if (b.price_per_unit_cents === null || b.price_per_unit_cents === "") {
+        newPrice = null;
+      } else {
+        const cents = Math.round(Number(b.price_per_unit_cents));
+        if (!Number.isFinite(cents) || cents < 0) return res.status(400).json({ error: "bad_request" });
+        newPrice = Math.min(cents, 1e9);
+      }
+    }
     const oldQty = Number(cur.quantity);
     const delta = newQty - oldQty;
     const reasonText = typeof b.reason === "string" && b.reason.trim() ? String(b.reason).trim().slice(0, 128) : "adjust";
@@ -44341,7 +44382,17 @@ app.patch("/api/inventory/:id", async (req, res, next) => {
     }
     const updated = await sql`
       UPDATE inventory_items
-      SET quantity = ${newQty}, low_stock_threshold = ${newThresh}, unit = ${newUnit}
+      SET
+        name = ${newName},
+        brand = ${newBrand},
+        shade_code = ${newShade},
+        package_size = ${newPackageSize},
+        supplier_hint = ${newSupplier},
+        price_per_unit_cents = ${newPrice},
+        quantity = ${newQty},
+        low_stock_threshold = ${newThresh},
+        unit = ${newUnit},
+        category = ${newCategory}
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       RETURNING
         id,
@@ -44349,6 +44400,7 @@ app.patch("/api/inventory/:id", async (req, res, next) => {
         category,
         brand,
         shade_code,
+        package_size,
         unit,
         quantity,
         low_stock_threshold,
@@ -44379,9 +44431,10 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
       SET
         quantity = quantity + ${item.quantity},
         price_per_unit_cents = ${nextPrice},
+        package_size = COALESCE(${item.package_size}, package_size),
         supplier_hint = COALESCE(${item.supplier_hint}, supplier_hint)
       WHERE id = ${match[0].id} AND salon_id = ${salonId}
-      RETURNING id, name, category, brand, shade_code, unit, quantity, low_stock_threshold,
+      RETURNING id, name, category, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
         price_per_unit_cents, supplier_hint, (quantity <= low_stock_threshold) AS is_low_stock
     `;
     await sql`
@@ -44392,14 +44445,14 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
   }
   const rows = await sql`
     INSERT INTO inventory_items (
-      salon_id, name, category, brand, shade_code, unit, quantity, low_stock_threshold,
+      salon_id, name, category, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
       price_per_unit_cents, supplier_hint
     )
     VALUES (
-      ${salonId}, ${item.name}, ${item.category}, ${item.brand}, ${item.shade_code}, ${item.unit},
+      ${salonId}, ${item.name}, ${item.category}, ${item.brand}, ${item.shade_code}, ${item.package_size}, ${item.unit},
       ${item.quantity}, ${0}, ${item.price_per_unit_cents}, ${item.supplier_hint}
     )
-    RETURNING id, name, category, brand, shade_code, unit, quantity, low_stock_threshold,
+    RETURNING id, name, category, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
       price_per_unit_cents, supplier_hint, (quantity <= low_stock_threshold) AS is_low_stock
   `;
   await sql`
@@ -44451,8 +44504,8 @@ app.post("/api/inventory/import/invoice", async (req, res, next) => {
       "Extract purchased salon inventory items from this invoice image.",
       "The invoice may be in English, Bulgarian, or mixed language. Read table rows and line items even if labels are abbreviated.",
       'Return only JSON with an "items" array. Do not return markdown.',
-      'Each item: {"name": string, "category": "dye|oxidant|retail|consumable", "brand": string|null, "shade_code": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
-      "For hair color like Wella Koleston 9.12 60 ml x 15 pieces, keep the package size in the name or shade_code, set quantity 15 and unit pcs.",
+      'Each item: {"name": string, "category": "dye|oxidant|mixtone|toner|retail|consumable", "brand": string|null, "shade_code": string|null, "package_size": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
+      "For hair color like Wella Koleston 9.12 60 ml x 15 pieces, set shade_code 9.12, package_size 60 ml, quantity 15 and unit pcs.",
       "Quantity words can appear as qty, count, \u0431\u0440, \u0431\u0440\u043E\u0439, \u0431\u0440\u043E\u0439\u043A\u0438, x, pcs, pieces. Convert them to a number.",
       "If the invoice shows 15 pcs at 10 each total 150, return quantity 15, price_per_unit 10, line_total 150.",
       "Skip taxes, discounts, subtotals, shipping, addresses, and non-product rows."

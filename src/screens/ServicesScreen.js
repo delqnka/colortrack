@@ -19,6 +19,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
+import { useCurrency } from '../context/CurrencyContext';
+import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
@@ -44,12 +46,12 @@ function previewRowsFromServices(rows) {
       key: `${Date.now()}-${index}`,
       name: String(row?.name || '').trim(),
       price: priceTextFromCents(row?.price_cents),
-      currency_code: String(row?.currency_code || 'BGN').trim().toUpperCase() || 'BGN',
     }))
     .filter((row) => row.name);
 }
 
 export default function ServicesScreen({ navigation }) {
+  const { currency } = useCurrency();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importBusy, setImportBusy] = useState(false);
@@ -90,7 +92,7 @@ export default function ServicesScreen({ navigation }) {
   const addPreviewRow = () => {
     setPreviewRows((rows) => [
       ...rows,
-      { key: `${Date.now()}-${rows.length}`, name: '', price: '', currency_code: 'BGN' },
+      { key: `${Date.now()}-${rows.length}`, name: '', price: '' },
     ]);
   };
 
@@ -149,7 +151,7 @@ export default function ServicesScreen({ navigation }) {
       .map((row) => ({
         name: row.name.trim(),
         price_cents: centsFromPriceText(row.price),
-        currency_code: row.currency_code || 'BGN',
+        currency_code: currency,
       }))
       .filter((row) => row.name);
     if (!servicesToSave.length || savingServices) return;
@@ -197,7 +199,7 @@ export default function ServicesScreen({ navigation }) {
         {
           name,
           price_cents: centsFromPriceText(editPrice),
-          currency_code: editingService.currency_code || 'BGN',
+          currency_code: currency,
         },
         { queueOffline: false },
       );
@@ -218,7 +220,7 @@ export default function ServicesScreen({ navigation }) {
                 {
                   name,
                   price_cents: centsFromPriceText(editPrice),
-                  currency_code: editingService.currency_code || 'BGN',
+                  currency_code: currency,
                 },
               ],
             },
@@ -278,7 +280,7 @@ export default function ServicesScreen({ navigation }) {
                   <Text style={styles.serviceName}>{service.name}</Text>
                   {service.price_cents != null ? (
                     <Text style={styles.servicePrice}>
-                      {priceTextFromCents(service.price_cents)} {service.currency_code || 'BGN'}
+                      {formatMinorFromStoredCents(service.price_cents, currency)}
                     </Text>
                   ) : null}
                 </View>
@@ -332,6 +334,7 @@ export default function ServicesScreen({ navigation }) {
                     placeholderTextColor="#1C1C1E"
                     keyboardType="decimal-pad"
                   />
+                  <Text style={styles.currencyLabel}>{currency}</Text>
                   <TouchableOpacity onPress={() => removePreviewRow(row.key)} hitSlop={8}>
                     <Ionicons name="close-circle" size={22} color="#1C1C1E" />
                   </TouchableOpacity>
@@ -380,14 +383,17 @@ export default function ServicesScreen({ navigation }) {
                 placeholderTextColor="#1C1C1E"
               />
               <Text style={styles.editLabel}>Price</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editPrice}
-                onChangeText={setEditPrice}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                keyboardType="decimal-pad"
-              />
+              <View style={styles.editPriceRow}>
+                <TextInput
+                  style={[styles.editInput, styles.editPriceInput]}
+                  value={editPrice}
+                  onChangeText={setEditPrice}
+                  placeholder=""
+                  placeholderTextColor="#1C1C1E"
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.editCurrencyLabel}>{currency}</Text>
+              </View>
               <TouchableOpacity
                 style={[styles.saveBtn, savingEdit && styles.actionBtnDisabled]}
                 onPress={saveEditedService}
@@ -541,6 +547,12 @@ const styles = StyleSheet.create({
   previewPriceInput: {
     width: 86,
   },
+  currencyLabel: {
+    minWidth: 34,
+    fontSize: 13,
+    fontFamily: FontFamily.medium,
+    color: '#5E35B1',
+  },
   addRowBtn: {
     alignSelf: 'flex-start',
     paddingVertical: 10,
@@ -579,5 +591,21 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginBottom: 14,
     ...reliefShadow,
+  },
+  editPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  editPriceInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  editCurrencyLabel: {
+    minWidth: 42,
+    fontSize: 15,
+    fontFamily: FontFamily.medium,
+    color: '#5E35B1',
   },
 });

@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { apiGet } from '../api/client';
@@ -43,6 +44,8 @@ const FINANCE_CARD_GRADIENT_COLORS = ['#BFDBFE', '#5AA7F7', '#2563EB', '#0E4788'
 const FINANCE_CARD_GRADIENT_LOCATIONS = [0, 0.32, 0.68, 1];
 const FINANCE_CARD_GRADIENT_START = { x: 0.35, y: 0 };
 const FINANCE_CARD_GRADIENT_END = { x: 0.65, y: 1 };
+const LAB_PAINT_IMAGE = require('../../assets/lab-paint-colors-strip.png');
+const FINANCE_COINS_IMAGE = require('../../assets/finance-coins.png');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -405,8 +408,7 @@ export default function HomeScreen() {
       : `${lowCount} products running low`;
   const greetingName = profileMe?.display_name?.trim();
   const formulasVisitCount = Number(labStats?.visits_with_formula_this_month ?? 0);
-  const formulasVisitLabel =
-    formulasVisitCount === 1 ? ' visit with formulas this month' : ' visits with formulas this month';
+  const formulasVisitLabel = ' this month';
 
   const lowStockCompactInner = (
     <View style={styles.stockCompactStack}>
@@ -602,16 +604,29 @@ export default function HomeScreen() {
                 >
                   <Text style={styles.badgeTextLab}>My lab</Text>
                   <View style={styles.labCardMain}>
-                    <Text style={[styles.labPlanTitle, styles.labPromoText]}>My formulas</Text>
+                    <MaskedView
+                      style={styles.labPlanTitleMask}
+                      maskElement={<Text style={styles.labPlanTitle}>My formulas</Text>}
+                    >
+                      <LinearGradient
+                        colors={['#0B7A34', '#35D86F', '#E8FF36']}
+                        start={{ x: 0, y: 1 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.labPlanTitleGradient}
+                      />
+                    </MaskedView>
                     <View style={styles.labIconCenter}>
                       <View style={styles.labIconPlate}>
-                        <Ionicons name="flask" size={58} color="#F1FEE2" />
+                        <Ionicons name="flask" size={58} color="#F8FF35" />
                       </View>
                     </View>
                     <Text style={[styles.labPlanMeta, styles.labPromoText]} numberOfLines={2}>
                       <Text style={styles.labPlanMetaNumber}>{formulasVisitCount}</Text>
                       {formulasVisitLabel}
                     </Text>
+                  </View>
+                  <View style={styles.labPaintFrame} pointerEvents="none">
+                    <Image source={LAB_PAINT_IMAGE} style={styles.labPaintImage} resizeMode="stretch" />
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -646,6 +661,7 @@ export default function HomeScreen() {
                       <Ionicons name="wallet-outline" size={36} color="rgba(255,255,255,0.94)" />
                       <Text style={styles.financeCardSubtitle}>Revenue & Expenses</Text>
                     </View>
+                    <Image source={FINANCE_COINS_IMAGE} style={styles.financeCoinsImage} resizeMode="contain" />
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -657,7 +673,7 @@ export default function HomeScreen() {
                     { flex: STOCK_SPLIT_COMPACT_FLEX },
                   ]}
                   activeOpacity={0.92}
-                  onPress={() => navigation.navigate('Inventory')}
+                  onPress={() => navigation.navigate('InventoryStack')}
                 >
                   {lowStockCompactInner}
                 </TouchableOpacity>
@@ -976,12 +992,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     minHeight: 0,
+    overflow: 'hidden',
   },
   financeCardHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
+    zIndex: 1,
   },
   financeBadgeText: {
     fontSize: 10,
@@ -994,6 +1012,8 @@ const styles = StyleSheet.create({
     minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    transform: [{ translateY: -8 }],
+    zIndex: 1,
   },
   financeCardSubtitle: {
     marginTop: 10,
@@ -1002,6 +1022,15 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     color: 'rgba(255,255,255,0.96)',
     textAlign: 'center',
+  },
+  financeCoinsImage: {
+    position: 'absolute',
+    right: -15,
+    bottom: -9,
+    width: 72,
+    height: 86,
+    opacity: 0.92,
+    zIndex: 0,
   },
   gridTallCard: {
     width: '100%',
@@ -1125,6 +1154,7 @@ const styles = StyleSheet.create({
     padding: 13,
     flex: 1,
     flexDirection: 'column',
+    overflow: 'hidden',
   },
   labPromoText: {
     color: LAB_ON_GRADIENT_TEXT,
@@ -1133,8 +1163,16 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 18,
     lineHeight: 23,
-    marginBottom: 10,
     textAlign: 'center',
+  },
+  labPlanTitleMask: {
+    height: 24,
+    marginBottom: 10,
+    alignSelf: 'center',
+  },
+  labPlanTitleGradient: {
+    width: 108,
+    height: 24,
   },
   labPlanMeta: {
     fontFamily: FontFamily.regular,
@@ -1159,7 +1197,25 @@ const styles = StyleSheet.create({
     minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    transform: [{ translateY: -8 }],
+    paddingBottom: 54,
+    transform: [{ translateY: -18 }],
+    zIndex: 1,
+  },
+  labPaintFrame: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 100,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+    zIndex: 0,
+  },
+  labPaintImage: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.96,
   },
   labIconCenter: {
     justifyContent: 'center',

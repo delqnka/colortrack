@@ -20,6 +20,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../api/client';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
+import { useCurrency } from '../context/CurrencyContext';
+import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 
 function todayYMD() {
   const d = new Date();
@@ -63,14 +65,8 @@ function formatHM(d) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function priceTextFromCents(cents) {
-  if (cents == null || cents === '') return '';
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return '';
-  return String(n / 100).replace(/\.00$/, '');
-}
-
 export default function AppointmentFormScreen({ route, navigation }) {
+  const { currency } = useCurrency();
   const appt = route.params?.appointment;
   const appointmentId = appt?.id;
   const isEdit = Number.isFinite(appointmentId) && appointmentId > 0;
@@ -327,7 +323,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
                   <Text style={styles.serviceChipName}>{service.name}</Text>
                   {service.price_cents != null ? (
                     <Text style={styles.serviceChipPrice}>
-                      {priceTextFromCents(service.price_cents)} {service.currency_code || 'BGN'}
+                      {formatMinorFromStoredCents(service.price_cents, currency)}
                     </Text>
                   ) : null}
                 </TouchableOpacity>

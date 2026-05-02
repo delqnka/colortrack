@@ -18,16 +18,91 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPost } from '../api/client';
 import { glassPurpleFabBar } from '../theme/glassUi';
+import { useCurrency } from '../context/CurrencyContext';
+import { formatMinorFromStoredCents } from '../format/moneyDisplay';
+import SFIcon from '../components/SFIcon';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 const ORDER = ['dye', 'oxidant', 'retail', 'consumable'];
 
 const LABEL = {
   dye: 'Color',
-  oxidant: 'Oxidants',
+  oxidant: 'Developer',
   retail: 'Retail',
   consumable: 'Consumables',
 };
+
+const STOCK_CATEGORY_OPTIONS = [
+  { key: 'dye', label: 'Color' },
+  { key: 'oxidant', label: 'Developer' },
+  { key: 'mixtone', label: 'Mixtone' },
+  { key: 'toner', label: 'Toner' },
+  { key: 'consumable', label: 'Consumables' },
+];
+const COLOR_CATEGORY_KEYS = new Set(['dye', 'oxidant', 'mixtone', 'toner']);
+
+const INVENTORY_FILTERS = [
+  {
+    key: 'stock',
+    label: 'Stock',
+    icon: 'swap-vertical-outline',
+    iosIcon: 'plusminus.circle.fill',
+    addCategory: 'consumable',
+  },
+  {
+    key: 'retail',
+    label: 'Retail',
+    icon: 'water-outline',
+    iosIcon: 'waterbottle.fill',
+    addCategory: 'retail',
+  },
+  {
+    key: 'colors',
+    label: 'Colors',
+    icon: 'color-wand-outline',
+    iosIcon: 'pencil.tip.crop.circle.badge.plus.fill',
+    addCategory: 'dye',
+  },
+];
+
+function looksLikeColorProduct(item) {
+  const shade = String(item?.shade_code || '').trim().toLowerCase();
+  if (/\b\d{1,2}(?:[.,/-]\d{1,2}){0,2}\b/.test(shade)) return true;
+  if (/\b\d{1,2}[a-z]{1,3}\b/i.test(shade)) return true;
+  const text = [item?.name, item?.brand].filter(Boolean).join(' ').toLowerCase();
+  return (
+    /\b(koleston|illumina|color touch|majirel|inoa|dialight|igora|royal|wella|loreal|l'oreal|schwarzkopf|matrix|redken|shades eq|welloxon)\b/.test(
+      text,
+    )
+  );
+}
+
+function importCategoryForItem(item) {
+  if (item?.category === 'retail') return 'retail';
+  if (item?.category === 'oxidant') return 'oxidant';
+  if (item?.category === 'dye' && looksLikeColorProduct(item)) return 'dye';
+  return 'consumable';
+}
+
+function inventoryCategoryKey(raw) {
+  const c = String(raw || '').trim().toLowerCase();
+  if (c === 'color' || c === 'colors' || c === 'colour' || c === 'dyes') return 'dye';
+  if (c === 'developer' || c === 'oxidants') return 'oxidant';
+  if (c === 'mixtones') return 'mixtone';
+  if (c === 'toners') return 'toner';
+  if (c === 'consumables') return 'consumable';
+  return c || 'other';
+}
+
+function isRetailItem(item) {
+  return inventoryCategoryKey(item?.category) === 'retail';
+}
+
+function isColorItem(item) {
+  const c = inventoryCategoryKey(item?.category);
+  if (c !== 'dye') return COLOR_CATEGORY_KEYS.has(c);
+  return looksLikeColorProduct(item);
+}
 
 function sectionTitle(cat) {
   if (LABEL[cat]) return LABEL[cat];
@@ -53,27 +128,36 @@ function centsFromPriceText(text) {
 function invoiceRowsFromItems(items) {
   if (!Array.isArray(items)) return [];
   return items
-    .map((item, index) => ({
-      key: `${Date.now()}-${index}`,
-      name: String(item?.name || '').trim(),
-      category: item?.category || 'dye',
-      brand: item?.brand || '',
-      shade_code: item?.shade_code || '',
-      unit: item?.unit || 'pcs',
-      quantity: String(item?.quantity || ''),
-      price: priceTextFromCents(item?.price_per_unit_cents),
-      supplier_hint: item?.supplier_hint || '',
-    }))
+    .map((item, index) => {
+      const category = importCategoryForItem(item);
+      return {
+        key: `${Date.now()}-${index}`,
+        name: String(item?.name || '').trim(),
+        category,
+        stockCategory: category === 'retail' ? 'consumable' : category,
+        addingCategory: false,
+        categoryDraft: '',
+        brand: item?.brand || '',
+        shade_code: item?.shade_code || '',
+        package_size: item?.package_size || '',
+        unit: item?.unit || 'pcs',
+        quantity: String(item?.quantity || ''),
+        price: priceTextFromCents(item?.price_per_unit_cents),
+        supplier_hint: item?.supplier_hint || '',
+      };
+    })
     .filter((item) => item.name && item.quantity);
 }
 
 export default function InventoryScreen({ navigation }) {
+  const { currency } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importBusy, setImportBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
   const [savingImport, setSavingImport] = useState(false);
+  const [inventoryFilter, setInventoryFilter] = useState('stock');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,15 +177,21 @@ export default function InventoryScreen({ navigation }) {
     }, [load]),
   );
 
+  const filteredRows = useMemo(() => {
+    if (inventoryFilter === 'retail') return rows.filter(isRetailItem);
+    if (inventoryFilter === 'colors') return rows.filter(isColorItem);
+    return rows.filter((item) => !isRetailItem(item) && !isColorItem(item));
+  }, [inventoryFilter, rows]);
+
   const grouped = useMemo(() => {
     const m = {};
-    for (const item of rows) {
-      const key = item.category || 'other';
+    for (const item of filteredRows) {
+      const key = inventoryCategoryKey(item.category);
       if (!m[key]) m[key] = [];
       m[key].push(item);
     }
     return m;
-  }, [rows]);
+  }, [filteredRows]);
 
   const sectionKeys = useMemo(() => {
     const keys = Object.keys(grouped);
@@ -118,6 +208,23 @@ export default function InventoryScreen({ navigation }) {
 
   const removePreviewRow = (key) => {
     setPreviewRows((items) => items.filter((item) => item.key !== key));
+  };
+
+  const savePreviewCategory = (key) => {
+    setPreviewRows((items) =>
+      items.map((item) => {
+        if (item.key !== key) return item;
+        const nextCategory = String(item.categoryDraft || '').trim();
+        if (!nextCategory) return { ...item, addingCategory: false, categoryDraft: '' };
+        return {
+          ...item,
+          category: nextCategory,
+          stockCategory: nextCategory,
+          addingCategory: false,
+          categoryDraft: '',
+        };
+      }),
+    );
   };
 
   const importInvoice = async (source) => {
@@ -181,6 +288,7 @@ export default function InventoryScreen({ navigation }) {
         category: item.category || 'dye',
         brand: item.brand || null,
         shade_code: item.shade_code || null,
+        package_size: item.package_size || null,
         unit: item.unit || 'pcs',
         quantity: Number(String(item.quantity).replace(',', '.')),
         price_per_unit_cents: centsFromPriceText(item.price),
@@ -212,13 +320,6 @@ export default function InventoryScreen({ navigation }) {
               <Text style={styles.badgeText}>{lowCount} low</Text>
             </View>
           ) : null}
-          <TouchableOpacity
-            style={styles.addBtn}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('InventoryItem')}
-          >
-            <Ionicons name="add" size={26} color="#FFFFFF" />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -239,6 +340,43 @@ export default function InventoryScreen({ navigation }) {
         >
           {importBusy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.importBtnText}>Import invoice</Text>}
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.filterRow}>
+        {INVENTORY_FILTERS.map((option) => {
+          const selected = inventoryFilter === option.key;
+          return (
+            <TouchableOpacity
+              key={option.key}
+              style={[styles.filterCard, selected && styles.filterCardOn]}
+              onPress={() => setInventoryFilter(option.key)}
+              activeOpacity={0.85}
+            >
+              <TouchableOpacity
+                style={styles.filterAddBtn}
+                onPress={() =>
+                  navigation.navigate('InventoryItem', {
+                    initialCategory: option.addCategory,
+                    categoryMode: option.key === 'colors' ? 'colors' : 'general',
+                  })
+                }
+                activeOpacity={0.85}
+                hitSlop={6}
+              >
+                <Ionicons name="add" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+              <View style={[styles.filterIconBubble, selected && styles.filterIconBubbleOn]}>
+                <SFIcon
+                  name={option.icon}
+                  iosName={option.iosIcon}
+                  size={26}
+                  color={selected ? '#E84D93' : '#5E35B1'}
+                />
+              </View>
+              <Text style={styles.filterCardText}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {loading ? (
@@ -266,7 +404,10 @@ export default function InventoryScreen({ navigation }) {
                         {[
                           item.brand,
                           item.shade_code,
-                          item.price_per_unit_cents != null ? `${priceTextFromCents(item.price_per_unit_cents)} / ${item.unit}` : null,
+                          item.package_size,
+                          item.price_per_unit_cents != null
+                            ? `${formatMinorFromStoredCents(item.price_per_unit_cents, currency)} / ${item.unit}`
+                            : null,
                         ]
                           .filter(Boolean)
                           .join(' · ') || '—'}
@@ -320,6 +461,7 @@ export default function InventoryScreen({ navigation }) {
                 const qty = Number(String(item.quantity).replace(',', '.'));
                 const price = centsFromPriceText(item.price);
                 const total = Number.isFinite(qty) && price != null ? Math.round(qty * price) : null;
+                const isRetail = item.category === 'retail';
                 return (
                   <View key={item.key} style={styles.previewCard}>
                     <View style={styles.previewTopRow}>
@@ -334,6 +476,120 @@ export default function InventoryScreen({ navigation }) {
                         <Ionicons name="close-circle" size={22} color="#1C1C1E" />
                       </TouchableOpacity>
                     </View>
+                    <View style={styles.previewChoiceRow}>
+                      <TouchableOpacity
+                        style={styles.previewCheckChoice}
+                        onPress={() =>
+                          updatePreviewRow(item.key, {
+                            category: item.stockCategory || 'consumable',
+                          })
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons
+                          name={!isRetail ? 'checkbox' : 'square-outline'}
+                          size={19}
+                          color="#5E35B1"
+                        />
+                        <Text style={styles.previewChoiceText}>Stock</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.previewCheckChoice}
+                        onPress={() =>
+                          updatePreviewRow(item.key, {
+                            stockCategory: item.category === 'retail' ? item.stockCategory : item.category,
+                            category: 'retail',
+                          })
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons
+                          name={isRetail ? 'checkbox' : 'square-outline'}
+                          size={19}
+                          color="#5E35B1"
+                        />
+                        <Text style={styles.previewChoiceText}>Retail</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {!isRetail ? (
+                      <>
+                        <View style={styles.previewCategoryRow}>
+                          {STOCK_CATEGORY_OPTIONS.map((option) => {
+                            const selected = item.category === option.key;
+                            return (
+                              <TouchableOpacity
+                                key={option.key}
+                                style={[styles.previewCategoryChip, selected && styles.previewCategoryChipOn]}
+                                onPress={() =>
+                                  updatePreviewRow(item.key, {
+                                    category: option.key,
+                                    stockCategory: option.key,
+                                    addingCategory: false,
+                                    categoryDraft: '',
+                                  })
+                                }
+                                activeOpacity={0.85}
+                              >
+                                <Text
+                                  style={[
+                                    styles.previewCategoryText,
+                                    selected && styles.previewCategoryTextOn,
+                                  ]}
+                                >
+                                  {option.label}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                          {!STOCK_CATEGORY_OPTIONS.some((option) => option.key === item.category) ? (
+                            <TouchableOpacity
+                              style={[styles.previewCategoryChip, styles.previewCategoryChipOn]}
+                              onPress={() =>
+                                updatePreviewRow(item.key, {
+                                  category: item.category,
+                                  stockCategory: item.category,
+                                  addingCategory: false,
+                                  categoryDraft: '',
+                                })
+                              }
+                              activeOpacity={0.85}
+                            >
+                              <Text style={[styles.previewCategoryText, styles.previewCategoryTextOn]}>
+                                {sectionTitle(item.category)}
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          <TouchableOpacity
+                            style={styles.previewAddCategory}
+                            onPress={() => updatePreviewRow(item.key, { addingCategory: true })}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="add" size={16} color="#5E35B1" />
+                            <Text style={styles.previewAddCategoryText}>Add new</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {item.addingCategory ? (
+                          <View style={styles.previewNewCategoryRow}>
+                            <TextInput
+                              style={[styles.previewInput, styles.previewCategoryInput]}
+                              value={item.categoryDraft}
+                              onChangeText={(text) => updatePreviewRow(item.key, { categoryDraft: text })}
+                              placeholder=""
+                              placeholderTextColor="#1C1C1E"
+                              returnKeyType="done"
+                              onSubmitEditing={() => savePreviewCategory(item.key)}
+                            />
+                            <TouchableOpacity
+                              style={styles.previewCategoryDone}
+                              onPress={() => savePreviewCategory(item.key)}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.previewCategoryDoneText}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                      </>
+                    ) : null}
                     <View style={styles.previewBottomRow}>
                       <TextInput
                         style={[styles.previewInput, styles.previewSmallInput]}
@@ -352,7 +608,10 @@ export default function InventoryScreen({ navigation }) {
                         placeholderTextColor="#1C1C1E"
                         keyboardType="decimal-pad"
                       />
-                      <Text style={styles.previewTotal}>{total != null ? priceTextFromCents(total) : '—'}</Text>
+                      <Text style={styles.previewCurrency}>{currency}</Text>
+                      <Text style={styles.previewTotal}>
+                        {total != null ? formatMinorFromStoredCents(total, currency) : '—'}
+                      </Text>
                     </View>
                   </View>
                 );
@@ -419,6 +678,59 @@ const styles = StyleSheet.create({
   },
   importBtnDisabled: { opacity: 0.6 },
   importBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingBottom: 18,
+  },
+  filterCard: {
+    flex: 1,
+    minHeight: 112,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#F3D3E2',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 14,
+    position: 'relative',
+  },
+  filterCardOn: {
+    borderColor: '#5E35B1',
+    backgroundColor: '#F8F3FF',
+  },
+  filterIconBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F5EAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  filterIconBubbleOn: { backgroundColor: '#FFD7EA' },
+  filterCardText: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
+  filterAddBtn: {
+    position: 'absolute',
+    top: 9,
+    right: 9,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#5E35B1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#5E35B1',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 5,
+    elevation: 4,
+  },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
   section: { marginBottom: 22 },
@@ -500,6 +812,64 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  previewChoiceRow: {
+    flexDirection: 'row',
+    gap: 18,
+    marginBottom: 8,
+  },
+  previewCheckChoice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  previewChoiceText: { fontSize: 13, fontWeight: '600', color: '#5E35B1' },
+  previewCategoryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  previewCategoryChip: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  previewCategoryChipOn: {
+    backgroundColor: '#1C1C1E',
+    borderColor: '#1C1C1E',
+  },
+  previewCategoryText: { fontSize: 12, fontWeight: '600', color: '#1C1C1E' },
+  previewCategoryTextOn: { color: '#FFFFFF' },
+  previewAddCategory: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  previewAddCategoryText: { fontSize: 12, fontWeight: '600', color: '#5E35B1' },
+  previewNewCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  previewCategoryInput: { flex: 1 },
+  previewCategoryDone: {
+    borderRadius: 12,
+    backgroundColor: '#5E35B1',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  previewCategoryDoneText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   previewInput: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -517,7 +887,8 @@ const styles = StyleSheet.create({
   previewSmallInput: { width: 70 },
   previewPriceInput: { width: 82 },
   previewUnit: { minWidth: 28, fontSize: 13, color: '#1C1C1E' },
-  previewTotal: { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '600', color: '#5E35B1' },
+  previewCurrency: { fontSize: 12, fontWeight: '600', color: '#5E35B1' },
+  previewTotal: { flex: 1, textAlign: 'right', fontSize: 13, fontWeight: '600', color: '#5E35B1' },
   saveImportBtn: {
     marginTop: 16,
     backgroundColor: '#5E35B1',

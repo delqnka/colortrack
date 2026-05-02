@@ -106,10 +106,16 @@ function MainTabs() {
     },
     tabBarIcon: ({ focused }) => {
       const sfSymbols = {
-        Dashboard: focused ? 'house.fill'            : 'house',
-        Clients:   focused ? 'person.2.fill'         : 'person.2',
-        Inventory: focused ? 'shippingbox.fill'      : 'shippingbox',
-        Calendar:  focused ? 'calendar.badge.clock'  : 'calendar',
+        Dashboard: focused ? 'house.fill'        : 'house',
+        Clients:   focused ? 'person.2.fill'     : 'person.2',
+        Inventory: focused ? 'cabinet.fill'      : 'cabinet',
+        Calendar:  focused ? 'calendar.fill'     : 'calendar',
+      };
+      const ionicons = {
+        Dashboard: focused ? 'home'              : 'home-outline',
+        Clients:   focused ? 'people'            : 'people-outline',
+        Inventory: focused ? 'filing'            : 'filing-outline',
+        Calendar:  focused ? 'calendar'          : 'calendar-outline',
       };
       const sf = sfSymbols[route.name] || 'circle';
       const size = focused ? ICON_SIZE_ACTIVE : ICON_SIZE_INACTIVE;
@@ -117,7 +123,7 @@ function MainTabs() {
 
       const icon = Platform.OS === 'ios'
         ? <SymbolView name={sf} size={size} tintColor={iconColor} weight={focused ? 'semibold' : 'regular'} type="hierarchical" style={{ width: size, height: size }} />
-        : <Ionicons name={focused ? sf.replace('.fill','') : sf} size={size} color={iconColor} />;
+        : <Ionicons name={ionicons[route.name] || 'home-outline'} size={size} color={iconColor} />;
 
       return (
         <View style={{ width: ICON_KNOB, height: TAB_H, justifyContent: 'center', alignItems: 'center' }}>

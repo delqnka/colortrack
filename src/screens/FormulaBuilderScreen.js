@@ -32,10 +32,10 @@ import { FontFamily } from '../theme/fonts';
 import IsoDatePickField from '../components/IsoDatePickField';
 
 const COLOUR_SECTIONS = [
-  { key: 'roots', label: 'Roots', icon: 'color-fill-outline', iosIcon: 'paintpalette.fill' },
-  { key: 'lengths', label: 'Lengths', icon: 'scissors-outline', iosIcon: 'scissors' },
-  { key: 'toner', label: 'Toner', icon: 'sparkles-outline', iosIcon: 'sparkles' },
-  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', iosIcon: 'ellipsis.circle' },
+  { key: 'roots', label: 'Roots', icon: 'color-fill-outline', iosIcon: 'r.circle.fill' },
+  { key: 'lengths', label: 'Lengths', icon: 'scissors-outline', iosIcon: 'l.circle.fill' },
+  { key: 'toner', label: 'Toner', icon: 'sparkles-outline', iosIcon: 't.circle.fill' },
+  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', iosIcon: 'o.circle.fill' },
 ];
 
 const IOS_KB_ACCESSORY_ID = 'formula_input_accessory_done';
@@ -604,7 +604,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         onPress={() => openInvPicker(row.key)}
         activeOpacity={0.82}
       >
-        <SFIcon name="cube-outline" iosName="shippingbox" size={18} color={BRAND_PURPLE} style={{ marginRight: 8 }} />
+        <SFIcon name="cube-outline" iosName="cabinet.fill" size={18} color={BRAND_PURPLE} style={{ marginRight: 8 }} />
         {row.stockLabel ? (
           <View style={{ flex: 1 }}>
             <Text style={styles.stockPickerShade}>
@@ -708,7 +708,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           onPress={() => openInvPicker('developer')}
           activeOpacity={0.82}
         >
-          <SFIcon name="cube-outline" iosName="shippingbox" size={18} color="#0D74FF" style={{ marginRight: 8 }} />
+          <SFIcon name="cube-outline" iosName="cabinet.fill" size={18} color="#0D74FF" style={{ marginRight: 8 }} />
           {draftDeveloper.stockLabel ? (
             <View style={{ flex: 1 }}>
               <Text style={styles.stockPickerShade}>

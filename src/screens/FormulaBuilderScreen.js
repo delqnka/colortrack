@@ -493,7 +493,9 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             activeOpacity={0.82}
           >
             <LinearGradient
-              colors={['#FFFFFF', '#F5EEFF']}
+              colors={['#FFFFFF', '#FFE0EF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.zoneCardInner}
             >
               <SFIcon name={s.icon} iosName={s.iosIcon} size={36} color={SCHEDULE_BANNER_LEAD_PINK} style={{ marginBottom: 10 }} />

@@ -1276,18 +1276,20 @@ const styles = StyleSheet.create({
   stockPickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
   },
   stockPickerBtnDev: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
   },
   stockPickerBtnTxt: {
     fontFamily: FontFamily.medium,
     fontSize: 15,
-    color: '#8E8E93',
+    color: '#1C1C1E',
     flex: 1,
   },
   stockPickerShade: {

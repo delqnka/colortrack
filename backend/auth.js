@@ -40,6 +40,14 @@ function verifyToken(token) {
   return jwt.verify(token, jwtSecret());
 }
 
+function hashPassword(password) {
+  return bcrypt.hash(password, 10);
+}
+
+function comparePassword(password, passwordHash) {
+  return bcrypt.compare(password, passwordHash);
+}
+
 function authMiddleware(req, res, next) {
   if (process.env.DISABLE_AUTH === 'true' || process.env.DISABLE_AUTH === '1') {
     req.auth = { userId: 1, salonId: 1, role: 'admin' };
@@ -282,4 +290,6 @@ module.exports = {
   registerHandler,
   appleAuthHandler,
   signToken,
+  hashPassword,
+  comparePassword,
 };

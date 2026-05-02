@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { apiGet } from '../api/client';
+import SFIcon from '../components/SFIcon';
 import { glassPurpleFab, BRAND_PURPLE } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
 import {
@@ -401,6 +402,10 @@ export default function HomeScreen() {
     lowCount === 1
       ? '1 product running low'
       : `${lowCount} products running low`;
+  const greetingName = profileMe?.display_name?.trim();
+  const formulasVisitCount = Number(labStats?.visits_with_formula_this_month ?? 0);
+  const formulasVisitLabel =
+    formulasVisitCount === 1 ? ' visit with formulas this month' : ' visits with formulas this month';
 
   const lowStockCompactInner = (
     <View style={styles.stockCompactStack}>
@@ -410,7 +415,7 @@ export default function HomeScreen() {
       </Text>
       <View style={styles.stockCompactFooter}>
         <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
-          <Ionicons name="cube" size={13} color="#fff" />
+          <SFIcon name="file-tray-full" iosName="cabinet.fill" size={13} color="#FFFFFF" />
         </View>
         <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
           <Ionicons name="cart" size={13} color="#fff" />
@@ -456,7 +461,9 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
             <View>
-              <Text style={styles.greeting}>Hello</Text>
+              <Text style={styles.greeting} numberOfLines={1}>
+                {greetingName ? `Hello, ${greetingName}` : 'Hello'}
+              </Text>
               <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
             </View>
           </View>
@@ -574,7 +581,7 @@ export default function HomeScreen() {
               })}
             </ScrollView>
 
-            <Text style={styles.sectionTitle}>Your plan</Text>
+            <Text style={styles.sectionTitle}>Salon tools</Text>
           </View>
 
           <View>
@@ -592,43 +599,18 @@ export default function HomeScreen() {
                   end={LAB_GRADIENT_END}
                   style={styles.labCardGradient}
                 >
-                  <Text style={styles.badgeTextLab}>Lab</Text>
-                  <Text style={[styles.labPlanTitle, styles.labPromoText]}>Formulas & templates</Text>
-                  <Text style={[styles.labPlanMeta, styles.labPromoText]} numberOfLines={2}>
-                    {labStats?.visits_with_formula_this_month != null
-                      ? `${labStats.visits_with_formula_this_month} visits with formulas this month`
-                      : 'Search, duplicate, save templates'}
-                  </Text>
-                  <View style={styles.labIconCenter}>
-                    <View style={styles.labReliefPlate}>
-                      <View style={styles.labReliefStack}>
-                        <View
-                          style={[styles.labReliefInset, { alignItems: 'center', justifyContent: 'center' }]}
-                          pointerEvents="none"
-                        >
-                          <Ionicons
-                            name="flask"
-                            size={56}
-                            color="rgba(2,54,43,0.42)"
-                            style={{ transform: [{ translateX: 3 }, { translateY: 4 }] }}
-                          />
-                        </View>
-                        <View
-                          style={[styles.labReliefInset, { alignItems: 'center', justifyContent: 'center' }]}
-                          pointerEvents="none"
-                        >
-                          <Ionicons
-                            name="flask"
-                            size={56}
-                            color="rgba(255,255,255,0.72)"
-                            style={{ transform: [{ translateX: -2.5 }, { translateY: -3 }] }}
-                          />
-                        </View>
-                        <View style={[styles.labReliefInset, styles.labReliefFaceWrap]}>
-                          <Ionicons name="flask" size={56} color="#F1FEE2" style={styles.labReliefFace} />
-                        </View>
+                  <Text style={styles.badgeTextLab}>My lab</Text>
+                  <View style={styles.labCardMain}>
+                    <Text style={[styles.labPlanTitle, styles.labPromoText]}>My formulas</Text>
+                    <View style={styles.labIconCenter}>
+                      <View style={styles.labIconPlate}>
+                        <Ionicons name="flask" size={58} color="#F1FEE2" />
                       </View>
                     </View>
+                    <Text style={[styles.labPlanMeta, styles.labPromoText]} numberOfLines={2}>
+                      <Text style={styles.labPlanMetaNumber}>{formulasVisitCount}</Text>
+                      {formulasVisitLabel}
+                    </Text>
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -661,6 +643,7 @@ export default function HomeScreen() {
                     </View>
                     <View style={styles.financeCardBody}>
                       <Ionicons name="wallet-outline" size={36} color="rgba(255,255,255,0.94)" />
+                      <Text style={styles.financeCardSubtitle}>Revenue & Expenses</Text>
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -988,6 +971,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  financeCardSubtitle: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: FontFamily.medium,
+    color: 'rgba(255,255,255,0.96)',
+    textAlign: 'center',
+  },
   gridTallCard: {
     width: '100%',
   },
@@ -1013,6 +1004,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lowStockSummary: {
+    marginTop: 5,
     fontSize: 12,
     fontFamily: FontFamily.semibold,
     color: 'rgba(255,255,255,0.96)',
@@ -1025,13 +1017,14 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     minHeight: 0,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 2,
   },
   stockCompactFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 5,
+    marginTop: 8,
   },
   iconCircleStockCompact: {
     width: 23,
@@ -1078,13 +1071,19 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 18,
     lineHeight: 23,
-    marginBottom: 4,
+    marginBottom: 10,
+    textAlign: 'center',
   },
   labPlanMeta: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
-    lineHeight: 17,
-    marginBottom: 2,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  labPlanMetaNumber: {
+    fontFamily: FontFamily.bold,
+    fontSize: 24,
+    lineHeight: 28,
   },
   badgeTextLab: {
     fontSize: 12,
@@ -1093,38 +1092,25 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 6,
   },
-  labIconCenter: {
+  labCardMain: {
     flex: 1,
     minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 2,
-    marginBottom: 2,
+    transform: [{ translateY: -8 }],
   },
-  labReliefPlate: {
-    width: 84,
-    height: 84,
+  labIconCenter: {
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 10,
   },
-  labReliefStack: {
-    width: 72,
-    height: 72,
-    position: 'relative',
+  labIconPlate: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  labReliefInset: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  labReliefFaceWrap: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  labReliefFace: {
-    textShadowColor: 'rgba(8,71,53,0.28)',
-    textShadowOffset: { width: 0.5, height: 1.25 },
-    textShadowRadius: 0,
   },
   badgeBlue: {
     backgroundColor: '#64B5F6',

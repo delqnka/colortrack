@@ -295,10 +295,11 @@ export async function apiGet(path, options = {}) {
 }
 
 /**
- * @param {{ clearSessionOn401?: boolean }} [options] - If false, 401 does not wipe the token (e.g. optional /api/push/register must not log the user out).
+ * @param {{ clearSessionOn401?: boolean, queueOffline?: boolean }} [options] - If false, 401 does not wipe the token (e.g. optional /api/push/register must not log the user out).
  */
 async function mutate(method, path, body, options = {}) {
   const clearSessionOn401 = options.clearSessionOn401 !== false;
+  const queueOffline = options.queueOffline !== false;
   const headers = { ...(await authHeaders()) };
   const opts = { method, headers };
   if (body !== undefined) {
@@ -333,7 +334,7 @@ async function mutate(method, path, body, options = {}) {
     const msg = e && e.message ? String(e.message) : '';
     const state = await NetInfo.fetch();
     const offline = !state.isConnected || msg === 'Network request failed';
-    if (offline && method !== 'GET') {
+    if (offline && method !== 'GET' && queueOffline) {
       /* Creating a client must return an id — queueing breaks navigation. */
       if (method === 'POST' && path === '/api/clients') {
         throw new Error('No connection. Connect to the internet and try again to create a client.');

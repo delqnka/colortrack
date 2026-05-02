@@ -19,14 +19,14 @@ import { glassPurpleIconBtn } from '../theme/glassUi';
 
 const CAT_OPTIONS = [
   { key: 'dye', label: 'Color' },
-  { key: 'oxidant', label: 'Oxidant' },
+  { key: 'oxidant', label: 'Developer' },
   { key: 'retail', label: 'Retail' },
   { key: 'consumable', label: 'Consumables' },
 ];
 
 const PRESET_CATEGORY_KEYS = new Set(CAT_OPTIONS.map((c) => c.key));
 
-const UNIT_OPTIONS = ['g', 'ml', 'pcs'];
+const UNIT_OPTIONS = ['g', 'ml', 'pcs', 'oz'];
 
 function numToStr(v) {
   if (v == null || v === '') return '';
@@ -41,6 +41,26 @@ function fmtWhen(iso) {
   return s.replace('T', ' ').replace(/\.\d{3}Z?$/, '').slice(0, 16);
 }
 
+function labelForDetailField(categoryPreset, categoryCustom) {
+  if (categoryCustom.trim()) return 'Product detail';
+  if (categoryPreset === 'oxidant') return 'Volume / %';
+  if (categoryPreset === 'retail') return 'SKU / code';
+  if (categoryPreset === 'consumable') return 'Size / spec';
+  return 'Shade / code';
+}
+
+function addUniqueCategory(list, category) {
+  const clean = String(category || '').trim();
+  if (!clean || PRESET_CATEGORY_KEYS.has(clean)) return list;
+  const exists = list.some((c) => c.trim().toLowerCase() === clean.toLowerCase());
+  return exists ? list : [...list, clean];
+}
+
+function customCategoriesFromInventory(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.reduce((out, row) => addUniqueCategory(out, row?.category), []);
+}
+
 export default function InventoryItemScreen({ route, navigation }) {
   const itemId = route.params?.itemId;
   const isEdit = Number.isFinite(Number(itemId)) && Number(itemId) > 0;
@@ -52,6 +72,9 @@ export default function InventoryItemScreen({ route, navigation }) {
   const [shadeStr, setShadeStr] = useState('');
   const [categoryPreset, setCategoryPreset] = useState('dye');
   const [categoryCustom, setCategoryCustom] = useState('');
+  const [categoryDraft, setCategoryDraft] = useState('');
+  const [customCategoryOptions, setCustomCategoryOptions] = useState([]);
+  const [addingCategory, setAddingCategory] = useState(false);
   const [unit, setUnit] = useState('g');
   const [supplierStr, setSupplierStr] = useState('');
   const [qtyStr, setQtyStr] = useState('');
@@ -76,10 +99,14 @@ export default function InventoryItemScreen({ route, navigation }) {
       if (PRESET_CATEGORY_KEYS.has(rc)) {
         setCategoryPreset(rc);
         setCategoryCustom('');
+        setCategoryDraft('');
       } else {
         setCategoryPreset(null);
         setCategoryCustom(rc);
+        setCategoryDraft('');
+        setCustomCategoryOptions((prev) => addUniqueCategory(prev, rc));
       }
+      setAddingCategory(false);
       setUnit(row.unit || 'g');
       setSupplierStr(row.supplier_hint || '');
       setQtyStr(numToStr(row.quantity));
@@ -100,12 +127,15 @@ export default function InventoryItemScreen({ route, navigation }) {
         load();
         return;
       }
+      let cancelled = false;
       setItem(null);
       setNameStr('');
       setBrandStr('');
       setShadeStr('');
       setCategoryPreset('dye');
       setCategoryCustom('');
+      setCategoryDraft('');
+      setAddingCategory(false);
       setUnit('g');
       setSupplierStr('');
       setQtyStr('0');
@@ -113,6 +143,16 @@ export default function InventoryItemScreen({ route, navigation }) {
       setReasonStr('');
       setMovements([]);
       setLoading(false);
+      apiGet('/api/inventory', { allowStaleCache: false })
+        .then((rows) => {
+          if (!cancelled) setCustomCategoryOptions(customCategoriesFromInventory(rows));
+        })
+        .catch(() => {
+          if (!cancelled) setCustomCategoryOptions([]);
+        });
+      return () => {
+        cancelled = true;
+      };
     }, [isEdit, load]),
   );
 
@@ -137,7 +177,8 @@ export default function InventoryItemScreen({ route, navigation }) {
           setSaving(false);
           return;
         }
-        const resolvedCategory = categoryCustom.trim() || categoryPreset || 'dye';
+        const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || 'dye';
+        setCustomCategoryOptions((prev) => addUniqueCategory(prev, resolvedCategory));
         const row = await apiPost('/api/inventory', {
           name,
           category: resolvedCategory,
@@ -153,6 +194,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         const body = {
           quantity: q,
           low_stock_threshold: t,
+          unit,
         };
         const note = reasonStr.trim();
         if (note) body.reason = note;
@@ -160,6 +202,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         setItem(row);
         setQtyStr(numToStr(row.quantity));
         setThreshStr(numToStr(row.low_stock_threshold));
+        setUnit(row.unit || unit);
         setReasonStr('');
         const hist = await apiGet(`/api/inventory/${itemId}/movements`);
         setMovements(Array.isArray(hist) ? hist : []);
@@ -182,6 +225,8 @@ export default function InventoryItemScreen({ route, navigation }) {
   }
 
   const metaLine = [brandStr, shadeStr].filter(Boolean).join(' · ') || '—';
+  const detailLabel = labelForDetailField(categoryPreset, categoryCustom);
+  const customCategoryPills = addUniqueCategory(customCategoryOptions, categoryCustom);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -215,7 +260,30 @@ export default function InventoryItemScreen({ route, navigation }) {
                 value={nameStr}
                 onChangeText={setNameStr}
               />
-              <Text style={styles.label}>Category</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.labelInRow}>Category</Text>
+                <TouchableOpacity
+                  style={styles.addCategoryBtn}
+                  onPress={() => {
+                    if (addingCategory) {
+                      const nextCategory = categoryDraft.trim();
+                      setAddingCategory(false);
+                      if (nextCategory) {
+                        setCategoryCustom(nextCategory);
+                        setCategoryPreset(null);
+                        setCustomCategoryOptions((prev) => addUniqueCategory(prev, nextCategory));
+                      }
+                      setCategoryDraft('');
+                    } else {
+                      setAddingCategory(true);
+                      setCategoryDraft('');
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.addCategoryTxt}>{addingCategory ? 'Done' : 'Add new'}</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.chips}>
                 {CAT_OPTIONS.map((c) => {
                   const chipOn = !categoryCustom.trim() && categoryPreset === c.key;
@@ -233,36 +301,34 @@ export default function InventoryItemScreen({ route, navigation }) {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-              <Text style={styles.label}>New category</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={categoryCustom}
-                onChangeText={(text) => {
-                  setCategoryCustom(text);
-                  if (text.trim()) {
-                    setCategoryPreset(null);
-                  } else {
-                    setCategoryPreset((p) => p || 'dye');
-                  }
-                }}
-                autoCapitalize="sentences"
-              />
-              <Text style={styles.label}>Unit</Text>
-              <View style={styles.chips}>
-                {UNIT_OPTIONS.map((u) => (
+                {customCategoryPills.map((category) => (
                   <TouchableOpacity
-                    key={u}
-                    style={[styles.chip, unit === u && styles.chipOn]}
-                    onPress={() => setUnit(u)}
+                    key={category}
+                    style={styles.chip}
+                    onPress={() => {
+                      setCategoryCustom(category);
+                      setCategoryPreset(null);
+                      setAddingCategory(false);
+                      setCategoryDraft('');
+                    }}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                    <Text style={styles.chipTxt}>{category}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              {addingCategory ? (
+                <TextInput
+                  style={styles.input}
+                  placeholder=""
+                  placeholderTextColor="#1C1C1E"
+                  value={categoryDraft}
+                  onChangeText={(text) => {
+                    setCategoryDraft(text);
+                  }}
+                  autoCapitalize="sentences"
+                />
+              ) : null}
               <Text style={styles.label}>Brand</Text>
               <TextInput
                 style={styles.input}
@@ -271,7 +337,7 @@ export default function InventoryItemScreen({ route, navigation }) {
                 value={brandStr}
                 onChangeText={setBrandStr}
               />
-              <Text style={styles.label}>Shade / code</Text>
+              <Text style={styles.label}>{detailLabel}</Text>
               <TextInput
                 style={styles.input}
                 placeholder=""
@@ -297,7 +363,21 @@ export default function InventoryItemScreen({ route, navigation }) {
             </>
           )}
 
-          <Text style={styles.label}>Quantity ({isEdit ? item.unit : unit})</Text>
+          <Text style={styles.label}>Unit</Text>
+          <View style={styles.chips}>
+            {UNIT_OPTIONS.map((u) => (
+              <TouchableOpacity
+                key={u}
+                style={[styles.chip, unit === u && styles.chipOn]}
+                onPress={() => setUnit(u)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.label}>Quantity</Text>
           <TextInput
             style={styles.input}
             placeholder=""
@@ -307,7 +387,7 @@ export default function InventoryItemScreen({ route, navigation }) {
             keyboardType="decimal-pad"
           />
 
-          <Text style={styles.label}>Low stock at ({isEdit ? item.unit : unit})</Text>
+          <Text style={styles.label}>Low stock at</Text>
           <TextInput
             style={styles.input}
             placeholder=""
@@ -395,6 +475,28 @@ const styles = StyleSheet.create({
   subMeta: { fontSize: 14, color: '#1C1C1E', marginBottom: 4 },
   supplier: { fontSize: 13, fontWeight: '400', color: '#5E35B1', marginBottom: 16 },
   label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
+  labelInRow: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  addCategoryBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    ...reliefShadow,
+  },
+  addCategoryTxt: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: '#5E35B1',
+  },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,

@@ -107,7 +107,7 @@ async function ensureSchema(sql) {
       category TEXT NOT NULL CHECK (char_length(trim(category)) >= 1 AND char_length(category) <= 80),
       brand TEXT,
       shade_code TEXT,
-      unit TEXT NOT NULL CHECK (unit IN ('g', 'ml', 'pcs')),
+      unit TEXT NOT NULL CHECK (unit IN ('g', 'ml', 'pcs', 'oz')),
       quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
       low_stock_threshold NUMERIC(12, 2) NOT NULL DEFAULT 0,
       price_per_unit_cents INT,
@@ -117,6 +117,14 @@ async function ensureSchema(sql) {
   `;
 
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS salon_id INT REFERENCES salons (id)`;
+  await sql`
+    ALTER TABLE inventory_items
+    DROP CONSTRAINT IF EXISTS inventory_items_unit_check
+  `;
+  await sql`
+    ALTER TABLE inventory_items
+    ADD CONSTRAINT inventory_items_unit_check CHECK (unit IN ('g', 'ml', 'pcs', 'oz'))
+  `;
   await sql`
     UPDATE inventory_items
     SET salon_id = (SELECT id FROM salons ORDER BY id LIMIT 1)
@@ -146,6 +154,24 @@ async function ensureSchema(sql) {
   `;
 
   await sql`CREATE INDEX IF NOT EXISTS idx_appointments_start ON appointments (start_at)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS salon_services (
+      id SERIAL PRIMARY KEY,
+      salon_id INT NOT NULL REFERENCES salons (id) ON DELETE CASCADE,
+      name TEXT NOT NULL CHECK (char_length(trim(name)) >= 1 AND char_length(name) <= 160),
+      price_cents INT CHECK (price_cents IS NULL OR (price_cents >= 0 AND price_cents <= 1000000000)),
+      currency_code TEXT NOT NULL DEFAULT 'BGN',
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_salon_services_salon_active ON salon_services (salon_id, is_active, name)`;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_salon_services_salon_name_lower
+    ON salon_services (salon_id, lower(name))
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS visits (

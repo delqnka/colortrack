@@ -27,6 +27,14 @@ function messageForProfileDeleteFailure(err) {
   return String(err?.message || '').trim() || 'Could not delete profile.';
 }
 
+function messageForProfileSaveFailure(err) {
+  const m = String(err?.message || '').trim().toLowerCase();
+  if (m === 'conflict') return 'This email is already registered.';
+  if (m === 'unauthorized') return 'Current password is incorrect.';
+  if (m === 'bad_request') return 'Check email and password.';
+  return String(err?.message || '').trim() || 'Could not save';
+}
+
 function pickContentType(asset) {
   if (asset.mimeType && asset.mimeType.startsWith('image/')) {
     const m = asset.mimeType.split(';')[0].trim().toLowerCase();
@@ -44,6 +52,10 @@ export default function ProfileScreen() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [me, setMe] = useState(null);
   const [nameDraft, setNameDraft] = useState('');
+  const [emailDraft, setEmailDraft] = useState('');
+  const [currentPasswordDraft, setCurrentPasswordDraft] = useState('');
+  const [newPasswordDraft, setNewPasswordDraft] = useState('');
+  const [confirmPasswordDraft, setConfirmPasswordDraft] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +63,10 @@ export default function ProfileScreen() {
       const row = await apiGet('/api/me', { allowStaleCache: false });
       setMe(row);
       setNameDraft(row.display_name || '');
+      setEmailDraft(row.email || '');
+      setCurrentPasswordDraft('');
+      setNewPasswordDraft('');
+      setConfirmPasswordDraft('');
     } catch {
       setMe(null);
     } finally {
@@ -64,17 +80,51 @@ export default function ProfileScreen() {
     }, [load]),
   );
 
-  const saveName = async () => {
+  const saveProfile = async () => {
     if (!me || saving) return;
+    const trimmedEmail = emailDraft.trim();
+    const nextPassword = newPasswordDraft;
+    if (!trimmedEmail) {
+      Alert.alert('', 'Email is required.');
+      return;
+    }
+    if (nextPassword || confirmPasswordDraft) {
+      if (nextPassword.length < 8) {
+        Alert.alert('', 'Password must be at least 8 characters.');
+        return;
+      }
+      if (nextPassword !== confirmPasswordDraft) {
+        Alert.alert('', 'Passwords do not match.');
+        return;
+      }
+      if (me.has_password && !currentPasswordDraft) {
+        Alert.alert('', 'Current password is required.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const trimmed = nameDraft.trim();
-      const payload = { display_name: trimmed.length ? trimmed : null };
-      const updated = await apiPatch('/api/me', payload);
+      const payload = {
+        display_name: trimmed.length ? trimmed : null,
+        email: trimmedEmail,
+      };
+      if (nextPassword) {
+        payload.password = nextPassword;
+        if (me.has_password) payload.current_password = currentPasswordDraft;
+      }
+      const updated = await apiPatch('/api/me', payload, {
+        clearSessionOn401: false,
+        queueOffline: false,
+      });
       setMe((prev) => ({ ...prev, ...updated }));
       setNameDraft(updated.display_name || '');
+      setEmailDraft(updated.email || '');
+      setCurrentPasswordDraft('');
+      setNewPasswordDraft('');
+      setConfirmPasswordDraft('');
     } catch (e) {
-      Alert.alert('', e.message || 'Could not save');
+      Alert.alert('', messageForProfileSaveFailure(e));
     } finally {
       setSaving(false);
     }
@@ -210,7 +260,7 @@ export default function ProfileScreen() {
               </Text>
             ) : null}
 
-            <Text style={styles.fieldLabel}>Display name</Text>
+            <Text style={[styles.fieldLabel, styles.firstFieldLabel]}>Display name</Text>
             <TextInput
               style={styles.input}
               value={nameDraft}
@@ -220,9 +270,62 @@ export default function ProfileScreen() {
               autoCapitalize="words"
               editable={!saving}
             />
+
+            <Text style={styles.fieldLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={emailDraft}
+              onChangeText={setEmailDraft}
+              placeholder=""
+              placeholderTextColor="#8E8E93"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              editable={!saving}
+            />
+
+            {me?.has_password ? (
+              <>
+                <Text style={styles.fieldLabel}>Current password</Text>
+                <TextInput
+                  style={styles.input}
+                  value={currentPasswordDraft}
+                  onChangeText={setCurrentPasswordDraft}
+                  placeholder=""
+                  placeholderTextColor="#8E8E93"
+                  secureTextEntry
+                  autoComplete="password"
+                  editable={!saving}
+                />
+              </>
+            ) : null}
+
+            <Text style={styles.fieldLabel}>New password</Text>
+            <TextInput
+              style={styles.input}
+              value={newPasswordDraft}
+              onChangeText={setNewPasswordDraft}
+              placeholder=""
+              placeholderTextColor="#8E8E93"
+              secureTextEntry
+              autoComplete="password-new"
+              editable={!saving}
+            />
+
+            <Text style={styles.fieldLabel}>Confirm password</Text>
+            <TextInput
+              style={styles.input}
+              value={confirmPasswordDraft}
+              onChangeText={setConfirmPasswordDraft}
+              placeholder=""
+              placeholderTextColor="#8E8E93"
+              secureTextEntry
+              autoComplete="password-new"
+              editable={!saving}
+            />
             <TouchableOpacity
               style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-              onPress={saveName}
+              onPress={saveProfile}
               disabled={saving || !me}
               activeOpacity={0.88}
             >
@@ -330,11 +433,14 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     alignSelf: 'stretch',
-    marginTop: 28,
+    marginTop: 16,
     marginBottom: 8,
     fontSize: 14,
     fontFamily: FontFamily.medium,
     color: '#1C1C1E',
+  },
+  firstFieldLabel: {
+    marginTop: 28,
   },
   input: {
     alignSelf: 'stretch',

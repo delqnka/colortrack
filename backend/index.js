@@ -6,7 +6,15 @@ const cors = require('cors');
 const { neon } = require('@neondatabase/serverless');
 const { ensureSchema } = require('./schemaEnsure');
 const r2 = require('./r2');
-const { authMiddleware, ensureBootstrapStaff, loginHandler, registerHandler, appleAuthHandler } = require('./auth');
+const {
+  authMiddleware,
+  ensureBootstrapStaff,
+  loginHandler,
+  registerHandler,
+  appleAuthHandler,
+  hashPassword,
+  comparePassword,
+} = require('./auth');
 const push = require('./push');
 const { jsonForError } = require('./errorResponse');
 
@@ -79,6 +87,10 @@ function sanitizeStaffDisplayName(raw) {
   return t.slice(0, 160);
 }
 
+function staffEmailLooksValid(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 app.get('/api/me', async (req, res, next) => {
   try {
     const sql = getSql();
@@ -109,22 +121,83 @@ app.get('/api/me', async (req, res, next) => {
 app.patch('/api/me', async (req, res, next) => {
   try {
     const b = req.body || {};
-    if (!Object.prototype.hasOwnProperty.call(b, 'display_name')) {
+    const wantsName = Object.prototype.hasOwnProperty.call(b, 'display_name');
+    const wantsEmail = Object.prototype.hasOwnProperty.call(b, 'email');
+    const wantsPassword = Object.prototype.hasOwnProperty.call(b, 'password');
+    if (!wantsName && !wantsEmail && !wantsPassword) {
       return res.status(400).json({ error: 'bad_request' });
     }
-    let displayNamePayload;
-    if (b.display_name === null) {
-      displayNamePayload = null;
-    } else {
-      const sanitized = sanitizeStaffDisplayName(b.display_name);
-      displayNamePayload = sanitized && sanitized.length ? sanitized : null;
-    }
+
     const sql = getSql();
+    const currentRows = await sql`
+      SELECT id, email, display_name, password_hash
+      FROM staff
+      WHERE id = ${req.auth.userId} AND salon_id = ${req.auth.salonId}
+      LIMIT 1
+    `;
+    if (!currentRows.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    const current = currentRows[0];
+
+    let displayNamePayload = current.display_name;
+    if (wantsName) {
+      if (b.display_name === null) {
+        displayNamePayload = null;
+      } else {
+        const sanitized = sanitizeStaffDisplayName(b.display_name);
+        displayNamePayload = sanitized && sanitized.length ? sanitized : null;
+      }
+    }
+
+    let emailPayload = current.email;
+    if (wantsEmail) {
+      emailPayload = typeof b.email === 'string' ? b.email.trim().toLowerCase() : '';
+      if (!emailPayload || !staffEmailLooksValid(emailPayload)) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      const dup = await sql`
+        SELECT id FROM staff
+        WHERE lower(email) = ${emailPayload} AND id <> ${req.auth.userId}
+        LIMIT 1
+      `;
+      if (dup.length) {
+        return res.status(409).json({ error: 'conflict' });
+      }
+    }
+
+    let passwordHashPayload = current.password_hash;
+    if (wantsPassword) {
+      const nextPassword = typeof b.password === 'string' ? b.password : '';
+      if (nextPassword.length < 8) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      if (current.password_hash) {
+        const currentPassword = typeof b.current_password === 'string' ? b.current_password : '';
+        const ok = await comparePassword(currentPassword, current.password_hash);
+        if (!ok) {
+          return res.status(401).json({ error: 'unauthorized' });
+        }
+      }
+      passwordHashPayload = await hashPassword(nextPassword);
+    }
+
     const rows = await sql`
       UPDATE staff
-      SET display_name = ${displayNamePayload}
+      SET
+        display_name = ${displayNamePayload},
+        email = ${emailPayload},
+        password_hash = ${passwordHashPayload}
       WHERE id = ${req.auth.userId} AND salon_id = ${req.auth.salonId}
-      RETURNING id, email, display_name, avatar_url, role
+      RETURNING
+        id,
+        email,
+        display_name,
+        avatar_url,
+        role,
+        (password_hash IS NOT NULL)::boolean AS has_password,
+        (apple_sub IS NOT NULL)::boolean AS has_apple,
+        (SELECT name FROM salons WHERE id = staff.salon_id) AS salon_name
     `;
     if (!rows.length) {
       return res.status(404).json({ error: 'not_found' });
@@ -884,7 +957,7 @@ app.get('/api/inventory', async (req, res, next) => {
   }
 });
 
-const INVENTORY_UNITS = new Set(['g', 'ml', 'pcs']);
+const INVENTORY_UNITS = new Set(['g', 'ml', 'pcs', 'oz']);
 const INVENTORY_CATEGORY_MAX = 80;
 
 app.post('/api/inventory', async (req, res, next) => {
@@ -1031,7 +1104,7 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
     }
     const sql = getSql();
     const existing = await sql`
-      SELECT id, quantity, low_stock_threshold
+      SELECT id, quantity, low_stock_threshold, unit
       FROM inventory_items
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       LIMIT 1
@@ -1060,6 +1133,14 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
       newThresh = t;
     }
 
+    let newUnit = cur.unit;
+    if (b.unit !== undefined && b.unit !== null) {
+      newUnit = typeof b.unit === 'string' ? b.unit.trim() : '';
+      if (!INVENTORY_UNITS.has(newUnit)) {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+    }
+
     const oldQty = Number(cur.quantity);
     const delta = newQty - oldQty;
     const reasonText =
@@ -1074,7 +1155,7 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
 
     const updated = await sql`
       UPDATE inventory_items
-      SET quantity = ${newQty}, low_stock_threshold = ${newThresh}
+      SET quantity = ${newQty}, low_stock_threshold = ${newThresh}, unit = ${newUnit}
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       RETURNING
         id,
@@ -1090,6 +1171,228 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         (quantity <= low_stock_threshold) AS is_low_stock
     `;
     res.json(updated[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+
+function sanitizeServiceName(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw.trim().replace(/\s+/g, ' ').slice(0, 160);
+}
+
+function normalizeCurrencyCode(raw) {
+  const c = typeof raw === 'string' ? raw.trim().toUpperCase() : '';
+  return /^[A-Z]{3}$/.test(c) ? c : 'BGN';
+}
+
+function centsFromLoosePrice(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || raw < 0) return null;
+    return Math.round(raw * 100);
+  }
+  const text = String(raw).replace(/\s/g, '').replace(',', '.');
+  const m = text.match(/\d+(?:\.\d{1,2})?/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
+function normalizeServiceCandidate(row) {
+  if (!row || typeof row !== 'object') return null;
+  const name = sanitizeServiceName(row.name || row.service || row.title);
+  if (!name) return null;
+  let priceCents = null;
+  if (row.price_cents !== undefined && row.price_cents !== null && row.price_cents !== '') {
+    const cents = Math.round(Number(row.price_cents));
+    priceCents = Number.isFinite(cents) && cents >= 0 ? Math.min(cents, 1000000000) : null;
+  } else {
+    priceCents = centsFromLoosePrice(row.price ?? row.amount ?? row.value);
+  }
+  return {
+    name,
+    price_cents: priceCents == null ? null : Math.min(priceCents, 1000000000),
+    currency_code: normalizeCurrencyCode(row.currency_code || row.currency),
+  };
+}
+
+function parseJsonObjectFromText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+async function upsertSalonService(sql, salonId, service) {
+  const existing = await sql`
+    SELECT id
+    FROM salon_services
+    WHERE salon_id = ${salonId} AND lower(name) = ${service.name.toLowerCase()}
+    LIMIT 1
+  `;
+  if (existing.length) {
+    const rows = await sql`
+      UPDATE salon_services
+      SET
+        name = ${service.name},
+        price_cents = ${service.price_cents},
+        currency_code = ${service.currency_code},
+        is_active = TRUE,
+        updated_at = NOW()
+      WHERE id = ${existing[0].id} AND salon_id = ${salonId}
+      RETURNING id, name, price_cents, currency_code, is_active
+    `;
+    return rows[0];
+  }
+  const rows = await sql`
+    INSERT INTO salon_services (salon_id, name, price_cents, currency_code)
+    VALUES (${salonId}, ${service.name}, ${service.price_cents}, ${service.currency_code})
+    RETURNING id, name, price_cents, currency_code, is_active
+  `;
+  return rows[0];
+}
+
+app.get('/api/services', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT id, name, price_cents, currency_code, is_active
+      FROM salon_services
+      WHERE salon_id = ${req.auth.salonId} AND is_active = TRUE
+      ORDER BY name
+    `;
+    res.json(rows);
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/services/bulk', async (req, res, next) => {
+  try {
+    const input = Array.isArray((req.body || {}).services) ? req.body.services : [];
+    const clean = [];
+    for (const row of input) {
+      const service = normalizeServiceCandidate(row);
+      if (!service) continue;
+      if (!clean.some((s) => s.name.toLowerCase() === service.name.toLowerCase())) {
+        clean.push(service);
+      }
+      if (clean.length >= 80) break;
+    }
+    if (!clean.length) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const sql = getSql();
+    const saved = [];
+    for (const service of clean) {
+      saved.push(await upsertSalonService(sql, req.auth.salonId, service));
+    }
+    res.status(201).json(saved);
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/services/import/ocr', async (req, res, next) => {
+  try {
+    const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+    const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
+    const usingOpenRouter = Boolean(openRouterKey);
+    const apiKey = openRouterKey || openAiKey;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'missing_ocr_key' });
+    }
+    const b = req.body || {};
+    const imageBase64 = typeof b.image_base64 === 'string' ? b.image_base64.trim() : '';
+    const contentType = typeof b.content_type === 'string' ? b.content_type.trim().toLowerCase() : 'image/jpeg';
+    if (!imageBase64 || !/^image\/(jpeg|jpg|png|webp)$/i.test(contentType)) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const model = usingOpenRouter
+      ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
+      : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
+    const prompt = [
+      'Extract salon service names and prices from this price list image.',
+      'Return only JSON with a "services" array.',
+      'Each item: {"name": string, "price": number|null, "currency_code": "BGN" unless another currency is visible}.',
+      'Skip headers, categories, phone numbers, addresses, discounts, and non-service rows.',
+      'If a price is a range, use the lowest visible price.',
+    ].join(' ');
+    const body = {
+      model,
+      temperature: 0,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: { url: `data:${contentType};base64,${imageBase64}` },
+            },
+          ],
+        },
+      ],
+    };
+    if (!usingOpenRouter) {
+      body.response_format = { type: 'json_object' };
+    }
+    const ocrRes = await fetch(
+      usingOpenRouter
+        ? 'https://openrouter.ai/api/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...(usingOpenRouter
+            ? {
+                'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
+                'X-Title': 'ColorTrack',
+              }
+            : {}),
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const text = await ocrRes.text();
+    if (!ocrRes.ok) {
+      return res.status(502).json({ error: 'ocr_failed' });
+    }
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return res.status(502).json({ error: 'ocr_failed' });
+    }
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = parseJsonObjectFromText(content);
+    const rows = Array.isArray(parsed?.services) ? parsed.services : [];
+    const services = [];
+    for (const row of rows) {
+      const service = normalizeServiceCandidate(row);
+      if (!service) continue;
+      if (!services.some((s) => s.name.toLowerCase() === service.name.toLowerCase())) {
+        services.push(service);
+      }
+      if (services.length >= 80) break;
+    }
+    res.json({ services });
   } catch (e) {
     next(e);
   }

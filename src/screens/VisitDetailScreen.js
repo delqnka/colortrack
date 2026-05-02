@@ -37,9 +37,11 @@ function formatLine(fl) {
     ? fl.shade_code
     : '';
   const unit = UNIT_SET.has(fl.shade_code) ? fl.shade_code : '';
-  const name = [fl.brand, shade].filter(Boolean).join(' ');
+  // shade code (e.g. 7.21) is primary; brand is secondary label
+  const primary = shade || fl.brand || '';
+  const secondary = shade && fl.brand ? fl.brand : '';
   const qty = `${Number(fl.amount) % 1 === 0 ? Number(fl.amount) : fl.amount}${unit ? ' ' + unit : ''}`;
-  return { name, qty };
+  return { primary, secondary, qty };
 }
 
 function buildMixGroups(lines) {
@@ -175,9 +177,9 @@ export default function VisitDetailScreen({ route, navigation }) {
                 <View key={gi} style={styles.mixCard}>
                   {/* section badge */}
                   <View style={styles.mixCardHeader}>
-                    <View style={[styles.sectionBadge, { backgroundColor: meta.color + '18' }]}>
+                    <View style={styles.sectionBadge}>
                       <Text style={[styles.sectionBadgeTxt, { color: meta.color }]}>
-                        {meta.label.toUpperCase()}
+                        {meta.label}
                       </Text>
                     </View>
                     {mixGroups.filter(g => g.section === group.section).length > 1 ? (
@@ -189,14 +191,15 @@ export default function VisitDetailScreen({ route, navigation }) {
 
                   {/* colour rows */}
                   {group.colours.map((fl, ci) => {
-                    const { name, qty } = formatLine(fl);
+                    const { primary, secondary, qty } = formatLine(fl);
                     return (
                       <View key={fl.id} style={[styles.lineRow, ci < group.colours.length - 1 && styles.lineRowBorder]}>
                         <View style={styles.lineNumBadge}>
                           <Text style={styles.lineNumTxt}>{ci + 1}</Text>
                         </View>
                         <View style={styles.lineBody}>
-                          <Text style={styles.lineName} numberOfLines={2}>{name}</Text>
+                          <Text style={styles.lineName} numberOfLines={1}>{primary}</Text>
+                          {secondary ? <Text style={styles.lineNameSub} numberOfLines={1}>{secondary}</Text> : null}
                         </View>
                         <Text style={styles.lineQty}>{qty}</Text>
                         {fl.inventory_item_id ? (
@@ -207,19 +210,21 @@ export default function VisitDetailScreen({ route, navigation }) {
                   })}
 
                   {/* developer row */}
-                  {group.developer ? (
-                    <View style={styles.devRow}>
-                      <View style={[styles.lineNumBadge, styles.lineNumBadgeDev]}>
-                        <Ionicons name="flask-outline" size={13} color="#0D74FF" />
+                  {group.developer ? (() => {
+                    const { primary, secondary, qty } = formatLine(group.developer);
+                    return (
+                      <View style={styles.devRow}>
+                        <View style={[styles.lineNumBadge, styles.lineNumBadgeDev]}>
+                          <Ionicons name="flask-outline" size={13} color="#0D74FF" />
+                        </View>
+                        <View style={styles.lineBody}>
+                          <Text style={styles.devName} numberOfLines={1}>{primary}</Text>
+                          {secondary ? <Text style={styles.lineNameSub} numberOfLines={1}>{secondary}</Text> : null}
+                        </View>
+                        <Text style={styles.devQty}>{qty}</Text>
                       </View>
-                      <View style={styles.lineBody}>
-                        <Text style={styles.devName} numberOfLines={2}>
-                          {formatLine(group.developer).name}
-                        </Text>
-                      </View>
-                      <Text style={styles.devQty}>{formatLine(group.developer).qty}</Text>
-                    </View>
-                  ) : null}
+                    );
+                  })() : null}
                 </View>
               );
             })}
@@ -233,7 +238,7 @@ export default function VisitDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F2F2F7' },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   miss: { textAlign: 'center', marginTop: 48, color: '#8E8E93', fontFamily: FontFamily.regular, fontSize: 16 },
 
@@ -244,10 +249,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: BRAND_PURPLE + '14',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     marginBottom: 16,
   },
   clientChipTxt: {
@@ -347,14 +348,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   sectionBadgeTxt: {
     fontFamily: FontFamily.bold,
-    fontSize: 11,
-    letterSpacing: 0.6,
+    fontSize: 13,
+    letterSpacing: -0.1,
   },
   mixIndex: {
     fontFamily: FontFamily.regular,
@@ -393,6 +392,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#000000',
     letterSpacing: -0.2,
+  },
+  lineNameSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 1,
   },
   lineQty: {
     fontFamily: FontFamily.bold,

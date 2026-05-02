@@ -315,7 +315,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         mixGroupKey: mgk,
         section: draftSection,
         brand,
-        shade_code: r.unit || 'g',
+        shade_code: r.shade_code || r.unit || 'g',
         amount: String(r.amount),
         unit: r.unit || 'g',
         inventory_item_id: r.inventory_item_id ?? null,
@@ -329,10 +329,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         mixGroupKey: mgk,
         section: 'developer',
         brand: devBrand || 'Developer',
-        shade_code: draftDeveloper.unit || 'g',
+        shade_code: draftDeveloper.shade_code || draftDeveloper.unit || 'g',
         amount: String(draftDeveloper.amount || ''),
         unit: draftDeveloper.unit || 'g',
-        inventory_item_id: null,
+        inventory_item_id: draftDeveloper.inventory_item_id ?? null,
       });
     }
     if (lines.length + built.length > MAX_FORMULA_LINES) {

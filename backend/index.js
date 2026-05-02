@@ -979,37 +979,52 @@ function normalizeInventoryCategory(raw) {
 function normalizeInventoryUnit(raw) {
   const u = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   if (INVENTORY_UNITS.has(u)) return u;
-  if (u === 'piece' || u === 'pieces' || u === 'pc') return 'pcs';
-  if (u === 'gram' || u === 'grams') return 'g';
+  if (u === 'piece' || u === 'pieces' || u === 'pc' || u === 'бр' || u === 'брой' || u === 'броя') return 'pcs';
+  if (u === 'gram' || u === 'grams' || u === 'гр') return 'g';
+  if (u === 'milliliter' || u === 'milliliters') return 'ml';
   return 'pcs';
 }
 
+function firstLooseNumber(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  const text = String(raw).replace(',', '.');
+  const m = text.match(/(?:x\s*)?(\d+(?:\.\d+)?)/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
 function quantityFromLoose(raw) {
-  if (raw === null || raw === undefined || raw === '') return 0;
-  const n = Number(String(raw).replace(',', '.'));
+  const n = firstLooseNumber(raw);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 function normalizeInventoryImportCandidate(row) {
   if (!row || typeof row !== 'object') return null;
-  const name = sanitizeInventoryText(row.name || row.product || row.item, 200);
+  const name = sanitizeInventoryText(
+    row.name || row.product || row.product_name || row.item || row.item_name || row.description,
+    200,
+  );
   if (!name) return null;
-  const quantity = quantityFromLoose(row.quantity ?? row.qty ?? row.count);
+  const quantity = quantityFromLoose(row.quantity ?? row.qty ?? row.count ?? row.amount ?? row.pack_count);
   if (!quantity) return null;
-  const unit = normalizeInventoryUnit(row.unit);
+  const unit = normalizeInventoryUnit(row.unit || row.quantity_unit || row.uom);
   const pricePerUnitCents = centsFromLoosePrice(
-    row.price_per_unit_cents != null ? Number(row.price_per_unit_cents) / 100 : row.price_per_unit ?? row.unit_price,
+    row.price_per_unit_cents != null
+      ? Number(row.price_per_unit_cents) / 100
+      : row.price_per_unit ?? row.unit_price ?? row.unitPrice ?? row.each ?? row.price_each,
   );
   const lineTotalCents = centsFromLoosePrice(
-    row.line_total_cents != null ? Number(row.line_total_cents) / 100 : row.line_total ?? row.total,
+    row.line_total_cents != null ? Number(row.line_total_cents) / 100 : row.line_total ?? row.total ?? row.total_price,
   );
   const computedTotalCents =
     lineTotalCents == null && pricePerUnitCents != null ? Math.round(pricePerUnitCents * quantity) : lineTotalCents;
   return {
     name,
     category: normalizeInventoryCategory(row.category),
-    brand: sanitizeInventoryText(row.brand, 200),
-    shade_code: sanitizeInventoryText(row.shade_code || row.shade || row.code || row.volume, 80),
+    brand: sanitizeInventoryText(row.brand || row.manufacturer, 200),
+    shade_code: sanitizeInventoryText(row.shade_code || row.shade || row.code || row.sku || row.volume, 80),
     unit,
     quantity,
     price_per_unit_cents: pricePerUnitCents == null ? null : Math.min(pricePerUnitCents, 1000000000),
@@ -1328,9 +1343,11 @@ app.post('/api/inventory/import/invoice', async (req, res, next) => {
       : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
     const prompt = [
       'Extract purchased salon inventory items from this invoice image.',
-      'Return only JSON with an "items" array.',
+      'The invoice may be in English, Bulgarian, or mixed language. Read table rows and line items even if labels are abbreviated.',
+      'Return only JSON with an "items" array. Do not return markdown.',
       'Each item: {"name": string, "category": "dye|oxidant|retail|consumable", "brand": string|null, "shade_code": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
       'For hair color like Wella Koleston 9.12 60 ml x 15 pieces, keep the package size in the name or shade_code, set quantity 15 and unit pcs.',
+      'Quantity words can appear as qty, count, бр, брой, бройки, x, pcs, pieces. Convert them to a number.',
       'If the invoice shows 15 pcs at 10 each total 150, return quantity 15, price_per_unit 10, line_total 150.',
       'Skip taxes, discounts, subtotals, shipping, addresses, and non-product rows.',
     ].join(' ');
@@ -1382,9 +1399,12 @@ app.post('/api/inventory/import/invoice', async (req, res, next) => {
     } catch {
       return res.status(502).json({ error: 'ocr_failed' });
     }
-    const content = data?.choices?.[0]?.message?.content;
+    const rawContent = data?.choices?.[0]?.message?.content;
+    const content = Array.isArray(rawContent)
+      ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n')
+      : rawContent;
     const parsed = parseJsonObjectFromText(content);
-    const rows = Array.isArray(parsed?.items) ? parsed.items : [];
+    const rows = Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
     const items = [];
     for (const row of rows) {
       const item = normalizeInventoryImportCandidate(row);

@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
   AppState,
   RefreshControl,
+  DeviceEventEmitter,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -46,6 +47,7 @@ const FINANCE_CARD_GRADIENT_START = { x: 0.35, y: 0 };
 const FINANCE_CARD_GRADIENT_END = { x: 0.65, y: 1 };
 const LAB_PAINT_IMAGE = require('../../assets/lab-paint-colors-strip.png');
 const FINANCE_COINS_IMAGE = require('../../assets/finance-coins.png');
+const SERVICES_PRICE_LIST_IMAGE = require('../../assets/services-price-list.png');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -198,6 +200,7 @@ export default function HomeScreen() {
   const hasFetchedOnce = useRef(false);
   const selectedDateRef = useRef(selectedDate);
   const homeFocusedRef = useRef(false);
+  const homeFocusInitial = useRef(true);
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
@@ -216,19 +219,36 @@ export default function HomeScreen() {
       .catch(() => setProfileMe(null));
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      homeFocusedRef.current = true;
-      return () => {
-        homeFocusedRef.current = false;
-      };
-    }, []),
-  );
+  const refreshHomeDataSilent = useCallback(async () => {
+    const ymd = toYMDLocal(selectedDateRef.current);
+    try {
+      const dashP = apiGet(`/api/dashboard/day?date=${encodeURIComponent(ymd)}`, {
+        allowStaleCache: false,
+      }).catch(() => null);
+      const labP = apiGet('/api/lab/stats', { allowStaleCache: false }).catch(() => null);
+      const [dash, lab] = await Promise.all([dashP, labP]);
+      if (toYMDLocal(selectedDateRef.current) !== ymd) return;
+      /** Keep prior dashboard/lab data on transient failures to avoid FALLBACK placeholders + wiping lab stats */
+      setData((prev) => (dash != null ? dash : prev != null ? prev : FALLBACK_DASH));
+      setLabStats((prev) => (lab != null ? lab : prev));
+    } catch {
+      if (toYMDLocal(selectedDateRef.current) !== ymd) return;
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
+      homeFocusedRef.current = true;
       loadProfileMe();
-    }, [loadProfileMe]),
+      if (homeFocusInitial.current) {
+        homeFocusInitial.current = false;
+      } else {
+        refreshHomeDataSilent();
+      }
+      return () => {
+        homeFocusedRef.current = false;
+      };
+    }, [loadProfileMe, refreshHomeDataSilent]),
   );
 
   const strip = useMemo(() => weekDaysForContainingMonday(selectedDate), [selectedDate]);
@@ -243,12 +263,13 @@ export default function HomeScreen() {
         const labP = apiGet('/api/lab/stats').catch(() => null);
         const [dash, lab] = await Promise.all([dashP, labP]);
         if (!cancelled) {
-          setData(dash || FALLBACK_DASH);
-          setLabStats(lab);
+          setData((prev) => (dash != null ? dash : prev != null ? prev : FALLBACK_DASH));
+          setLabStats((prev) => (lab != null ? lab : prev));
         }
       } catch {
-        if (!cancelled) setData(FALLBACK_DASH);
-        if (!cancelled) setLabStats(null);
+        if (!cancelled) {
+          setData((prev) => (prev != null ? prev : FALLBACK_DASH));
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -261,24 +282,6 @@ export default function HomeScreen() {
     };
   }, [selectedDate]);
 
-  const refreshHomeDataSilent = useCallback(async () => {
-    const ymd = toYMDLocal(selectedDateRef.current);
-    try {
-      const dashP = apiGet(`/api/dashboard/day?date=${encodeURIComponent(ymd)}`, {
-        allowStaleCache: false,
-      }).catch(() => null);
-      const labP = apiGet('/api/lab/stats', { allowStaleCache: false }).catch(() => null);
-      const [dash, lab] = await Promise.all([dashP, labP]);
-      if (toYMDLocal(selectedDateRef.current) !== ymd) return;
-      setData(dash || FALLBACK_DASH);
-      setLabStats(lab);
-    } catch {
-      if (toYMDLocal(selectedDateRef.current) !== ymd) return;
-      setData(FALLBACK_DASH);
-      setLabStats(null);
-    }
-  }, []);
-
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active' || !homeFocusedRef.current) return;
@@ -287,6 +290,13 @@ export default function HomeScreen() {
     });
     return () => sub.remove();
   }, [refreshHomeDataSilent, loadProfileMe]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('colortrack:appointments-changed', () => {
+      refreshHomeDataSilent();
+    });
+    return () => sub.remove();
+  }, [refreshHomeDataSilent]);
 
   const onPullRefresh = useCallback(async () => {
     setPullRefreshing(true);
@@ -367,7 +377,7 @@ export default function HomeScreen() {
           : `${appointmentCount} bookings · tap to view day`;
 
   const openCalendarForSelection = () =>
-    navigation.navigate('Calendar', { openDate: toYMDLocal(selectedDate) });
+    navigation.navigate('DashboardCalendar', { openDate: toYMDLocal(selectedDate) });
 
   const nowTick = new Date();
 
@@ -418,10 +428,10 @@ export default function HomeScreen() {
       </Text>
       <View style={styles.stockCompactFooter}>
         <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
-          <SFIcon name="file-tray-full" iosName="cabinet.fill" size={13} color="#FFFFFF" />
+          <SFIcon name="file-tray-full" iosName="cabinet.fill" size={13} color={BRAND_PURPLE} />
         </View>
         <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
-          <Ionicons name="cart" size={13} color="#fff" />
+          <Ionicons name="cart" size={13} color={BRAND_PURPLE} />
         </View>
       </View>
     </View>
@@ -555,10 +565,16 @@ export default function HomeScreen() {
                     hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                   >
                     {isSelected ? (
-                      <View style={styles.dateActiveBubble}>
+                      <LinearGradient
+                        colors={SCHEDULE_BANNER_GRADIENT}
+                        locations={SCHEDULE_BANNER_LOCATIONS}
+                        start={SCHEDULE_BANNER_GRADIENT_START}
+                        end={SCHEDULE_BANNER_GRADIENT_END}
+                        style={styles.dateActiveBubble}
+                      >
                         <Text style={styles.dateTextDayActive}>{item.day}</Text>
                         <Text style={styles.dateTextNumActive}>{item.num}</Text>
-                      </View>
+                      </LinearGradient>
                     ) : (
                       <>
                         <Text
@@ -655,10 +671,14 @@ export default function HomeScreen() {
                   >
                     <View style={styles.financeCardHead}>
                       <Text style={styles.financeBadgeText}>Finance</Text>
-                      <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.92)" />
                     </View>
                     <View style={styles.financeCardBody}>
-                      <Ionicons name="wallet-outline" size={36} color="rgba(255,255,255,0.94)" />
+                      <Ionicons
+                        name="wallet-outline"
+                        size={36}
+                        color="#BFEAFF"
+                        style={styles.financeWalletIcon}
+                      />
                       <Text style={styles.financeCardSubtitle}>Revenue & Expenses</Text>
                     </View>
                     <Image source={FINANCE_COINS_IMAGE} style={styles.financeCoinsImage} resizeMode="contain" />
@@ -693,12 +713,12 @@ export default function HomeScreen() {
                     <Text style={styles.servicesCompactTitle} numberOfLines={2}>
                       Price list
                     </Text>
-                    <View style={styles.servicesCompactFooter}>
-                      <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleServices]}>
-                        <Ionicons name="cut-outline" size={13} color="#fff" />
-                      </View>
-                    </View>
                   </View>
+                  <Image
+                    source={SERVICES_PRICE_LIST_IMAGE}
+                    style={styles.servicesPriceListImage}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -907,7 +927,6 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1012,15 +1031,18 @@ const styles = StyleSheet.create({
     minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    transform: [{ translateY: -8 }],
+    transform: [{ translateY: -10 }],
     zIndex: 1,
   },
+  financeWalletIcon: {
+    transform: [{ translateY: 5 }],
+  },
   financeCardSubtitle: {
-    marginTop: 10,
+    marginTop: 2,
     fontSize: 13,
     lineHeight: 17,
     fontFamily: FontFamily.medium,
-    color: 'rgba(255,255,255,0.96)',
+    color: '#BFEAFF',
     textAlign: 'center',
   },
   financeCoinsImage: {
@@ -1052,7 +1074,7 @@ const styles = StyleSheet.create({
   lowStockBadgeText: {
     fontSize: 9,
     fontFamily: FontFamily.semibold,
-    color: '#FFFFFF',
+    color: '#7A1738',
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
@@ -1060,11 +1082,11 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 12,
     fontFamily: FontFamily.semibold,
-    color: 'rgba(255,255,255,0.96)',
+    color: '#3A1020',
     lineHeight: 16,
   },
   iconCircleLowStock: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'rgba(255,255,255,0.48)',
   },
   servicesCompactCard: {
     backgroundColor: '#F97316',
@@ -1081,6 +1103,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
     justifyContent: 'flex-start',
     paddingTop: 2,
+    zIndex: 1,
   },
   servicesCompactBadge: {
     fontSize: 9,
@@ -1103,6 +1126,15 @@ const styles = StyleSheet.create({
   },
   iconCircleServices: {
     backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  servicesPriceListImage: {
+    position: 'absolute',
+    right: -7,
+    bottom: -14,
+    width: 54,
+    height: 74,
+    opacity: 0.92,
+    zIndex: 0,
   },
   stockCompactStack: {
     flex: 1,

@@ -12,6 +12,7 @@ import {
   Modal,
   FlatList,
   Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -71,7 +72,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
   const appointmentId = appt?.id;
   const isEdit = Number.isFinite(appointmentId) && appointmentId > 0;
 
-  const [title, setTitle] = useState('');
   const [procedureName, setProcedureName] = useState('');
   const [dateStr, setDateStr] = useState(route.params?.initialDate || todayYMD());
   const [startTime, setStartTime] = useState('09:00');
@@ -116,8 +116,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (isEdit && appt) {
-        setTitle(appt.title || '');
-        setProcedureName(appt.procedure_name || '');
+        setProcedureName(appt.procedure_name || appt.title || '');
         setDateStr(appt.day_local || route.params?.initialDate || todayYMD());
         setStartTime(appt.start_local || '09:00');
         setEndTime(appt.end_local || '10:00');
@@ -126,7 +125,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
         setClientId(appt.client_id ?? null);
         setClientLabel(appt.client_name || '');
       } else {
-        setTitle('');
         setProcedureName('');
         setDateStr(route.params?.initialDate || todayYMD());
         setStartTime('09:00');
@@ -179,7 +177,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
     const name = String(service?.name || '').trim();
     if (!name) return;
     setProcedureName(name);
-    if (!title.trim()) setTitle(name);
   };
 
   const applyPickerSelection = useCallback((mode, selectedDate) => {
@@ -213,9 +210,9 @@ export default function AppointmentFormScreen({ route, navigation }) {
   const iosPickerTitle =
     dateTimePickerMode === 'date' ? 'Date' : dateTimePickerMode === 'start' ? 'Start' : 'End';
   const save = async () => {
-    const t = title.trim();
-    if (!t) {
-      Alert.alert('', 'Title');
+    const procedure = procedureName.trim();
+    if (!procedure) {
+      Alert.alert('', 'Procedure');
       return;
     }
     const ds = dateStr.trim();
@@ -225,8 +222,8 @@ export default function AppointmentFormScreen({ route, navigation }) {
     }
 
     const body = {
-      title: t,
-      procedure_name: procedureName.trim() || null,
+      title: procedure,
+      procedure_name: procedure,
       date: ds,
       start_time: startTime.trim(),
       end_time: endTime.trim(),
@@ -242,6 +239,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
       } else {
         await apiPost('/api/appointments', body);
       }
+      DeviceEventEmitter.emit('colortrack:appointments-changed');
       navigation.goBack();
     } catch (e) {
       Alert.alert('', e.message || '');
@@ -260,6 +258,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
         onPress: async () => {
           try {
             await apiDelete(`/api/appointments/${appointmentId}`);
+            DeviceEventEmitter.emit('colortrack:appointments-changed');
             navigation.goBack();
           } catch (e) {
             Alert.alert('', e.message || '');
@@ -289,15 +288,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.label}>Title</Text>
-          <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#1C1C1E"
-            value={title}
-            onChangeText={setTitle}
-          />
-
           <Text style={styles.label}>Procedure</Text>
           <TextInput
             style={styles.input}
@@ -424,7 +414,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
                   navigation.navigate('FormulaBuilder', {
                     clientId,
                     appointmentId,
-                    initialProcedure: procedureName.trim() || title.trim(),
+                    initialProcedure: procedureName.trim(),
                     initialDate: dateStr,
                     initialChair: chairLabel,
                     initialNotes: notes,
@@ -432,7 +422,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
                 }
                 activeOpacity={0.88}
               >
-                <Text style={styles.secondaryBtnTxt}>Log visit (formula)</Text>
+                <Text style={styles.secondaryBtnTxt}>Add color formula</Text>
               </TouchableOpacity>
             )
           ) : null}

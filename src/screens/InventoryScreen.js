@@ -21,6 +21,11 @@ import { glassPurpleFabBar } from '../theme/glassUi';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 import SFIcon from '../components/SFIcon';
+import {
+  importCategoryForItem,
+  inventoryCategoryKey,
+  isColorItem,
+} from '../inventory/inventoryCategories';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 const ORDER = ['dye', 'oxidant', 'retail', 'consumable'];
@@ -39,7 +44,6 @@ const STOCK_CATEGORY_OPTIONS = [
   { key: 'toner', label: 'Toner' },
   { key: 'consumable', label: 'Consumables' },
 ];
-const COLOR_CATEGORY_KEYS = new Set(['dye', 'oxidant', 'mixtone', 'toner']);
 
 const INVENTORY_FILTERS = [
   {
@@ -65,43 +69,8 @@ const INVENTORY_FILTERS = [
   },
 ];
 
-function looksLikeColorProduct(item) {
-  const shade = String(item?.shade_code || '').trim().toLowerCase();
-  if (/\b\d{1,2}(?:[.,/-]\d{1,2}){0,2}\b/.test(shade)) return true;
-  if (/\b\d{1,2}[a-z]{1,3}\b/i.test(shade)) return true;
-  const text = [item?.name, item?.brand].filter(Boolean).join(' ').toLowerCase();
-  return (
-    /\b(koleston|illumina|color touch|majirel|inoa|dialight|igora|royal|wella|loreal|l'oreal|schwarzkopf|matrix|redken|shades eq|welloxon)\b/.test(
-      text,
-    )
-  );
-}
-
-function importCategoryForItem(item) {
-  if (item?.category === 'retail') return 'retail';
-  if (item?.category === 'oxidant') return 'oxidant';
-  if (item?.category === 'dye' && looksLikeColorProduct(item)) return 'dye';
-  return 'consumable';
-}
-
-function inventoryCategoryKey(raw) {
-  const c = String(raw || '').trim().toLowerCase();
-  if (c === 'color' || c === 'colors' || c === 'colour' || c === 'dyes') return 'dye';
-  if (c === 'developer' || c === 'oxidants') return 'oxidant';
-  if (c === 'mixtones') return 'mixtone';
-  if (c === 'toners') return 'toner';
-  if (c === 'consumables') return 'consumable';
-  return c || 'other';
-}
-
 function isRetailItem(item) {
   return inventoryCategoryKey(item?.category) === 'retail';
-}
-
-function isColorItem(item) {
-  const c = inventoryCategoryKey(item?.category);
-  if (c !== 'dye') return COLOR_CATEGORY_KEYS.has(c);
-  return looksLikeColorProduct(item);
 }
 
 function sectionTitle(cat) {

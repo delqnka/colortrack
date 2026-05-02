@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Pressable,
+  Animated,
   ActivityIndicator,
   KeyboardAvoidingView,
   Keyboard,
@@ -14,13 +16,16 @@ import {
   FlatList,
   Alert,
   Modal,
+  Image,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import SFIcon from '../components/SFIcon';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { apiGet, apiPost } from '../api/client';
-import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
+import { BRAND_PURPLE, BRAND_LILAC, glassPurpleIconBtn } from '../theme/glassUi';
 import {
   SCHEDULE_BANNER_GRADIENT,
   SCHEDULE_BANNER_GRADIENT_END,
@@ -30,13 +35,28 @@ import {
 } from '../theme/scheduleBannerGradient';
 import { FontFamily } from '../theme/fonts';
 import IsoDatePickField from '../components/IsoDatePickField';
+import { isColourFormulaPickItem, isDeveloperInventoryPickItem } from '../inventory/inventoryCategories';
+
+const FORMULA_ZONE_ROOTS_ART = require('../../assets/formula-zone-roots.png');
+const FORMULA_ZONE_LENGTHS_ART = require('../../assets/formula-zone-lengths.png');
+const FORMULA_ZONE_TONER_ART = require('../../assets/formula-zone-toner.png');
+const FORMULA_ZONE_OTHER_ART = require('../../assets/formula-zone-other.png');
 
 const COLOUR_SECTIONS = [
-  { key: 'roots', label: 'Roots', icon: 'color-fill-outline', iosIcon: 'r.circle.fill' },
-  { key: 'lengths', label: 'Lengths', icon: 'scissors-outline', iosIcon: 'l.circle.fill' },
-  { key: 'toner', label: 'Toner', icon: 'sparkles-outline', iosIcon: 't.circle.fill' },
-  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', iosIcon: 'o.circle.fill' },
+  { key: 'roots', label: 'Roots', image: FORMULA_ZONE_ROOTS_ART },
+  { key: 'lengths', label: 'Lengths', image: FORMULA_ZONE_LENGTHS_ART },
+  { key: 'toner', label: 'Toner', image: FORMULA_ZONE_TONER_ART },
+  { key: 'other', label: 'Other', image: FORMULA_ZONE_OTHER_ART },
 ];
+
+const ZONE_CARD_INNER_COLORS = [
+  'rgba(255,255,255,0.98)',
+  'rgba(255,255,255,0.94)',
+  'rgba(255,255,255,0.9)',
+];
+const ZONE_CARD_INNER_LOCATIONS = [0, 0.58, 1];
+const COUNT_CIRCLE_COLORS = ['rgba(255,255,255,0.98)', 'rgba(250,247,255,0.94)'];
+const COUNT_CIRCLE_LOCATIONS = [0, 1];
 
 const IOS_KB_ACCESSORY_ID = 'formula_input_accessory_done';
 const MAX_FORMULA_LINES = 24;
@@ -70,6 +90,58 @@ function parseRouteClientId(raw) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function FormulaColourCountBubble({ value, onPick }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const pressIn = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    Animated.spring(scale, {
+      toValue: 0.9,
+      friction: 6,
+      tension: 260,
+      useNativeDriver: true,
+    }).start();
+  }, [scale]);
+
+  const pressOut = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 5,
+      tension: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [scale]);
+
+  return (
+    <View style={styles.countCircleWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${value} colours`}
+        hitSlop={8}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        onPress={() => onPick(value)}
+        android_ripple={{ color: 'rgba(184,74,224,0.22)', borderless: true, radius: 24 }}
+        style={styles.countCirclePressable}
+      >
+        <Animated.View style={[styles.countCircleElevate, { transform: [{ scale }] }]}>
+          <LinearGradient
+            colors={COUNT_CIRCLE_COLORS}
+            locations={COUNT_CIRCLE_LOCATIONS}
+            start={{ x: 0.2, y: 0 }}
+            end={{ x: 0.8, y: 1 }}
+            style={styles.countCircle}
+          >
+            <Text style={styles.countCircleTxt}>{value}</Text>
+          </LinearGradient>
+        </Animated.View>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function FormulaBuilderScreen({ route, navigation }) {
   // ── client ──
   const [clientId, setClientId] = useState(() => parseRouteClientId(route.params?.clientId));
@@ -86,6 +158,14 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
   useEffect(() => () => {
     if (clientPickTimerRef.current) clearTimeout(clientPickTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    COLOUR_SECTIONS.forEach((section) => {
+      if (!section.image) return;
+      const source = Image.resolveAssetSource(section.image);
+      if (source?.uri) Image.prefetch(source.uri).catch(() => {});
+    });
   }, []);
 
   const runClientPickSearch = useCallback(async (q) => {
@@ -174,9 +254,14 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
   // ── wizard draft ──
   const [wizardStep, setWizardStep] = useState(1);
+  const wizardStepRef = useRef(1);
   const [draftSection, setDraftSection] = useState(null);
   const [draftColourRows, setDraftColourRows] = useState([]);
   const [draftDeveloper, setDraftDeveloper] = useState({ brand: '', amount: '', unit: 'g' });
+
+  useEffect(() => {
+    wizardStepRef.current = wizardStep;
+  }, [wizardStep]);
 
   // ── inventory picker ──
   const [invPickerOpen, setInvPickerOpen] = useState(false);
@@ -196,8 +281,11 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     apiGet('/api/inventory')
       .then((rows) => {
         const list = Array.isArray(rows) ? rows : [];
-        setInvAllItems(list);
-        setInvItems(list);
+        const predicate =
+          target === 'developer' ? isDeveloperInventoryPickItem : isColourFormulaPickItem;
+        const filtered = list.filter(predicate);
+        setInvAllItems(filtered);
+        setInvItems(filtered);
       })
       .catch(() => { setInvAllItems([]); setInvItems([]); })
       .finally(() => setInvLoading(false));
@@ -259,17 +347,42 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     setWizardStep(1);
   }, []);
 
-  const wizardBack = () => {
+  /** Same as header back — also used when swipe would leave the screen on steps 2–3 */
+  const wizardBack = useCallback(() => {
     Keyboard.dismiss();
-    if (wizardStep === 2) {
+    const step = wizardStepRef.current;
+    if (step === 2) {
       setDraftSection(null);
       setWizardStep(1);
-    } else if (wizardStep === 3) {
+    } else if (step === 3) {
       setDraftColourRows([]);
       setDraftDeveloper({ brand: '', amount: '', unit: 'g' });
       setWizardStep(2);
     }
-  };
+  }, []);
+
+  /** Native-stack: raw `beforeRemove` + preventDefault is unreliable; hook syncs with native navigator */
+  usePreventRemove(wizardStep >= 2 && wizardStep <= 3, wizardBack);
+
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: wizardStep <= 1 || wizardStep >= 4 });
+  }, [navigation, wizardStep]);
+
+  const wizardPanHandlers = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (evt, gesture) => {
+          const step = wizardStepRef.current;
+          if (step <= 1 || step >= 4) return false;
+          if (evt.nativeEvent.pageX > 36) return false;
+          return gesture.dx > 12 && Math.abs(gesture.dy) < 18;
+        },
+        onPanResponderRelease: (_evt, gesture) => {
+          if (gesture.dx > 52 && Math.abs(gesture.dy) < 44) wizardBack();
+        },
+      }).panHandlers,
+    [wizardBack],
+  );
 
   const onPickZone = (sectionKey) => {
     setDraftSection(sectionKey);
@@ -493,12 +606,31 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             activeOpacity={0.82}
           >
             <LinearGradient
-              colors={['#FFFFFF', '#FFE0EF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              colors={ZONE_CARD_INNER_COLORS}
+              locations={ZONE_CARD_INNER_LOCATIONS}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
               style={styles.zoneCardInner}
             >
-              <SFIcon name={s.icon} iosName={s.iosIcon} size={36} color={SCHEDULE_BANNER_LEAD_PINK} style={{ marginBottom: 10 }} />
+              <View style={styles.zoneGlassHighlight} pointerEvents="none" />
+              {s.image ? (
+                <View style={styles.zoneArtworkWrap}>
+                  <Image
+                    source={s.image}
+                    style={styles.zoneCardRootsImage}
+                    resizeMode="contain"
+                    accessibilityIgnoresInvertColors
+                  />
+                </View>
+              ) : (
+                <SFIcon
+                  name={s.icon}
+                  iosName={s.iosIcon}
+                  size={36}
+                  color={SCHEDULE_BANNER_LEAD_PINK}
+                  style={{ marginBottom: 10 }}
+                />
+              )}
               <Text style={styles.zoneCardLabel}>{s.label}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -507,7 +639,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
       {committedMixGroups.length > 0 ? (
         <View style={styles.mixesSummaryBox}>
-          <Text style={styles.mixesSummaryTitle}>Added this visit:</Text>
+          <Text style={styles.mixesSummaryTitle}>Added this visit</Text>
           {committedMixGroups.map((mgk, i) => {
             const colours = lines.filter(
               (l) => l.mixGroupKey === mgk && l.section !== 'developer',
@@ -516,7 +648,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               COLOUR_SECTIONS.find((s) => s.key === colours[0]?.section)?.label || colours[0]?.section;
             return (
               <Text key={mgk} style={styles.mixesSummaryItem}>
-                Mix {i + 1}: {sLabel} — {colours.length} colour{colours.length !== 1 ? 's' : ''}
+                Mix {i + 1}: {sLabel}, {colours.length} colour{colours.length !== 1 ? 's' : ''}
               </Text>
             );
           })}
@@ -536,22 +668,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       ) : null}
       <View style={styles.countGrid}>
         {[1, 2, 3, 4, 5, 6].map((n) => (
-          <TouchableOpacity
-            key={n}
-            style={styles.countCircleWrap}
-            onPress={() => onPickColourCount(n)}
-            activeOpacity={0.82}
-          >
-            <LinearGradient
-              colors={SCHEDULE_BANNER_GRADIENT}
-              locations={SCHEDULE_BANNER_LOCATIONS}
-              start={SCHEDULE_BANNER_GRADIENT_START}
-              end={SCHEDULE_BANNER_GRADIENT_END}
-              style={styles.countCircle}
-            >
-              <Text style={styles.countCircleTxt}>{n}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <FormulaColourCountBubble key={n} value={n} onPick={onPickColourCount} />
         ))}
       </View>
       <TouchableOpacity
@@ -581,7 +698,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         }}
         activeOpacity={0.82}
       >
-        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_PURPLE} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_LILAC} />
         <Text style={styles.moreColoursBtnTxt}>More colours</Text>
       </TouchableOpacity>
     </View>
@@ -617,7 +734,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             ) : null}
           </View>
         ) : (
-          <Text style={styles.stockPickerBtnTxt}>Choose from stock</Text>
+          <Text style={styles.stockPickerBtnTxt}>Choose from colors</Text>
         )}
         {row.stockLabel ? (
           <TouchableOpacity
@@ -721,7 +838,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               ) : null}
             </View>
           ) : (
-            <Text style={styles.stockPickerBtnTxt}>Choose from stock</Text>
+            <Text style={styles.stockPickerBtnTxt}>Choose developer</Text>
           )}
           {draftDeveloper.stockLabel ? (
             <TouchableOpacity
@@ -809,7 +926,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         return (
           <View key={mgk} style={styles.mixSummaryCard}>
             <Text style={styles.mixSummaryHeading}>
-              Mix {i + 1} — {sLabel}
+              Mix {i + 1}: {sLabel}
             </Text>
             {colours.map((cl, ci) => (
               <Text key={cl.key} style={styles.mixSummaryLine}>
@@ -910,7 +1027,9 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         <TouchableOpacity style={{ flex: 1 }} onPress={() => setInvPickerOpen(false)} />
         <View style={styles.modalSheet}>
           <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Choose from inventory</Text>
+            <Text style={styles.modalTitle}>
+              {invPickerTarget === 'developer' ? 'Choose developer' : 'Choose from colors'}
+            </Text>
             <TouchableOpacity onPress={() => setInvPickerOpen(false)}>
               <Text style={styles.modalClose}>Done</Text>
             </TouchableOpacity>
@@ -951,9 +1070,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             ListEmptyComponent={
               !invLoading ? (
                 <Text style={styles.invEmpty}>
-                  {invAllItems.length === 0
-                    ? 'No products in inventory yet.'
-                    : 'No products match your search.'}
+                  {invAllItems.length === 0 ? 'Nothing to pick.' : 'No matching items.'}
                 </Text>
               ) : null
             }
@@ -982,6 +1099,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       {renderInvModal()}
 
       <KeyboardAvoidingView
+        {...(wizardStep > 1 && wizardStep < 4 ? wizardPanHandlers : {})}
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
@@ -1081,11 +1199,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E5EA',
   },
   progressSegmentDone: {
-    backgroundColor: SCHEDULE_BANNER_LEAD_PINK,
-    opacity: 0.45,
+    backgroundColor: BRAND_LILAC,
+    opacity: 0.5,
   },
   progressSegmentActive: {
-    backgroundColor: SCHEDULE_BANNER_LEAD_PINK,
+    backgroundColor: BRAND_LILAC,
     opacity: 1,
   },
   progressLabel: {
@@ -1115,7 +1233,7 @@ const styles = StyleSheet.create({
   stepSubtitle: {
     fontFamily: FontFamily.medium,
     fontSize: 16,
-    color: SCHEDULE_BANNER_LEAD_PINK,
+    color: BRAND_LILAC,
     marginBottom: 20,
     letterSpacing: -0.2,
   },
@@ -1137,21 +1255,46 @@ const styles = StyleSheet.create({
   zoneCard: {
     width: '48%',
     marginBottom: 14,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: SCHEDULE_BANNER_LEAD_PINK,
-    overflow: 'hidden',
-    shadowColor: SCHEDULE_BANNER_LEAD_PINK,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 9,
   },
   zoneCardInner: {
-    minHeight: 130,
+    minHeight: 136,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.98)',
+    borderLeftColor: 'rgba(255,255,255,0.9)',
+    borderRightColor: 'rgba(184,74,224,0.26)',
+    borderBottomColor: 'rgba(184,74,224,0.34)',
+  },
+  zoneGlassHighlight: {
+    position: 'absolute',
+    top: 1,
+    left: 10,
+    right: 10,
+    height: 1,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  zoneArtworkWrap: {
+    width: 104,
+    height: 78,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoneCardRootsImage: {
+    width: 88,
+    height: 68,
   },
   zoneCardLabel: {
     fontFamily: FontFamily.semibold,
@@ -1160,51 +1303,80 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   mixesSummaryBox: {
-    marginTop: 8,
-    backgroundColor: '#F5EEFF',
-    borderRadius: 14,
-    padding: 14,
+    marginTop: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   mixesSummaryTitle: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 13,
-    color: BRAND_PURPLE,
-    marginBottom: 6,
-    letterSpacing: -0.1,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 10,
+    letterSpacing: -0.01,
+    textTransform: 'uppercase',
   },
   mixesSummaryItem: {
-    fontFamily: FontFamily.regular,
-    fontSize: 14,
+    fontFamily: FontFamily.semibold,
+    fontSize: 17,
     color: '#1C1C1E',
-    lineHeight: 21,
+    lineHeight: 24,
+    letterSpacing: -0.41,
+    marginBottom: 4,
   },
 
   // step 2 — count grid
   countGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginTop: 16,
-    marginBottom: 10,
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    marginTop: 14,
+    marginBottom: 12,
+    paddingHorizontal: 0,
   },
-  countCircleWrap: { margin: 8 },
-  countCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  countCircleWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: SCHEDULE_BANNER_LEAD_PINK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    minWidth: 0,
+    paddingHorizontal: 1,
+  },
+  countCirclePressable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countCircleElevate: {
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+    shadowColor: 'rgba(60,24,92,0.28)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 5,
   },
+  countCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(184,74,224,0.66)',
+    overflow: 'hidden',
+  },
   countCircleTxt: {
-    fontSize: 26,
+    fontSize: 15,
     fontFamily: FontFamily.bold,
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
+    color: BRAND_LILAC,
+    letterSpacing: -0.4,
   },
   moreColoursBtn: {
     flexDirection: 'row',
@@ -1212,16 +1384,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 8,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: BRAND_PURPLE,
-    backgroundColor: '#FAFAFA',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
   },
   moreColoursBtnTxt: {
     fontFamily: FontFamily.semibold,
     fontSize: 16,
-    color: BRAND_PURPLE,
+    color: BRAND_LILAC,
   },
 
   // step 3 — colour cards
@@ -1379,30 +1550,39 @@ const styles = StyleSheet.create({
 
   // step 4 — mix summary
   mixSummaryCard: {
-    backgroundColor: '#F5EEFF',
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     marginBottom: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   mixSummaryHeading: {
     fontFamily: FontFamily.semibold,
-    fontSize: 14,
-    color: BRAND_PURPLE,
-    marginBottom: 6,
-    letterSpacing: -0.15,
+    fontSize: 18,
+    color: '#1C1C1E',
+    marginBottom: 10,
+    letterSpacing: -0.43,
+    lineHeight: 24,
   },
   mixSummaryLine: {
     fontFamily: FontFamily.regular,
-    fontSize: 14,
+    fontSize: 15,
     color: '#1C1C1E',
-    lineHeight: 21,
+    lineHeight: 22,
+    letterSpacing: -0.23,
   },
   mixSummaryDevLine: {
     fontFamily: FontFamily.regular,
-    fontSize: 14,
-    color: '#0D74FF',
-    lineHeight: 21,
-    marginTop: 2,
+    fontSize: 15,
+    color: '#007AFF',
+    lineHeight: 22,
+    marginTop: 4,
+    letterSpacing: -0.23,
   },
   sectionDivider: {
     fontFamily: FontFamily.semibold,

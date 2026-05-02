@@ -1,6 +1,8 @@
 /** Brand purple + frosted-glass chips (header close, FABs, tab bar tint). */
 
 export const BRAND_PURPLE = '#5E35B1';
+/** Warmer lilac from schedule gradients — reads less blue than BRAND_PURPLE on pale cards */
+export const BRAND_LILAC = '#B84AE0';
 const P = { r: 94, g: 53, b: 177 };
 
 export const glassPurpleIconBtn = {

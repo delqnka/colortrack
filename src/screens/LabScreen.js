@@ -432,7 +432,7 @@ export default function LabScreen({ navigation }) {
           activeOpacity={0.85}
           accessibilityHint="Opens a screen to choose a client, then enter the visit formula."
           accessibilityLabel="Add formula visit"
-          onPress={() => navigation.navigate('FormulaBuilder')}
+          onPress={() => navigation.push('FormulaBuilder')}
         >
           <Ionicons name="add" size={26} color="#FFFFFF" />
         </TouchableOpacity>

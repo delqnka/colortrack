@@ -394,7 +394,7 @@ export default function CalendarScreen() {
               selected.getFullYear() === cursor.y &&
               selected.getMonth() === cursor.m &&
               selected.getDate() === dayNum;
-            const hasDot = dayNum && (marked.has(key) || deviceMark.has(key));
+            const hasAppointmentMark = dayNum && (marked.has(key) || deviceMark.has(key));
             return (
               <TouchableOpacity
                 key={key}
@@ -403,8 +403,15 @@ export default function CalendarScreen() {
                 disabled={!dayNum}
                 activeOpacity={0.85}
               >
-                {dayNum ? <Text style={[styles.cellTxt, isSel && styles.cellTxtSel]}>{dayNum}</Text> : null}
-                {hasDot ? <View style={[styles.dot, isSel && styles.dotSel]} /> : null}
+                {dayNum ? (
+                  hasAppointmentMark ? (
+                    <View style={[styles.dayOutline, isSel && styles.dayOutlineSel]}>
+                      <Text style={[styles.cellTxt, isSel && styles.cellTxtSel]}>{dayNum}</Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.cellTxt, isSel && styles.cellTxtSel]}>{dayNum}</Text>
+                  )
+                ) : null}
               </TouchableOpacity>
             );
           })}
@@ -473,7 +480,7 @@ export default function CalendarScreen() {
                         }
                         activeOpacity={0.85}
                       >
-                        <Text style={styles.cardActionTxt}>Log visit</Text>
+                        <Text style={styles.cardActionTxt}>Add color formula</Text>
                         <Ionicons name="flask-outline" size={18} color="#5E35B1" />
                       </TouchableOpacity>
                     )}
@@ -571,17 +578,23 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cellSel: { backgroundColor: BRAND_PURPLE },
+  /** Days with bookings: hollow circle framing the digit (no filled dot). */
+  dayOutline: {
+    minWidth: 36,
+    minHeight: 36,
+    paddingHorizontal: 2,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: BRAND_PURPLE,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayOutlineSel: {
+    borderColor: 'rgba(255,255,255,0.92)',
+  },
   cellTxt: { fontSize: 19, fontWeight: '500', color: '#1C1C1E' },
   cellTxtSel: { color: '#fff' },
-  dot: {
-    position: 'absolute',
-    bottom: 6,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#5E35B1',
-  },
-  dotSel: { backgroundColor: '#fff' },
   loader: { paddingTop: 24, alignItems: 'center' },
   list: { paddingHorizontal: 24, paddingBottom: 24 },
   card: {
@@ -589,11 +602,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 18,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 8,
   },
   cardTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
   client: { marginTop: 6, fontSize: 15, color: '#5E35B1', fontWeight: '400' },

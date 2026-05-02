@@ -35,6 +35,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const DashboardStack = createNativeStackNavigator();
 
 /** Side margin: ~6.5% + min 18px + safe area */
 const TAB_H = 64;
@@ -44,6 +45,19 @@ const ICON_SIZE_ACTIVE = 28;
 const ICON_SIZE_INACTIVE = 22;
 const TAB_SIDE_RATIO = 0.065;
 const TAB_SIDE_MIN = 18;
+
+function DashboardStackScreen() {
+  return (
+    <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
+      <DashboardStack.Screen name="DashboardHome" component={HomeScreen} />
+      <DashboardStack.Screen
+        name="DashboardCalendar"
+        component={CalendarScreen}
+        options={{ gestureEnabled: true, fullScreenGestureEnabled: true }}
+      />
+    </DashboardStack.Navigator>
+  );
+}
 
 function MainTabs() {
   const { width: windowWidth } = useWindowDimensions();
@@ -110,7 +124,7 @@ function MainTabs() {
         Dashboard: focused ? 'house.fill'        : 'house',
         Clients:   focused ? 'person.2.fill'     : 'person.2',
         Inventory: focused ? 'cabinet.fill'      : 'cabinet',
-        Calendar:  focused ? 'calendar.fill'     : 'calendar',
+        Calendar:  'calendar',
       };
       const ionicons = {
         Dashboard: focused ? 'home'              : 'home-outline',
@@ -165,7 +179,7 @@ function MainTabs() {
       )}
       screenOptions={screenOptions}
     >
-      <Tab.Screen name="Dashboard" component={HomeScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardStackScreen} />
       <Tab.Screen name="Clients" component={ClientsScreen} />
       <Tab.Screen name="Inventory" component={InventoryScreen} />
       <Tab.Screen name="Calendar" component={CalendarScreen} />
@@ -255,7 +269,11 @@ export default function App() {
                 <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
                 <Stack.Screen name="InventoryStack" component={InventoryScreen} />
                 <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
-                <Stack.Screen name="FormulaBuilder" component={FormulaBuilderScreen} />
+                <Stack.Screen
+                  name="FormulaBuilder"
+                  component={FormulaBuilderScreen}
+                  options={{ headerShown: false, headerBackButtonMenuEnabled: false }}
+                />
                 <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />
                 <Stack.Screen name="Finance" component={FinanceScreen} />
                 <Stack.Screen name="Lab" component={LabScreen} />

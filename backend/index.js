@@ -1541,19 +1541,20 @@ app.post('/api/visits', async (req, res, next) => {
       `;
 
       if (invId && invId > 0) {
-        const upd = await sql`
-          UPDATE inventory_items
-          SET quantity = quantity - ${amount}
-          WHERE id = ${invId} AND salon_id = ${sid} AND quantity >= ${amount}
-          RETURNING id
+        const itemExists = await sql`
+          SELECT id FROM inventory_items WHERE id = ${invId} AND salon_id = ${sid} LIMIT 1
         `;
-        if (!upd.length) {
-          return res.status(400).json({ error: 'bad_request' });
+        if (itemExists.length) {
+          await sql`
+            UPDATE inventory_items
+            SET quantity = quantity - ${amount}
+            WHERE id = ${invId} AND salon_id = ${sid}
+          `;
+          await sql`
+            INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
+            VALUES (${invId}, ${-amount}, ${'visit_formula'}, ${visitId})
+          `;
         }
-        await sql`
-          INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
-          VALUES (${invId}, ${-amount}, ${'visit_formula'}, ${visitId})
-        `;
       }
     }
 

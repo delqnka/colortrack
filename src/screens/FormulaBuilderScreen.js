@@ -119,6 +119,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   const [procedureName, setProcedureName] = useState('');
   const [notes, setNotes] = useState('');
   const [visitDate, setVisitDate] = useState(() => toYMD(new Date()));
+  const [amountPaid, setAmountPaid] = useState('');
   const [linkedAppointmentId, setLinkedAppointmentId] = useState(null);
   const prefilledApptRef = useRef(null);
   const prefilledDeviceCalRef = useRef(null);
@@ -377,6 +378,11 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         notes: notes.trim() || null,
         lines: validLines,
       };
+      const paidRaw = amountPaid.trim().replace(',', '.');
+      if (paidRaw) {
+        const u = Number(paidRaw);
+        if (Number.isFinite(u) && u >= 0) body.amount_usd = u;
+      }
       if (linkedAppointmentId) body.appointment_id = linkedAppointmentId;
       const evId = route.params?.deviceCalendarEventId;
       if (evId != null && String(evId).trim())
@@ -844,10 +850,21 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       <TextInput
         style={[styles.input, styles.inputMulti]}
         placeholder=""
-        placeholderTextColor="#8E8E93"
+        placeholderTextColor="#1C1C1E"
         value={notes}
         onChangeText={setNotes}
         multiline
+        inputAccessoryViewID={iosAccessoryId}
+      />
+
+      <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Amount paid (optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="0.00"
+        placeholderTextColor="#1C1C1E"
+        value={amountPaid}
+        onChangeText={setAmountPaid}
+        keyboardType="decimal-pad"
         inputAccessoryViewID={iosAccessoryId}
       />
 

@@ -138,24 +138,20 @@ export default function VisitDetailScreen({ route, navigation }) {
         <Text style={styles.procedure}>{visit.procedure_name}</Text>
         <Text style={styles.date}>{formatDisplayDate(visit.visit_date)}</Text>
 
+        {/* ── paid ── */}
+        {paid ? (
+          <Text style={styles.paidLine}>{paid} paid</Text>
+        ) : null}
+
         {/* ── meta row ── */}
         <View style={styles.metaRow}>
           {visit.source ? (
-            <View style={styles.metaPill}>
-              <Text style={styles.metaPillTxt}>
-                {VISIT_SOURCE_LABEL[visit.source] || visit.source}
-              </Text>
-            </View>
-          ) : null}
-          {paid ? (
-            <View style={[styles.metaPill, styles.metaPillGreen]}>
-              <Text style={[styles.metaPillTxt, styles.metaPillTxtGreen]}>{paid} paid</Text>
-            </View>
+            <Text style={styles.metaTag}>
+              {VISIT_SOURCE_LABEL[visit.source] || visit.source}
+            </Text>
           ) : null}
           {visit.chair_label ? (
-            <View style={styles.metaPill}>
-              <Text style={styles.metaPillTxt}>{visit.chair_label}</Text>
-            </View>
+            <Text style={styles.metaTag}>{visit.chair_label}</Text>
           ) : null}
         </View>
 
@@ -270,30 +266,34 @@ const styles = StyleSheet.create({
   date: {
     fontFamily: FontFamily.regular,
     fontSize: 15,
-    color: '#8E8E93',
-    marginBottom: 14,
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  paidLine: {
+    fontFamily: FontFamily.bold,
+    fontSize: 17,
+    color: '#2E7D32',
+    marginBottom: 10,
+    letterSpacing: -0.3,
   },
 
-  // meta pills
+  // meta row
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 8,
   },
-  metaPill: {
-    backgroundColor: '#E5E5EA',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  metaPillTxt: {
+  metaTag: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
-    color: '#3C3C43',
+    color: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: '#1C1C1E',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
-  metaPillGreen: { backgroundColor: '#E8F5E9' },
-  metaPillTxtGreen: { color: '#2E7D32' },
 
   // notes
   notesBox: {
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   mixIndex: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#1C1C1E',
   },
 
   // colour line
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 13,
     borderWidth: 1.5,
-    borderColor: '#C6C6C8',
+    borderColor: '#000000',
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   lineNumTxt: {
     fontFamily: FontFamily.semibold,
     fontSize: 12,
-    color: '#3C3C43',
+    color: '#000000',
   },
   lineBody: { flex: 1 },
   lineName: {
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   lineNameSub: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#1C1C1E',
     marginTop: 1,
   },
   lineQty: {
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   },
   lineNumBadgeDev: {
     backgroundColor: 'transparent',
-    borderColor: '#0D74FF55',
+    borderColor: '#0D74FF',
   },
   devName: {
     fontFamily: FontFamily.regular,

@@ -19,6 +19,7 @@ import { FontFamily } from '../theme/fonts';
 
 const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
+const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
 function messageForProfileDeleteFailure(err) {
   const m = String(err?.message || '').trim().toLowerCase();
@@ -137,7 +138,7 @@ export default function ProfileScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: IMAGE_MEDIA_TYPES,
       quality: 0.85,
     });
     if (result.canceled || !result.assets?.length) return;

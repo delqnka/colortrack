@@ -14,7 +14,6 @@ import {
   Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -71,26 +70,6 @@ function priceTextFromCents(cents) {
   return String(n / 100).replace(/\.00$/, '');
 }
 
-function centsFromPriceText(text) {
-  const raw = String(text || '').trim().replace(',', '.');
-  if (!raw) return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return Math.round(n * 100);
-}
-
-function previewRowsFromServices(rows) {
-  if (!Array.isArray(rows)) return [];
-  return rows
-    .map((row, index) => ({
-      key: `${Date.now()}-${index}`,
-      name: String(row?.name || '').trim(),
-      price: priceTextFromCents(row?.price_cents),
-      currency_code: String(row?.currency_code || 'BGN').trim().toUpperCase() || 'BGN',
-    }))
-    .filter((row) => row.name);
-}
-
 export default function AppointmentFormScreen({ route, navigation }) {
   const appt = route.params?.appointment;
   const appointmentId = appt?.id;
@@ -111,10 +90,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [dateTimePickerMode, setDateTimePickerMode] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [importBusy, setImportBusy] = useState(false);
-  const [servicePreviewOpen, setServicePreviewOpen] = useState(false);
-  const [servicePreviewRows, setServicePreviewRows] = useState([]);
-  const [savingServices, setSavingServices] = useState(false);
   const [linkedVisitId, setLinkedVisitId] = useState(() => (appt?.visit_id != null ? appt.visit_id : null));
 
   const loadClients = useCallback(async () => {
@@ -209,98 +184,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
     if (!name) return;
     setProcedureName(name);
     if (!title.trim()) setTitle(name);
-  };
-
-  const updatePreviewRow = (key, patch) => {
-    setServicePreviewRows((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
-  };
-
-  const removePreviewRow = (key) => {
-    setServicePreviewRows((rows) => rows.filter((row) => row.key !== key));
-  };
-
-  const addPreviewRow = () => {
-    setServicePreviewRows((rows) => [
-      ...rows,
-      { key: `${Date.now()}-${rows.length}`, name: '', price: '', currency_code: 'BGN' },
-    ]);
-  };
-
-  const importPriceList = async (source) => {
-    if (importBusy) return;
-    try {
-      if (source === 'camera') {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('', 'Camera access');
-          return;
-        }
-      } else {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('', 'Photo library access');
-          return;
-        }
-      }
-      const picker = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
-      const result = await picker({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        base64: true,
-        quality: 0.85,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      if (!asset.base64) {
-        Alert.alert('', 'Image');
-        return;
-      }
-      const contentType =
-        asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
-      setImportBusy(true);
-      const data = await apiPost(
-        '/api/services/import/ocr',
-        { image_base64: asset.base64, content_type: contentType },
-        { queueOffline: false },
-      );
-      const rows = previewRowsFromServices(data?.services);
-      if (!rows.length) {
-        Alert.alert('', 'No services found.');
-        return;
-      }
-      setServicePreviewRows(rows);
-      setServicePreviewOpen(true);
-    } catch (e) {
-      Alert.alert('', e.message || 'Import failed');
-    } finally {
-      setImportBusy(false);
-    }
-  };
-
-  const saveImportedServices = async () => {
-    const servicesToSave = servicePreviewRows
-      .map((row) => ({
-        name: row.name.trim(),
-        price_cents: centsFromPriceText(row.price),
-        currency_code: row.currency_code || 'BGN',
-      }))
-      .filter((row) => row.name);
-    if (!servicesToSave.length || savingServices) return;
-    setSavingServices(true);
-    try {
-      const saved = await apiPost(
-        '/api/services/bulk',
-        { services: servicesToSave },
-        { queueOffline: false },
-      );
-      setServices(Array.isArray(saved) ? saved : []);
-      await loadServices();
-      setServicePreviewOpen(false);
-      setServicePreviewRows([]);
-    } catch (e) {
-      Alert.alert('', e.message || 'Save failed');
-    } finally {
-      setSavingServices(false);
-    }
   };
 
   const applyPickerSelection = useCallback((mode, selectedDate) => {
@@ -419,27 +302,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
             onChangeText={setTitle}
           />
 
-          <View style={styles.labelRow}>
-            <Text style={styles.labelInRow}>Procedure</Text>
-            <View style={styles.importActions}>
-              <TouchableOpacity
-                style={styles.importBtn}
-                onPress={() => importPriceList('camera')}
-                disabled={importBusy}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.importBtnTxt}>Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.importBtn}
-                onPress={() => importPriceList('library')}
-                disabled={importBusy}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.importBtnTxt}>{importBusy ? 'Importing' : 'Import'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <Text style={styles.label}>Procedure</Text>
           <TextInput
             style={styles.input}
             placeholder=""
@@ -588,67 +451,6 @@ export default function AppointmentFormScreen({ route, navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={servicePreviewOpen} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalSheet, styles.servicePreviewSheet]}>
-            <View style={styles.modalHead}>
-              <Text style={styles.modalTitle}>Services</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setServicePreviewOpen(false);
-                  setServicePreviewRows([]);
-                }}
-              >
-                <Text style={styles.modalClose}>Done</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.previewContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {servicePreviewRows.map((row) => (
-                <View key={row.key} style={styles.previewRow}>
-                  <TextInput
-                    style={[styles.previewInput, styles.previewNameInput]}
-                    value={row.name}
-                    onChangeText={(text) => updatePreviewRow(row.key, { name: text })}
-                    placeholder=""
-                    placeholderTextColor="#1C1C1E"
-                  />
-                  <TextInput
-                    style={[styles.previewInput, styles.previewPriceInput]}
-                    value={row.price}
-                    onChangeText={(text) => updatePreviewRow(row.key, { price: text })}
-                    placeholder=""
-                    placeholderTextColor="#1C1C1E"
-                    keyboardType="decimal-pad"
-                  />
-                  <TouchableOpacity onPress={() => removePreviewRow(row.key)} hitSlop={8}>
-                    <Ionicons name="close-circle" size={22} color="#1C1C1E" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              <TouchableOpacity style={styles.addRowBtn} onPress={addPreviewRow} activeOpacity={0.85}>
-                <Text style={styles.addRowTxt}>Add row</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveBtn, savingServices && styles.saveDisabled]}
-                onPress={saveImportedServices}
-                disabled={savingServices}
-                activeOpacity={0.9}
-              >
-                {savingServices ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveTxt}>Save services</Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       <Modal visible={pickerOpen} animationType="slide" transparent>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
@@ -742,32 +544,6 @@ const styles = StyleSheet.create({
   htitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
   label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
-  labelInRow: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  importActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  importBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    ...reliefShadow,
-  },
-  importBtnTxt: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: '#5E35B1',
-  },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -864,9 +640,6 @@ const styles = StyleSheet.create({
     maxHeight: '72%',
     paddingBottom: 16,
   },
-  servicePreviewSheet: {
-    maxHeight: '86%',
-  },
   modalHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -888,42 +661,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
   },
   stockName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E', flex: 1 },
-  previewContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 24,
-  },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  previewInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#1C1C1E',
-    ...reliefShadow,
-  },
-  previewNameInput: {
-    flex: 1,
-  },
-  previewPriceInput: {
-    width: 86,
-  },
-  addRowBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  addRowTxt: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: '#5E35B1',
-  },
   iosPickerRoot: {
     flex: 1,
     justifyContent: 'flex-end',

@@ -44100,6 +44100,58 @@ app.get("/api/inventory", async (req, res, next) => {
 });
 var INVENTORY_UNITS = /* @__PURE__ */ new Set(["g", "ml", "pcs", "oz"]);
 var INVENTORY_CATEGORY_MAX = 80;
+var INVENTORY_CATEGORIES = /* @__PURE__ */ new Set(["dye", "oxidant", "retail", "consumable"]);
+function sanitizeInventoryText(raw, max = 200) {
+  if (typeof raw !== "string") return null;
+  const t = raw.trim().replace(/\s+/g, " ").slice(0, max);
+  return t || null;
+}
+function normalizeInventoryCategory(raw) {
+  const c = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (INVENTORY_CATEGORIES.has(c)) return c;
+  if (c === "developer" || c === "oxidants") return "oxidant";
+  if (c === "color" || c === "colour" || c === "dyes") return "dye";
+  if (c === "consumables") return "consumable";
+  return "dye";
+}
+function normalizeInventoryUnit(raw) {
+  const u = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (INVENTORY_UNITS.has(u)) return u;
+  if (u === "piece" || u === "pieces" || u === "pc") return "pcs";
+  if (u === "gram" || u === "grams") return "g";
+  return "pcs";
+}
+function quantityFromLoose(raw) {
+  if (raw === null || raw === void 0 || raw === "") return 0;
+  const n = Number(String(raw).replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function normalizeInventoryImportCandidate(row) {
+  if (!row || typeof row !== "object") return null;
+  const name = sanitizeInventoryText(row.name || row.product || row.item, 200);
+  if (!name) return null;
+  const quantity = quantityFromLoose(row.quantity ?? row.qty ?? row.count);
+  if (!quantity) return null;
+  const unit = normalizeInventoryUnit(row.unit);
+  const pricePerUnitCents = centsFromLoosePrice(
+    row.price_per_unit_cents != null ? Number(row.price_per_unit_cents) / 100 : row.price_per_unit ?? row.unit_price
+  );
+  const lineTotalCents = centsFromLoosePrice(
+    row.line_total_cents != null ? Number(row.line_total_cents) / 100 : row.line_total ?? row.total
+  );
+  const computedTotalCents = lineTotalCents == null && pricePerUnitCents != null ? Math.round(pricePerUnitCents * quantity) : lineTotalCents;
+  return {
+    name,
+    category: normalizeInventoryCategory(row.category),
+    brand: sanitizeInventoryText(row.brand, 200),
+    shade_code: sanitizeInventoryText(row.shade_code || row.shade || row.code || row.volume, 80),
+    unit,
+    quantity,
+    price_per_unit_cents: pricePerUnitCents == null ? null : Math.min(pricePerUnitCents, 1e9),
+    line_total_cents: computedTotalCents == null ? null : Math.min(computedTotalCents, 1e9),
+    supplier_hint: sanitizeInventoryText(row.supplier || row.supplier_hint, 200)
+  };
+}
 app.post("/api/inventory", async (req, res, next) => {
   try {
     const b = req.body || {};
@@ -44297,6 +44349,159 @@ app.patch("/api/inventory/:id", async (req, res, next) => {
     next(e);
   }
 });
+async function applyInventoryInvoiceItem(sql, salonId, item) {
+  const match = await sql`
+    SELECT id, quantity, price_per_unit_cents
+    FROM inventory_items
+    WHERE salon_id = ${salonId}
+      AND lower(name) = ${item.name.toLowerCase()}
+      AND COALESCE(lower(brand), '') = ${String(item.brand || "").toLowerCase()}
+      AND COALESCE(lower(shade_code), '') = ${String(item.shade_code || "").toLowerCase()}
+      AND unit = ${item.unit}
+    LIMIT 1
+  `;
+  if (match.length) {
+    const nextPrice = item.price_per_unit_cents != null ? item.price_per_unit_cents : match[0].price_per_unit_cents;
+    const rows2 = await sql`
+      UPDATE inventory_items
+      SET
+        quantity = quantity + ${item.quantity},
+        price_per_unit_cents = ${nextPrice},
+        supplier_hint = COALESCE(${item.supplier_hint}, supplier_hint)
+      WHERE id = ${match[0].id} AND salon_id = ${salonId}
+      RETURNING id, name, category, brand, shade_code, unit, quantity, low_stock_threshold,
+        price_per_unit_cents, supplier_hint, (quantity <= low_stock_threshold) AS is_low_stock
+    `;
+    await sql`
+      INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
+      VALUES (${match[0].id}, ${item.quantity}, ${"invoice"}, NULL)
+    `;
+    return { ...rows2[0], import_action: "updated" };
+  }
+  const rows = await sql`
+    INSERT INTO inventory_items (
+      salon_id, name, category, brand, shade_code, unit, quantity, low_stock_threshold,
+      price_per_unit_cents, supplier_hint
+    )
+    VALUES (
+      ${salonId}, ${item.name}, ${item.category}, ${item.brand}, ${item.shade_code}, ${item.unit},
+      ${item.quantity}, ${0}, ${item.price_per_unit_cents}, ${item.supplier_hint}
+    )
+    RETURNING id, name, category, brand, shade_code, unit, quantity, low_stock_threshold,
+      price_per_unit_cents, supplier_hint, (quantity <= low_stock_threshold) AS is_low_stock
+  `;
+  await sql`
+    INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
+    VALUES (${rows[0].id}, ${item.quantity}, ${"invoice"}, NULL)
+  `;
+  return { ...rows[0], import_action: "created" };
+}
+app.post("/api/inventory/import/bulk", async (req, res, next) => {
+  try {
+    const input = Array.isArray((req.body || {}).items) ? req.body.items : [];
+    const clean = [];
+    for (const row of input) {
+      const item = normalizeInventoryImportCandidate(row);
+      if (!item) continue;
+      clean.push(item);
+      if (clean.length >= 120) break;
+    }
+    if (!clean.length) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const sql = getSql();
+    const saved = [];
+    for (const item of clean) {
+      saved.push(await applyInventoryInvoiceItem(sql, req.auth.salonId, item));
+    }
+    res.status(201).json(saved);
+  } catch (e) {
+    next(e);
+  }
+});
+app.post("/api/inventory/import/invoice", async (req, res, next) => {
+  try {
+    const openRouterKey = String(process.env.OPENROUTER_API_KEY || "").trim();
+    const openAiKey = String(process.env.OPENAI_API_KEY || "").trim();
+    const usingOpenRouter = Boolean(openRouterKey);
+    const apiKey = openRouterKey || openAiKey;
+    if (!apiKey) {
+      return res.status(503).json({ error: "missing_ocr_key" });
+    }
+    const b = req.body || {};
+    const imageBase64 = typeof b.image_base64 === "string" ? b.image_base64.trim() : "";
+    const contentType = typeof b.content_type === "string" ? b.content_type.trim().toLowerCase() : "image/jpeg";
+    if (!imageBase64 || !/^image\/(jpeg|jpg|png|webp)$/i.test(contentType)) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const model = usingOpenRouter ? String(process.env.OPENROUTER_OCR_MODEL || "google/gemini-2.0-flash-001").trim() : String(process.env.OPENAI_OCR_MODEL || "gpt-4o-mini").trim();
+    const prompt = [
+      "Extract purchased salon inventory items from this invoice image.",
+      'Return only JSON with an "items" array.',
+      'Each item: {"name": string, "category": "dye|oxidant|retail|consumable", "brand": string|null, "shade_code": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
+      "For hair color like Wella Koleston 9.12 60 ml x 15 pieces, keep the package size in the name or shade_code, set quantity 15 and unit pcs.",
+      "If the invoice shows 15 pcs at 10 each total 150, return quantity 15, price_per_unit 10, line_total 150.",
+      "Skip taxes, discounts, subtotals, shipping, addresses, and non-product rows."
+    ].join(" ");
+    const body = {
+      model,
+      temperature: 0,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            {
+              type: "image_url",
+              image_url: { url: `data:${contentType};base64,${imageBase64}` }
+            }
+          ]
+        }
+      ]
+    };
+    if (!usingOpenRouter) {
+      body.response_format = { type: "json_object" };
+    }
+    const ocrRes = await fetch(
+      usingOpenRouter ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          ...usingOpenRouter ? {
+            "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://colortrack.vercel.app",
+            "X-Title": "ColorTrack"
+          } : {}
+        },
+        body: JSON.stringify(body)
+      }
+    );
+    const text = await ocrRes.text();
+    if (!ocrRes.ok) {
+      return res.status(502).json({ error: "ocr_failed" });
+    }
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return res.status(502).json({ error: "ocr_failed" });
+    }
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = parseJsonObjectFromText(content);
+    const rows = Array.isArray(parsed?.items) ? parsed.items : [];
+    const items = [];
+    for (const row of rows) {
+      const item = normalizeInventoryImportCandidate(row);
+      if (!item) continue;
+      items.push(item);
+      if (items.length >= 120) break;
+    }
+    res.json({ items });
+  } catch (e) {
+    next(e);
+  }
+});
 function sanitizeServiceName(raw) {
   if (typeof raw !== "string") return "";
   return raw.trim().replace(/\s+/g, " ").slice(0, 160);
@@ -44416,6 +44621,46 @@ app.post("/api/services/bulk", async (req, res, next) => {
       saved.push(await upsertSalonService(sql, req.auth.salonId, service));
     }
     res.status(201).json(saved);
+  } catch (e) {
+    next(e);
+  }
+});
+app.patch("/api/services/:id", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const service = normalizeServiceCandidate(req.body || {});
+    if (!service) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    const sql = getSql();
+    const dup = await sql`
+      SELECT id
+      FROM salon_services
+      WHERE salon_id = ${req.auth.salonId}
+        AND lower(name) = ${service.name.toLowerCase()}
+        AND id <> ${id}
+      LIMIT 1
+    `;
+    if (dup.length) {
+      return res.status(409).json({ error: "conflict" });
+    }
+    const rows = await sql`
+      UPDATE salon_services
+      SET
+        name = ${service.name},
+        price_cents = ${service.price_cents},
+        currency_code = ${service.currency_code},
+        updated_at = NOW()
+      WHERE id = ${id} AND salon_id = ${req.auth.salonId}
+      RETURNING id, name, price_cents, currency_code, is_active
+    `;
+    if (!rows.length) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    res.json(rows[0]);
   } catch (e) {
     next(e);
   }

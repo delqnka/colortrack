@@ -20,6 +20,8 @@ import { formatDisplayDate } from '../lib/formatDate';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 
+const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
+
 const SECTION_LABEL = {
   roots: 'Roots',
   lengths: 'Lengths',
@@ -92,7 +94,7 @@ export default function ClientDetailScreen({route, navigation}) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: IMAGE_MEDIA_TYPES,
       quality: 0.85,
     });
     if (result.canceled || !result.assets?.length) return;

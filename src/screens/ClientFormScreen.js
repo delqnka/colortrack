@@ -29,6 +29,8 @@ import {
 import IsoDatePickField from '../components/IsoDatePickField';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 
+const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
+
 function patchDateToInput(v) {
   if (v == null || v === '') return '';
   const s = typeof v === 'string' ? v : String(v);
@@ -185,7 +187,7 @@ export default function ClientFormScreen({ route, navigation }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: IMAGE_MEDIA_TYPES,
       quality: 0.85,
     });
     if (result.canceled || !result.assets?.length) return;

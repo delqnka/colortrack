@@ -176,11 +176,12 @@ function planGridRowHeight(windowWidth) {
   const inner = Math.max(0, gridRowW - PLAN_GRID_COL_GAP);
   const leftColW = inner * (27 / 48);
   const h = Math.round(leftColW * 1.42);
-  return Math.min(Math.max(h, 278), 336);
+  return Math.min(Math.max(h - 24, 254), 312);
 }
 
 const STOCK_SPLIT_LOW_FLEX = 7;
 const STOCK_SPLIT_COMPACT_FLEX = 3;
+const STOCK_SPLIT_SERVICES_FLEX = 3;
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -384,7 +385,7 @@ export default function HomeScreen() {
     if (viewH > 40 && abovePlanH > 24) {
       const fill = Math.round(viewH - abovePlanH - scrollReserveBottom);
       if (fill >= 248) {
-        return Math.min(Math.max(fill, fallback - 28), 398);
+        return Math.min(Math.max(fill - 24, fallback - 36), 360);
       }
     }
     return fallback;
@@ -659,6 +660,29 @@ export default function HomeScreen() {
                   onPress={() => navigation.navigate('Inventory')}
                 >
                   {lowStockCompactInner}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.stockCompactSecondary,
+                    styles.servicesCompactCard,
+                    styles.stockCardSized,
+                    styles.stockCompactInStack,
+                    { flex: STOCK_SPLIT_SERVICES_FLEX },
+                  ]}
+                  activeOpacity={0.92}
+                  onPress={() => navigation.navigate('Services')}
+                >
+                  <View style={styles.servicesCompactInner}>
+                    <Text style={styles.servicesCompactBadge}>Services</Text>
+                    <Text style={styles.servicesCompactTitle} numberOfLines={2}>
+                      Price list
+                    </Text>
+                    <View style={styles.servicesCompactFooter}>
+                      <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleServices]}>
+                        <Ionicons name="cut-outline" size={13} color="#fff" />
+                      </View>
+                    </View>
+                  </View>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1011,6 +1035,44 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   iconCircleLowStock: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  servicesCompactCard: {
+    backgroundColor: '#F97316',
+    borderWidth: 0,
+    shadowColor: '#B7791F',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  servicesCompactInner: {
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
+    justifyContent: 'flex-start',
+    paddingTop: 2,
+  },
+  servicesCompactBadge: {
+    fontSize: 9,
+    fontFamily: FontFamily.semibold,
+    color: '#FFFFFF',
+    alignSelf: 'flex-start',
+    marginBottom: 5,
+  },
+  servicesCompactTitle: {
+    fontSize: 12,
+    fontFamily: FontFamily.semibold,
+    color: '#FFFFFF',
+    lineHeight: 16,
+  },
+  servicesCompactFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  iconCircleServices: {
     backgroundColor: 'rgba(255,255,255,0.28)',
   },
   stockCompactStack: {

@@ -44631,10 +44631,24 @@ app.get("/api/visits/:id", async (req, res, next) => {
     }
     const v = rows[0];
     const formula_lines = await sql`
-      SELECT id, section, brand, shade_code, amount, inventory_item_id
-      FROM formula_lines
-      WHERE visit_id = ${id}
-      ORDER BY id
+      SELECT
+        fl.id,
+        fl.section,
+        fl.brand,
+        CASE
+          WHEN fl.shade_code IS NOT NULL
+            AND fl.shade_code NOT IN ('', '-', 'g', 'oz', 'ml')
+          THEN fl.shade_code
+          WHEN ii.shade_code IS NOT NULL AND TRIM(ii.shade_code) <> ''
+          THEN ii.shade_code
+          ELSE fl.shade_code
+        END AS shade_code,
+        fl.amount,
+        fl.inventory_item_id
+      FROM formula_lines fl
+      LEFT JOIN inventory_items ii ON ii.id = fl.inventory_item_id
+      WHERE fl.visit_id = ${id}
+      ORDER BY fl.id
     `;
     res.json({
       id: v.id,

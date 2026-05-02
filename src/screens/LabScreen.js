@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import SFIcon from '../components/SFIcon';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPost } from '../api/client';
 import { BRAND_PURPLE, glassPurpleFabBar } from '../theme/glassUi';
@@ -379,7 +380,7 @@ export default function LabScreen({ navigation }) {
                 {item.client_name}
               </Text>
               {item.has_inventory_link ? (
-                <Ionicons name="cube-outline" size={18} color={BRAND_PURPLE} />
+                <SFIcon name="filing-outline" iosName="cabinet.fill" size={18} color={BRAND_PURPLE} />
               ) : null}
             </View>
             <Text style={styles.visitProc} numberOfLines={2}>

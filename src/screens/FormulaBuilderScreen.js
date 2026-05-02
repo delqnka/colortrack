@@ -40,6 +40,92 @@ const COLOUR_SECTIONS = [
   { key: 'other', label: 'Other' },
 ];
 
+const COLOUR_ZONE_KEYS = ['roots', 'lengths', 'toner', 'other'];
+
+const ZONE_FIELDS = ['brand', 'shade_code', 'amount', 'inventory_item_id', 'stockLabel'];
+
+function emptyColourZone() {
+  return {
+    brand: '',
+    shade_code: '',
+    amount: '',
+    inventory_item_id: null,
+    stockLabel: null,
+  };
+}
+
+function emptyColourByZone() {
+  return {
+    roots: emptyColourZone(),
+    lengths: emptyColourZone(),
+    toner: emptyColourZone(),
+    other: emptyColourZone(),
+  };
+}
+
+function newMixGroupId() {
+  return `mg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function mixGroupKeyOf(line) {
+  if (!line || line.section === 'developer') return null;
+  return line.mixGroupKey || `mg_${line.key}`;
+}
+
+function colourLineCountForMix(lines, mixKey) {
+  if (!mixKey) return 0;
+  return lines.filter((l) => l.section !== 'developer' && mixGroupKeyOf(l) === mixKey).length;
+}
+
+/** Legacy colour rows stored product on the line root; fold into zone buckets. */
+function migrateColourLine(line) {
+  if (line.section === 'developer') return line;
+  if (line.colourByZone) {
+    return line.mixGroupKey ? line : { ...line, mixGroupKey: line.mixGroupKey ?? `mg_${line.key}` };
+  }
+  const sec = COLOUR_ZONE_KEYS.includes(line.section) ? line.section : 'roots';
+  const colourByZone = emptyColourByZone();
+  colourByZone[sec] = {
+    brand: line.brand ?? '',
+    shade_code: line.shade_code ?? '',
+    amount: line.amount ?? '',
+    inventory_item_id: line.inventory_item_id ?? null,
+    stockLabel: line.stockLabel ?? null,
+  };
+  return {
+    key: line.key,
+    mixGroupKey: line.mixGroupKey ?? `mg_${line.key}`,
+    section: sec,
+    colourByZone,
+  };
+}
+
+function getActiveZone(line) {
+  if (!line) return emptyColourZone();
+  if (line.section === 'developer') {
+    return {
+      brand: line.brand ?? '',
+      shade_code: line.shade_code ?? '',
+      amount: line.amount ?? '',
+      inventory_item_id: line.inventory_item_id ?? null,
+      stockLabel: line.stockLabel ?? null,
+    };
+  }
+  const migrated = line.colourByZone ? line : migrateColourLine(line);
+  if (line.section == null || !COLOUR_ZONE_KEYS.includes(line.section)) {
+    return emptyColourZone();
+  }
+  return migrated.colourByZone[line.section] || emptyColourZone();
+}
+
+function isZoneEmpty(z) {
+  return (
+    !String(z.brand || '').trim() &&
+    !z.inventory_item_id &&
+    !String(z.amount ?? '').replace(',', '.').trim()
+  );
+}
+
 /** Prefer when picking inventory for a Developer line (no search query). */
 function inventoryLooksLikeDeveloper(item) {
   const t = `${item.name || ''} ${item.brand || ''} ${item.category || ''}`.toLowerCase();
@@ -49,30 +135,39 @@ function inventoryLooksLikeDeveloper(item) {
 /** iOS: decimal pad / number pad have no "return" — toolbar to dismiss keyboard */
 const IOS_KB_ACCESSORY_ID = 'formula_input_accessory_done';
 
-function newLine() {
+function newLine(opts = {}) {
+  const mixGroupKey = opts.mixGroupKey ?? newMixGroupId();
+  const section = opts.section !== undefined ? opts.section : null;
   return {
     key: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-    section: 'roots',
-    brand: '',
-    shade_code: '',
-    amount: '',
-    inventory_item_id: null,
-    stockLabel: null,
+    mixGroupKey,
+    section,
+    colourByZone: emptyColourByZone(),
   };
 }
 
 function newDeveloperLine() {
-  const line = newLine();
-  line.section = 'developer';
-  return line;
+  return {
+    key: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    section: 'developer',
+    colourByZone: null,
+    ...emptyColourZone(),
+  };
 }
 
 function isLineEmpty(line) {
-  return (
-    !String(line.brand || '').trim() &&
-    !line.inventory_item_id &&
-    !String(line.amount || '').replace(',', '.').trim()
-  );
+  if (line.section === 'developer') {
+    return (
+      !String(line.brand || '').trim() &&
+      !line.inventory_item_id &&
+      !String(line.amount || '').replace(',', '.').trim()
+    );
+  }
+  if (line.section == null || !COLOUR_ZONE_KEYS.includes(line.section)) {
+    return true;
+  }
+  const zones = line.colourByZone || migrateColourLine(line).colourByZone;
+  return isZoneEmpty(zones[line.section]);
 }
 
 function englishOrdinalSuffix(n) {
@@ -92,8 +187,25 @@ function lineTabLabel(lines, idx) {
     const oxNum = lines.slice(0, idx + 1).filter((l) => l.section === 'developer').length;
     return oxNum <= 1 ? 'Developer' : `Developer ${oxNum}`;
   }
-  const colourNum = lines.slice(0, idx).filter((l) => l.section !== 'developer').length + 1;
-  return `${englishOrdinalSuffix(colourNum)} color`;
+  const mgk = mixGroupKeyOf(line);
+  const orderedMixKeys = [];
+  for (const l of lines) {
+    if (l.section === 'developer') continue;
+    const k = mixGroupKeyOf(l);
+    if (!orderedMixKeys.includes(k)) orderedMixKeys.push(k);
+  }
+  const mixIndex = Math.max(1, orderedMixKeys.indexOf(mgk) + 1);
+  const tubeIndex =
+    lines.slice(0, idx).filter((l) => l.section !== 'developer' && mixGroupKeyOf(l) === mgk).length + 1;
+  const mixLabel = `${englishOrdinalSuffix(mixIndex)} mix`;
+  if (tubeIndex <= 1) return mixLabel;
+  return `${mixLabel} · ${tubeIndex}`;
+}
+
+function colourZoneTitle(sectionKey) {
+  if (sectionKey === 'developer') return '';
+  const s = COLOUR_SECTIONS.find((x) => x.key === sectionKey);
+  return s ? s.label : '';
 }
 
 function toYMD(d) {
@@ -244,6 +356,24 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   }, [lines.length]);
 
   useEffect(() => {
+    setLines((prev) => {
+      let changed = false;
+      const next = prev.map((l) => {
+        if (l.section !== 'developer' && !l.colourByZone) {
+          changed = true;
+          return migrateColourLine(l);
+        }
+        if (l.section !== 'developer' && l.colourByZone && !l.mixGroupKey) {
+          changed = true;
+          return { ...l, mixGroupKey: `mg_${l.key}` };
+        }
+        return l;
+      });
+      return changed ? next : prev;
+    });
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -351,22 +481,83 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   const MAX_FORMULA_LINES = 16;
 
   const updateLine = (key, patch) => {
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.key !== key) return l;
+        let base = l.section !== 'developer' && !l.colourByZone ? migrateColourLine(l) : l;
+        if (base.section === 'developer') {
+          return { ...base, ...patch };
+        }
+        const zonePatch = {};
+        for (const f of ZONE_FIELDS) {
+          if (f in patch) zonePatch[f] = patch[f];
+        }
+        const nextSection = patch.section !== undefined ? patch.section : base.section;
+        if (Object.keys(zonePatch).length === 0) {
+          if (patch.section !== undefined) return { ...base, section: nextSection };
+          return { ...base, ...patch };
+        }
+        const targetSec = patch.section !== undefined ? patch.section : base.section;
+        if (!targetSec || !COLOUR_ZONE_KEYS.includes(targetSec)) {
+          if (Object.keys(zonePatch).length === 0) {
+            if (patch.section !== undefined) return { ...base, section: nextSection };
+            return { ...base, ...patch };
+          }
+          return base;
+        }
+        const nextZones = {
+          ...base.colourByZone,
+          [targetSec]: {
+            ...(base.colourByZone[targetSec] || emptyColourZone()),
+            ...zonePatch,
+          },
+        };
+        return { ...base, section: nextSection, colourByZone: nextZones };
+      }),
+    );
   };
 
   const selectColourSection = (lineKey, sectionKey) => {
     Keyboard.dismiss();
-    updateLine(lineKey, { section: sectionKey });
+    setLines((prev) => {
+      const target = prev.find((l) => l.key === lineKey);
+      if (!target || target.section === 'developer') return prev;
+      const mgk = mixGroupKeyOf(target);
+      return prev.map((l) => {
+        if (l.section === 'developer') return l;
+        if (mixGroupKeyOf(l) !== mgk) return l;
+        const base = l.section !== 'developer' && !l.colourByZone ? migrateColourLine(l) : l;
+        const prevSec = base.section;
+        let nextZones = base.colourByZone ? { ...base.colourByZone } : emptyColourByZone();
+        if (prevSec != null && COLOUR_ZONE_KEYS.includes(prevSec) && prevSec !== sectionKey) {
+          nextZones = emptyColourByZone();
+        }
+        return { ...base, section: sectionKey, colourByZone: nextZones };
+      });
+    });
     const idx = COLOUR_SECTIONS.findIndex((s) => s.key === sectionKey);
     requestAnimationFrame(() => {
       const ref = sectionChipScrollRefs.current[lineKey];
       if (ref && idx >= 0) {
-        ref.scrollTo({ x: Math.max(0, idx * 118 - 20), animated: true });
+        ref.scrollTo({ x: Math.max(0, idx * 92 - 16), animated: true });
       }
     });
   };
 
-  const appendColourLine = () => {
+  const resetColourLineZonePick = (lineKey) => {
+    Keyboard.dismiss();
+    setLines((prev) => {
+      const target = prev.find((l) => l.key === lineKey);
+      if (!target || target.section === 'developer') return prev;
+      if (colourLineCountForMix(prev, mixGroupKeyOf(target)) !== 1) return prev;
+      return prev.map((l) => {
+        if (l.key !== lineKey || l.section === 'developer') return l;
+        return { ...l, section: null, colourByZone: emptyColourByZone() };
+      });
+    });
+  };
+
+  const appendNewMixLine = () => {
     Keyboard.dismiss();
     if (lines.length >= MAX_FORMULA_LINES) {
       Alert.alert('', `At most ${MAX_FORMULA_LINES} lines.`);
@@ -374,6 +565,27 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     }
     setLines((prev) => {
       const next = [...prev, newLine()];
+      setActiveLineIndex(next.length - 1);
+      return next;
+    });
+  };
+
+  const appendColourToActiveMix = () => {
+    Keyboard.dismiss();
+    const active = lines[activeLineIndex];
+    if (!active || active.section === 'developer') return;
+    if (active.section == null || !COLOUR_ZONE_KEYS.includes(active.section)) {
+      Alert.alert('', 'Choose Roots, Lengths, or another area first.');
+      return;
+    }
+    if (lines.length >= MAX_FORMULA_LINES) {
+      Alert.alert('', `At most ${MAX_FORMULA_LINES} lines.`);
+      return;
+    }
+    const mgk = mixGroupKeyOf(active);
+    const nl = newLine({ mixGroupKey: mgk, section: active.section });
+    setLines((prev) => {
+      const next = [...prev, nl];
       setActiveLineIndex(next.length - 1);
       return next;
     });
@@ -394,24 +606,63 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
   const applyColourCountQuickStart = (n) => {
     if (n < 1 || n > 8) return;
-    const go = () => {
-      Keyboard.dismiss();
-      setLines(Array.from({ length: n }, () => newLine()));
-      setActiveLineIndex(0);
-    };
-    const allEmpty = lines.every(isLineEmpty);
-    if (allEmpty) {
-      go();
-      return;
-    }
-    Alert.alert(
-      'Replace lines?',
-      `Replace with ${n} empty colour rows?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Replace', style: 'destructive', onPress: go },
-      ],
-    );
+    Keyboard.dismiss();
+    setLines((prev) => {
+      const idx = Math.min(activeLineIndex, Math.max(0, prev.length - 1));
+      const active = prev[idx];
+      const devLines = prev.filter((l) => l.section === 'developer');
+      const colourLines = prev.filter((l) => l.section !== 'developer');
+
+      let targetMgk = null;
+      if (active?.section !== 'developer') {
+        targetMgk = mixGroupKeyOf(active);
+      } else if (colourLines.length) {
+        targetMgk = mixGroupKeyOf(colourLines[0]);
+      }
+
+      if (!targetMgk) {
+        if (prev.length + n > MAX_FORMULA_LINES) {
+          Alert.alert('', `At most ${MAX_FORMULA_LINES} lines.`);
+          return prev;
+        }
+        const sharedMgk = newMixGroupId();
+        const newCol = Array.from({ length: n }, () => newLine({ mixGroupKey: sharedMgk, section: null }));
+        return [...newCol, ...devLines];
+      }
+
+      const groupIndices = prev
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => l.section !== 'developer' && mixGroupKeyOf(l) === targetMgk)
+        .map((x) => x.i);
+      const k = groupIndices.length;
+      if (k === 0) return prev;
+
+      const templateSection = prev.find(
+        (l) =>
+          mixGroupKeyOf(l) === targetMgk &&
+          l.section != null &&
+          COLOUR_ZONE_KEYS.includes(l.section),
+      )?.section ?? null;
+
+      if (n === k) return prev;
+
+      if (n > k) {
+        const toAdd = n - k;
+        if (prev.length + toAdd > MAX_FORMULA_LINES) {
+          Alert.alert('', `At most ${MAX_FORMULA_LINES} lines.`);
+          return prev;
+        }
+        const lastIdx = groupIndices[groupIndices.length - 1];
+        const additions = Array.from({ length: toAdd }, () =>
+          newLine({ mixGroupKey: targetMgk, section: templateSection }),
+        );
+        return [...prev.slice(0, lastIdx + 1), ...additions, ...prev.slice(lastIdx + 1)];
+      }
+
+      const toRemove = k - n;
+      const removeSet = new Set(groupIndices.slice(-toRemove));
+      return prev.filter((_, i) => !removeSet.has(i));
+    });
   };
 
   const removeLineByKey = (key) => {
@@ -450,7 +701,28 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
   const convertDeveloperToColourLine = (lineKey) => {
     Keyboard.dismiss();
-    updateLine(lineKey, { section: 'roots' });
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.key !== lineKey || l.section !== 'developer') return l;
+        return {
+          key: l.key,
+          mixGroupKey: l.mixGroupKey ?? newMixGroupId(),
+          section: 'roots',
+          colourByZone: {
+            roots: {
+              brand: l.brand || '',
+              shade_code: l.shade_code || '',
+              amount: l.amount ?? '',
+              inventory_item_id: l.inventory_item_id,
+              stockLabel: l.stockLabel,
+            },
+            lengths: emptyColourZone(),
+            toner: emptyColourZone(),
+            other: emptyColourZone(),
+          },
+        };
+      }),
+    );
   };
 
   const pickStock = (item) => {
@@ -492,15 +764,39 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       Alert.alert('Procedure', 'Enter a procedure for this visit.');
       return;
     }
-    const validLines = lines
-      .map((l) => ({
-        section: l.section,
-        brand: l.brand.trim(),
-        shade_code: (l.shade_code || '').trim() || '-',
-        amount: Number(String(l.amount).replace(',', '.')),
-        inventory_item_id: l.inventory_item_id,
-      }))
-      .filter((l) => l.brand && Number.isFinite(l.amount) && l.amount > 0);
+    const validLines = [];
+    for (const l of lines) {
+      if (l.section === 'developer') {
+        const brand = String(l.brand || '').trim();
+        const amount = Number(String(l.amount || '').replace(',', '.'));
+        const shade_code = String(l.shade_code || '').trim() || '-';
+        if (brand && Number.isFinite(amount) && amount > 0) {
+          validLines.push({
+            section: 'developer',
+            brand,
+            shade_code,
+            amount,
+            inventory_item_id: l.inventory_item_id,
+          });
+        }
+        continue;
+      }
+      if (l.section == null || !COLOUR_ZONE_KEYS.includes(l.section)) continue;
+      const zones = l.colourByZone || migrateColourLine(l).colourByZone;
+      const z = zones[l.section];
+      const brand = String(z.brand || '').trim();
+      const amount = Number(String(z.amount || '').replace(',', '.'));
+      const shade_code = String(z.shade_code || '').trim() || '-';
+      if (brand && Number.isFinite(amount) && amount > 0) {
+        validLines.push({
+          section: l.section,
+          brand,
+          shade_code,
+          amount,
+          inventory_item_id: z.inventory_item_id,
+        });
+      }
+    }
 
     if (validLines.length === 0) {
       Alert.alert('', 'Add at least one line with quantity.');
@@ -540,10 +836,17 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   };
 
   const quickCountSelected = useMemo(() => {
-    const c = lines.filter((l) => l.section !== 'developer').length;
+    const active = lines[activeLineIndex];
+    let c = 0;
+    if (active && active.section !== 'developer') {
+      const mgk = mixGroupKeyOf(active);
+      c = lines.filter((l) => l.section !== 'developer' && mixGroupKeyOf(l) === mgk).length;
+    } else {
+      c = lines.filter((l) => l.section !== 'developer').length;
+    }
     if (c >= 1 && c <= 6) return c;
     return null;
-  }, [lines]);
+  }, [lines, activeLineIndex]);
 
   if (!clientId) {
     return (
@@ -618,6 +921,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   const iosAccessoryId = Platform.OS === 'ios' ? IOS_KB_ACCESSORY_ID : undefined;
 
   const activeLine = lines[activeLineIndex] || lines[0];
+  const activeZoneSlice = activeLine ? getActiveZone(activeLine) : emptyColourZone();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -719,8 +1023,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             inputAccessoryViewID={iosAccessoryId}
           />
 
+          <View style={styles.afterPaidSpacing} />
+
           <View style={styles.linesHeader}>
-            <Text style={styles.sectionTitle}>How many colors did you mix?</Text>
+            <Text style={styles.sectionTitle}>How many colours?</Text>
           </View>
 
           <ScrollView
@@ -809,7 +1115,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                       >
                         <Ionicons
                           name="close"
-                          size={18}
+                          size={15}
                           color={sel ? '#E53935' : 'rgba(255,255,255,0.88)'}
                         />
                       </TouchableOpacity>
@@ -820,9 +1126,36 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             </View>
           </ScrollView>
 
+          {activeLine && activeLine.section !== 'developer' && activeLine.section == null ? (
+            <>
+              <Text style={styles.zoneLeadTitle}>What is this mix for?</Text>
+              <ScrollView
+                ref={(r) => {
+                  sectionChipScrollRefs.current[activeLine.key] = r;
+                }}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.segScroll}
+                style={styles.zoneTabsRow}
+                keyboardShouldPersistTaps="handled"
+              >
+                {COLOUR_SECTIONS.map((s) => (
+                  <TouchableOpacity
+                    key={s.key}
+                    onPress={() => selectColourSection(activeLine.key, s.key)}
+                    style={styles.seg}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.segTxt}>{s.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
+
           <View style={styles.addLineRow}>
             <AddLineBouncyButton
-              onPress={appendColourLine}
+              onPress={appendColourToActiveMix}
               iconName="color-fill-outline"
               label="+ Colour"
               variant="pink"
@@ -835,14 +1168,20 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             />
           </View>
 
-          {activeLine ? (
+          {activeLine &&
+          (activeLine.section === 'developer' ||
+            (activeLine.section != null && COLOUR_ZONE_KEYS.includes(activeLine.section))) ? (
             <View
               key={activeLine.key}
               style={[styles.lineCard, activeLine.section === 'developer' && styles.lineCardDev]}
             >
               <View style={styles.lineTop}>
                 <View style={styles.lineTopLeft}>
-                  <Text style={styles.lineTitle}>{lineTabLabel(lines, activeLineIndex)}</Text>
+                  <Text style={styles.lineTitle}>
+                    {activeLine.section === 'developer'
+                      ? lineTabLabel(lines, activeLineIndex)
+                      : `${lineTabLabel(lines, activeLineIndex)} · ${colourZoneTitle(activeLine.section)}`}
+                  </Text>
                   {activeLine.section === 'developer' ? (
                     <TouchableOpacity
                       onPress={() => convertDeveloperToColourLine(activeLine.key)}
@@ -851,6 +1190,16 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                       accessibilityLabel="Switch this row to colour"
                     >
                       <Text style={styles.lineTypeSwitch}>Switch to colour</Text>
+                    </TouchableOpacity>
+                  ) : isZoneEmpty(activeZoneSlice) &&
+                    colourLineCountForMix(lines, mixGroupKeyOf(activeLine)) === 1 ? (
+                    <TouchableOpacity
+                      onPress={() => resetColourLineZonePick(activeLine.key)}
+                      hitSlop={8}
+                      accessibilityRole="link"
+                      accessibilityLabel="Change mix area"
+                    >
+                      <Text style={styles.lineTypeSwitch}>Change area</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -866,30 +1215,6 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 ) : null}
               </View>
 
-              {activeLine.section !== 'developer' ? (
-                <ScrollView
-                  ref={(r) => {
-                    sectionChipScrollRefs.current[activeLine.key] = r;
-                  }}
-                  horizontal
-                  showsHorizontalScrollIndicator
-                  contentContainerStyle={styles.segScroll}
-                >
-                  {COLOUR_SECTIONS.map((s) => (
-                    <TouchableOpacity
-                      key={s.key}
-                      onPress={() => selectColourSection(activeLine.key, s.key)}
-                      style={[styles.seg, activeLine.section === s.key && styles.segOn]}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.segTxt, activeLine.section === s.key && styles.segTxtOn]}>
-                        {s.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              ) : null}
-
               <Text style={styles.labSm}>Product (inventory)</Text>
               <TouchableOpacity
                 style={[
@@ -903,21 +1228,23 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 <Ionicons
                   name={activeLine.section === 'developer' ? 'flask-outline' : 'cube-outline'}
                   size={20}
-                  color={activeLine.section === 'developer' ? ADD_LINE_THEME.blue.bg : ADD_LINE_THEME.pink.bg}
+                  color={
+                    activeLine.section === 'developer' ? ADD_LINE_THEME.blue.bg : ADD_LINE_THEME.pink.bg
+                  }
                   style={styles.productIcon}
                 />
                 <Text
                   style={[
                     styles.productPickText,
-                    !activeLine.stockLabel && styles.productPickPlaceholder,
+                    !activeZoneSlice.stockLabel && styles.productPickPlaceholder,
                   ]}
                   numberOfLines={2}
                 >
-                  {activeLine.stockLabel || 'Choose from your inventory…'}
+                  {activeZoneSlice.stockLabel || 'Choose from your inventory…'}
                 </Text>
                 <Ionicons name="chevron-down" size={22} color="#1C1C1E" />
               </TouchableOpacity>
-              {activeLine.inventory_item_id ? (
+              {activeZoneSlice.inventory_item_id ? (
                 <TouchableOpacity
                   onPress={() => {
                     Keyboard.dismiss();
@@ -930,7 +1257,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 </TouchableOpacity>
               ) : null}
 
-              {!activeLine.inventory_item_id ? (
+              {!activeZoneSlice.inventory_item_id ? (
                 activeLine.section === 'developer' ? (
                   <>
                     <Text style={styles.labSm}>Manual</Text>
@@ -938,7 +1265,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                       style={[styles.input, styles.inputDevManual]}
                       placeholder=""
                       placeholderTextColor="#8E8E93"
-                      value={activeLine.brand}
+                      value={activeZoneSlice.brand}
                       onChangeText={(t) =>
                         updateLine(activeLine.key, { brand: t, shade_code: '-' })
                       }
@@ -955,7 +1282,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                       style={styles.input}
                       placeholder=""
                       placeholderTextColor="#1C1C1E"
-                      value={activeLine.brand}
+                      value={activeZoneSlice.brand}
                       onChangeText={(t) => updateLine(activeLine.key, { brand: t })}
                       inputAccessoryViewID={iosAccessoryId}
                       returnKeyType="done"
@@ -968,7 +1295,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                       style={styles.input}
                       placeholder=""
                       placeholderTextColor="#1C1C1E"
-                      value={activeLine.shade_code}
+                      value={activeZoneSlice.shade_code}
                       onChangeText={(t) => updateLine(activeLine.key, { shade_code: t })}
                       autoCapitalize="characters"
                       inputAccessoryViewID={iosAccessoryId}
@@ -985,13 +1312,24 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 style={styles.input}
                 placeholder=""
                 placeholderTextColor="#8E8E93"
-                value={String(activeLine.amount)}
+                value={String(activeZoneSlice.amount ?? '')}
                 onChangeText={(t) => updateLine(activeLine.key, { amount: t })}
                 keyboardType="decimal-pad"
                 inputAccessoryViewID={iosAccessoryId}
               />
             </View>
           ) : null}
+
+          <TouchableOpacity
+            style={styles.addAnotherMixBtn}
+            onPress={() => {
+              Keyboard.dismiss();
+              appendNewMixLine();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addAnotherMixTxt}>+ Add another mix</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.saveBtn, submitting && styles.saveDisabled]}
@@ -1168,6 +1506,35 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
+  afterPaidSpacing: {
+    marginTop: 26,
+    marginBottom: 2,
+  },
+  addAnotherMixBtn: {
+    alignSelf: 'stretch',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#C6C6C8',
+    backgroundColor: '#FAFAFA',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addAnotherMixTxt: {
+    fontSize: 15,
+    fontFamily: FontFamily.semibold,
+    color: '#1C1C1E',
+    letterSpacing: -0.2,
+  },
+  zoneLeadTitle: {
+    fontSize: 16,
+    fontFamily: FontFamily.semibold,
+    color: '#1C1C1E',
+    marginBottom: 10,
+    letterSpacing: -0.28,
+    lineHeight: 22,
+  },
   label: {
     fontSize: 13,
     fontFamily: FontFamily.medium,
@@ -1189,61 +1556,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: 12,
+    marginBottom: 8,
   },
   quickCountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
+    gap: 5,
+    marginBottom: 10,
     paddingRight: 8,
   },
   quickCountTouchable: {
-    width: 52,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  /** Ясна „избрана“ рамка: бяло около по-малък градиент */
-  quickCountRing: {
-    padding: 4,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    shadowColor: BRAND_PURPLE,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.38,
-    shadowRadius: 7,
-    elevation: 6,
-  },
-  quickCountGradInset: {
     width: 40,
     height: 40,
-    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /** Неизбраните — по-слаби, избраният се откроява */
-  quickCountGradDim: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
+  quickCountRing: {
+    padding: 2,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: BRAND_PURPLE,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  quickCountGradInset: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 0.68,
+  },
+  quickCountGradDim: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.6,
   },
   quickCountChipTxt: {
-    fontSize: 17,
+    fontSize: 14,
     fontFamily: FontFamily.semibold,
     color: '#FFFFFF',
-    letterSpacing: 0.25,
-    textShadowColor: 'rgba(0,0,0,0.18)',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.14)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 1.5,
   },
   lineSegScroller: {
     alignSelf: 'stretch',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   lineSegScrollContent: {
     paddingRight: 8,
@@ -1255,16 +1620,16 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     backgroundColor: '#000000',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 10,
-    padding: 3,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    padding: 2,
     gap: 2,
   },
   /** One pill: tap label → select tab; ✕ removes row when there are 2+ rows */
   lineSegSegment: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    borderRadius: 7,
+    borderRadius: 6,
     overflow: 'hidden',
     flexShrink: 0,
     alignSelf: 'flex-start',
@@ -1274,7 +1639,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 2,
   },
@@ -1283,20 +1648,20 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 9,
-    paddingLeft: 12,
-    paddingRight: 4,
-    minHeight: 36,
+    paddingVertical: 6,
+    paddingLeft: 10,
+    paddingRight: 3,
+    minHeight: 30,
   },
   lineSegRemovePress: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingRight: 8,
-    paddingLeft: 4,
-    minWidth: 30,
+    paddingRight: 6,
+    paddingLeft: 2,
+    minWidth: 24,
   },
   lineSegTxt: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FontFamily.medium,
     color: 'rgba(255, 255, 255, 0.92)',
     letterSpacing: -0.08,
@@ -1371,15 +1736,20 @@ const styles = StyleSheet.create({
     color: ADD_LINE_THEME.blue.bg,
   },
   lineTitle: { fontWeight: '400', color: '#1C1C1E', fontSize: 15 },
-  segScroll: { gap: 8, marginBottom: 14 },
+  segScroll: { gap: 6 },
+  zoneTabsRow: {
+    alignSelf: 'stretch',
+    marginBottom: 10,
+    flexGrow: 0,
+  },
   seg: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
     backgroundColor: '#F2F2F7',
   },
   segOn: { backgroundColor: '#1C1C1E' },
-  segTxt: { fontWeight: '400', color: '#1C1C1E', fontSize: 13 },
+  segTxt: { fontWeight: '400', color: '#1C1C1E', fontSize: 12 },
   segTxtOn: { color: '#fff' },
   labSm: { fontSize: 12, fontWeight: '400', color: '#1C1C1E', marginBottom: 6, marginTop: 8 },
   productPickRow: {

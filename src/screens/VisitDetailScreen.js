@@ -8,8 +8,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import SFIcon from '../components/SFIcon';
 import { apiGet } from '../api/client';
 import { BRAND_PURPLE } from '../theme/glassUi';
 import { SCHEDULE_BANNER_LEAD_PINK } from '../theme/scheduleBannerGradient';
@@ -127,11 +127,11 @@ export default function VisitDetailScreen({ route, navigation }) {
           onPress={() => navigation.navigate('ClientDetail', { clientId: visit.client_id })}
           activeOpacity={0.75}
         >
-          <Ionicons name="person-circle-outline" size={16} color={BRAND_PURPLE} style={{ marginRight: 5 }} />
+          <SFIcon name="person-circle-outline" iosName="person.circle" size={16} color={BRAND_PURPLE} style={{ marginRight: 5 }} />
           <Text style={styles.clientChipTxt} numberOfLines={1}>
             {visit.client?.full_name || 'Client'}
           </Text>
-          <Ionicons name="chevron-forward" size={14} color={BRAND_PURPLE} style={{ marginLeft: 2 }} />
+          <SFIcon name="chevron-forward" iosName="chevron.right" size={14} color={BRAND_PURPLE} style={{ marginLeft: 2 }} />
         </TouchableOpacity>
 
         {/* ── hero: procedure + date ── */}
@@ -211,7 +211,7 @@ export default function VisitDetailScreen({ route, navigation }) {
                     return (
                       <View style={styles.devRow}>
                         <View style={[styles.lineNumBadge, styles.lineNumBadgeDev]}>
-                          <Ionicons name="flask-outline" size={13} color="#0D74FF" />
+                          <SFIcon name="flask-outline" iosName="flask" size={13} color="#0D74FF" />
                         </View>
                         <View style={styles.lineBody}>
                           <Text style={styles.devName} numberOfLines={1}>{primary}</Text>

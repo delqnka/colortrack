@@ -16,8 +16,8 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import SFIcon from '../components/SFIcon';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiGet, apiPost } from '../api/client';
 import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
@@ -32,10 +32,10 @@ import { FontFamily } from '../theme/fonts';
 import IsoDatePickField from '../components/IsoDatePickField';
 
 const COLOUR_SECTIONS = [
-  { key: 'roots', label: 'Roots', icon: 'color-fill-outline' },
-  { key: 'lengths', label: 'Lengths', icon: 'scissors-outline' },
-  { key: 'toner', label: 'Toner', icon: 'sparkles-outline' },
-  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline' },
+  { key: 'roots', label: 'Roots', icon: 'color-fill-outline', iosIcon: 'paintpalette.fill' },
+  { key: 'lengths', label: 'Lengths', icon: 'scissors-outline', iosIcon: 'scissors' },
+  { key: 'toner', label: 'Toner', icon: 'sparkles-outline', iosIcon: 'sparkles' },
+  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', iosIcon: 'ellipsis.circle' },
 ];
 
 const IOS_KB_ACCESSORY_ID = 'formula_input_accessory_done';
@@ -413,12 +413,12 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               style={styles.iconBtn}
               hitSlop={12}
             >
-              <Ionicons name="close" size={26} color="#FFFFFF" />
+              <SFIcon name="close" iosName="xmark" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
           <Text style={styles.pickPurpose}>Who is this formula for?</Text>
           <View style={styles.pickSearchRow}>
-            <Ionicons name="search-outline" size={20} color="#8E8E93" style={{ marginRight: 8 }} />
+            <SFIcon name="search-outline" iosName="magnifyingglass" size={20} color="#8E8E93" style={{ marginRight: 8 }} />
             <TextInput
               style={styles.pickSearchField}
               placeholder="Search clients"
@@ -496,7 +496,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               colors={['#FFFFFF', '#F5EEFF']}
               style={styles.zoneCardInner}
             >
-              <Ionicons name={s.icon} size={38} color={SCHEDULE_BANNER_LEAD_PINK} style={{ marginBottom: 10 }} />
+              <SFIcon name={s.icon} iosName={s.iosIcon} size={36} color={SCHEDULE_BANNER_LEAD_PINK} style={{ marginBottom: 10 }} />
               <Text style={styles.zoneCardLabel}>{s.label}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -579,7 +579,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         }}
         activeOpacity={0.82}
       >
-        <Ionicons name="add-circle-outline" size={20} color={BRAND_PURPLE} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_PURPLE} />
         <Text style={styles.moreColoursBtnTxt}>More colours</Text>
       </TouchableOpacity>
     </View>
@@ -593,7 +593,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         <Text style={styles.colourCardTitle}>Colour {idx + 1}</Text>
         {draftColourRows.length > 1 ? (
           <TouchableOpacity onPress={() => removeDraftRow(row.key)} hitSlop={10} activeOpacity={0.7}>
-            <Ionicons name="trash-outline" size={18} color="#C62828" />
+            <SFIcon name="trash-outline" iosName="trash" size={18} color="#C62828" />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -604,7 +604,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         onPress={() => openInvPicker(row.key)}
         activeOpacity={0.82}
       >
-        <Ionicons name="cube-outline" size={18} color={BRAND_PURPLE} style={{ marginRight: 8 }} />
+        <SFIcon name="cube-outline" iosName="shippingbox" size={18} color={BRAND_PURPLE} style={{ marginRight: 8 }} />
         {row.stockLabel ? (
           <View style={{ flex: 1 }}>
             <Text style={styles.stockPickerShade}>
@@ -623,10 +623,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             hitSlop={10}
             style={{ marginLeft: 'auto' }}
           >
-            <Ionicons name="close-circle" size={17} color="#8E8E93" />
+            <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8E8E93" />
           </TouchableOpacity>
         ) : (
-          <Ionicons name="chevron-forward" size={16} color="#C6C6C8" style={{ marginLeft: 'auto' }} />
+          <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#C6C6C8" style={{ marginLeft: 'auto' }} />
         )}
       </TouchableOpacity>
 
@@ -694,7 +694,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
       {/* Add another colour row inline */}
       <TouchableOpacity style={styles.addColourRowBtn} onPress={addDraftRow} activeOpacity={0.82}>
-        <Ionicons name="add-circle-outline" size={20} color={BRAND_PURPLE} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_PURPLE} />
         <Text style={styles.addColourRowBtnTxt}>+ Add another colour</Text>
       </TouchableOpacity>
 
@@ -708,7 +708,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           onPress={() => openInvPicker('developer')}
           activeOpacity={0.82}
         >
-          <Ionicons name="cube-outline" size={18} color="#0D74FF" style={{ marginRight: 8 }} />
+          <SFIcon name="cube-outline" iosName="shippingbox" size={18} color="#0D74FF" style={{ marginRight: 8 }} />
           {draftDeveloper.stockLabel ? (
             <View style={{ flex: 1 }}>
               <Text style={styles.stockPickerShade}>
@@ -727,10 +727,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               hitSlop={10}
               style={{ marginLeft: 'auto' }}
             >
-              <Ionicons name="close-circle" size={17} color="#8E8E93" />
+              <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8E8E93" />
             </TouchableOpacity>
           ) : (
-            <Ionicons name="chevron-forward" size={16} color="#C6C6C8" style={{ marginLeft: 'auto' }} />
+            <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#C6C6C8" style={{ marginLeft: 'auto' }} />
           )}
         </TouchableOpacity>
 
@@ -875,7 +875,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         onPress={() => { Keyboard.dismiss(); resetDraft(); }}
         activeOpacity={0.85}
       >
-        <Ionicons name="add-circle-outline" size={22} color={SCHEDULE_BANNER_LEAD_PINK} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={SCHEDULE_BANNER_LEAD_PINK} />
         <Text style={styles.addAnotherBtnTxt}>+ Add another mix</Text>
       </TouchableOpacity>
 
@@ -943,7 +943,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                     {item.quantity != null ? `  ·  In stock: ${item.quantity} ${item.unit || ''}` : ''}
                   </Text>
                 </View>
-                <Ionicons name="add-circle-outline" size={22} color={BRAND_PURPLE} />
+                <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={BRAND_PURPLE} />
               </TouchableOpacity>
             )}
             ListEmptyComponent={
@@ -989,7 +989,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           <View style={styles.headerSide}>
             {wizardStep > 1 && wizardStep < 4 ? (
               <TouchableOpacity onPress={wizardBack} style={styles.iconBtn} hitSlop={12}>
-                <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
+                <SFIcon name="chevron-back" iosName="chevron.left" size={22} color="#FFFFFF" />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -999,7 +999,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             style={styles.iconBtn}
             hitSlop={12}
           >
-            <Ionicons name="close" size={26} color="#FFFFFF" />
+            <SFIcon name="close" iosName="xmark" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 

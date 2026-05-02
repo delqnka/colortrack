@@ -7,6 +7,7 @@ import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { SymbolView } from 'expo-symbols';
 import NetInfo from '@react-native-community/netinfo';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -104,46 +105,34 @@ function MainTabs() {
       shadowRadius: 16,
     },
     tabBarIcon: ({ focused }) => {
-      let iconName;
-      if (route.name === 'Dashboard') iconName = focused ? 'home' : 'home-outline';
-      else if (route.name === 'Clients') iconName = focused ? 'people' : 'people-outline';
-      else if (route.name === 'Inventory') iconName = focused ? 'cube' : 'cube-outline';
-      else iconName = focused ? 'calendar' : 'calendar-outline';
-
+      const sfSymbols = {
+        Dashboard: focused ? 'house.fill'            : 'house',
+        Clients:   focused ? 'person.2.fill'         : 'person.2',
+        Inventory: focused ? 'shippingbox.fill'      : 'shippingbox',
+        Calendar:  focused ? 'calendar.badge.clock'  : 'calendar',
+      };
+      const sf = sfSymbols[route.name] || 'circle';
       const size = focused ? ICON_SIZE_ACTIVE : ICON_SIZE_INACTIVE;
+      const iconColor = focused ? BRAND_PURPLE : '#FFFFFF';
+
+      const icon = Platform.OS === 'ios'
+        ? <SymbolView name={sf} size={size} tintColor={iconColor} weight={focused ? 'semibold' : 'regular'} type="hierarchical" style={{ width: size, height: size }} />
+        : <Ionicons name={focused ? sf.replace('.fill','') : sf} size={size} color={iconColor} />;
 
       return (
-        <View
-          style={{
-            width: ICON_KNOB,
-            height: TAB_H,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
+        <View style={{ width: ICON_KNOB, height: TAB_H, justifyContent: 'center', alignItems: 'center' }}>
           {focused ? (
-            <View
-              style={{
-                width: ICON_KNOB,
-                height: ICON_KNOB,
-                borderRadius: ICON_KNOB / 2,
-                backgroundColor: 'rgba(255, 255, 255, 0.92)',
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.65)',
-                justifyContent: 'center',
-                alignItems: 'center',
-                shadowColor: '#000000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.45,
-                shadowRadius: 6,
-                elevation: 10,
-              }}
-            >
-              <Ionicons name={iconName} size={size} color={BRAND_PURPLE} />
+            <View style={{
+              width: ICON_KNOB, height: ICON_KNOB, borderRadius: ICON_KNOB / 2,
+              backgroundColor: 'rgba(255,255,255,0.92)',
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)',
+              justifyContent: 'center', alignItems: 'center',
+              shadowColor: '#000000', shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.45, shadowRadius: 6, elevation: 10,
+            }}>
+              {icon}
             </View>
-          ) : (
-            <Ionicons name={iconName} size={size} color="#FFFFFF" />
-          )}
+          ) : icon}
         </View>
       );
     },

@@ -320,6 +320,27 @@ export default function InventoryItemScreen({ route, navigation }) {
             onChangeText={setBrandStr}
           />
 
+          {/* ── Section toggle: Stock / Retail ── */}
+          <Text style={styles.label}>Section</Text>
+          <View style={styles.sectionToggle}>
+            {[
+              { key: 'consumable', label: 'Stock' },
+              { key: 'retail',     label: 'Retail' },
+            ].map(({ key, label }) => {
+              const on = categoryPreset === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.sectionBtn, on && styles.sectionBtnOn]}
+                  onPress={() => { setCategoryPreset(key); setCategoryCustom(''); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.sectionBtnTxt, on && styles.sectionBtnTxtOn]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           {/* ── Subcategory ── */}
           <Text style={styles.label}>Subcategory</Text>
           <TextInput
@@ -483,6 +504,32 @@ const styles = StyleSheet.create({
     ...Type.secondary,
     color: '#5E35B1',
     marginBottom: 16,
+  },
+  sectionToggle: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  sectionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  sectionBtnOn: {
+    backgroundColor: '#0D0D0D',
+    borderColor: '#0D0D0D',
+  },
+  sectionBtnTxt: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    color: '#0D0D0D',
+  },
+  sectionBtnTxtOn: {
+    color: '#FFFFFF',
   },
   labelHint: {
     fontFamily: FontFamily.regular,

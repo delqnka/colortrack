@@ -1163,14 +1163,17 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 >
                   <Image source={{ uri: p.uri }} style={styles.photoThumbImg} />
                   <View style={styles.photoRemove}>
-                    <SFIcon name="close-circle" iosName="xmark.circle.fill" size={18} color="#FFFFFF" />
+                    <SFIcon name="close-circle" iosName="xmark.circle.fill" size={20} color="#FFFFFF" />
                   </View>
                 </TouchableOpacity>
               ))}
+              <TouchableOpacity style={styles.photoAddMore} onPress={() => pickPhoto(type)} activeOpacity={0.8}>
+                <SFIcon name="camera-outline" iosName="camera.fill" size={22} color={BRAND_PURPLE} />
+              </TouchableOpacity>
             </ScrollView>
           ) : (
             <TouchableOpacity style={styles.photoEmpty} onPress={() => pickPhoto(type)} activeOpacity={0.8}>
-              <SFIcon name="camera-outline" iosName="camera" size={22} color="#AEAEB2" />
+              <SFIcon name="camera-outline" iosName="camera.fill" size={26} color={BRAND_PURPLE} />
               <Text style={styles.photoEmptyTxt}>Add {label.toLowerCase()} photos</Text>
             </TouchableOpacity>
           )}
@@ -1361,7 +1364,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, backgroundColor: '#FFFFFF' },
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
 
   // keyboard accessory
@@ -1861,20 +1864,33 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 4, right: 4,
   },
   photoEmpty: {
-    height: 72,
-    borderRadius: 12,
-    borderWidth: 1,
+    height: 80,
+    borderRadius: 14,
+    borderWidth: 1.5,
     borderColor: '#E5E5EA',
     borderStyle: 'dashed',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
+    backgroundColor: '#FAFAFA',
   },
   photoEmptyTxt: {
-    fontFamily: FontFamily.regular,
+    fontFamily: FontFamily.medium,
     fontSize: 14,
-    color: '#AEAEB2',
+    color: BRAND_PURPLE,
+  },
+  photoAddMore: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    backgroundColor: '#FAFAFA',
   },
 
   // inputs

@@ -251,25 +251,24 @@ async function registerHandler(sql, req, res) {
   const b = req.body || {};
   const email = typeof b.email === 'string' ? b.email.trim().toLowerCase() : '';
   const password = typeof b.password === 'string' ? b.password : '';
-  if (!email || !password || password.length < 8 || !emailLooksValid(email)) {
+  const firstName = typeof b.first_name === 'string' ? b.first_name.trim() : '';
+  const lastName = typeof b.last_name === 'string' ? b.last_name.trim() : '';
+  const salonName = typeof b.salon_name === 'string' ? b.salon_name.trim() : '';
+  if (!email || !password || password.length < 6 || !emailLooksValid(email)) {
     return res.status(400).json({ error: 'bad_request' });
   }
   const dup = await sql`SELECT id FROM staff WHERE lower(email) = ${email} LIMIT 1`;
   if (dup.length) {
     return res.status(409).json({ error: 'conflict' });
   }
-  let salons = await sql`SELECT id FROM salons ORDER BY id LIMIT 1`;
-  let salonId = salons[0]?.id;
-  if (!salonId) {
-    const ins = await sql`INSERT INTO salons (name) VALUES ('Default') RETURNING id`;
-    salonId = ins[0].id;
-  }
-  const cnt = await sql`SELECT COUNT(*)::int AS n FROM staff`;
-  const role = Number(cnt[0]?.n) === 0 ? 'admin' : 'staff';
+  const displayName = [firstName, lastName].filter(Boolean).join(' ') || null;
+  const resolvedSalonName = salonName || displayName || 'My Salon';
+  const ins = await sql`INSERT INTO salons (name) VALUES (${resolvedSalonName}) RETURNING id`;
+  const salonId = ins[0].id;
   const hash = await bcrypt.hash(password, 10);
   const insStaff = await sql`
-    INSERT INTO staff (salon_id, email, password_hash, role)
-    VALUES (${salonId}, ${email}, ${hash}, ${role})
+    INSERT INTO staff (salon_id, email, password_hash, role, display_name)
+    VALUES (${salonId}, ${email}, ${hash}, ${'admin'}, ${displayName})
     RETURNING id, salon_id, role
   `;
   const row = insStaff[0];

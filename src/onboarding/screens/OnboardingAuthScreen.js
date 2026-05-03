@@ -12,7 +12,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { CommonActions } from '@react-navigation/native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import SFIcon from '../../components/SFIcon';
 import { apiLoginWithApple, flushOutbox, getApiBaseUrl, saveSessionToken } from '../../api/client';
@@ -101,14 +100,8 @@ export default function OnboardingAuthScreen({ navigation, onLoggedIn }) {
     Linking.openURL(url).catch(() => Alert.alert(mapErr('Could not open link.')));
   }
 
-  async function emailInstead() {
-    await setOnboardingComplete();
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      }),
-    );
+  function emailInstead() {
+    navigation.navigate('OnboardingEmail', { mode: 'register' });
   }
 
   return (

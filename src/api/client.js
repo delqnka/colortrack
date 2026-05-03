@@ -412,11 +412,17 @@ export async function apiLogin(email, password) {
   return JSON.parse(text);
 }
 
-export async function apiRegister(email, password) {
+export async function apiRegister(email, password, { firstName, lastName, salonName } = {}) {
   const res = await fetch(apiFetchUrl('/api/auth/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
+    body: JSON.stringify({
+      email: String(email).trim(),
+      password: String(password),
+      first_name: firstName || undefined,
+      last_name: lastName || undefined,
+      salon_name: salonName || undefined,
+    }),
   });
   const text = await res.text();
   if (!res.ok) throwAuthResponseError(text, res);

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import DotGrid from '../components/DotGrid';
 import { O, OnboardingFonts } from '../theme';
@@ -24,8 +25,8 @@ const SLIDES = [
   },
   {
     key: 'invoice',
-    headline: 'Scan. Stock. Done.',
-    body: 'Photograph any invoice and watch your inventory fill itself. No typing, ever.',
+    headline: 'Always stocked. Never surprised.',
+    body: 'Scan any invoice and your inventory updates instantly. Low stock alerts remind you before you run out mid-appointment.',
     Mockup: InvoiceMockup,
   },
   {
@@ -178,57 +179,140 @@ function PhoneShell({ children }) {
 function LabMockup() {
   return (
     <View style={styles.mockLab}>
-      <Text style={[OnboardingFonts.label, styles.labClient]}>Jordan M.</Text>
-      <View style={styles.labRow}>
-        <Text style={styles.labRowLabel}>Roots</Text>
-        <View style={styles.labDots}>
-          {[0, 1, 2].map((x) => (
-            <View key={x} style={styles.ingChip} />
-          ))}
+      {/* Formula card */}
+      <View style={styles.labFormulaCard}>
+        <View style={styles.labClientRow}>
+          <View style={styles.labAvatar}>
+            <Text style={styles.labAvatarInitial}>S</Text>
+          </View>
+          <Text style={styles.labClient}>Sofia K.</Text>
+        </View>
+
+        <View style={styles.ingSection}>
+          <Text style={styles.ingSectionLabel}>Roots</Text>
+          <View style={styles.ingLine}>
+            <View style={[styles.ingSwatch, { backgroundColor: '#3B2F6B' }]} />
+            <Text style={[OnboardingFonts.bodySm, styles.ingName]} numberOfLines={1}>Koleston 6N</Text>
+            <Text style={[OnboardingFonts.labelSm, styles.ingAmt]}>45 g</Text>
+          </View>
+          <View style={styles.ingLine}>
+            <View style={[styles.ingSwatch, { backgroundColor: '#7B6EA0' }]} />
+            <Text style={[OnboardingFonts.bodySm, styles.ingName]} numberOfLines={1}>Developer 20V</Text>
+            <Text style={[OnboardingFonts.labelSm, styles.ingAmt]}>90 ml</Text>
+          </View>
+        </View>
+
+        <View style={styles.ingSection}>
+          <Text style={styles.ingSectionLabel}>Toner</Text>
+          <View style={styles.ingLine}>
+            <View style={[styles.ingSwatch, { backgroundColor: '#B8A9D8' }]} />
+            <Text style={[OnboardingFonts.bodySm, styles.ingName]} numberOfLines={1}>Gloss 10V</Text>
+            <Text style={[OnboardingFonts.labelSm, styles.ingAmt]}>90 ml</Text>
+          </View>
+          <View style={styles.ingLine}>
+            <View style={[styles.ingSwatch, { backgroundColor: '#7B6EA0' }]} />
+            <Text style={[OnboardingFonts.bodySm, styles.ingName]} numberOfLines={1}>Developer 3V</Text>
+            <Text style={[OnboardingFonts.labelSm, styles.ingAmt]}>180 ml</Text>
+          </View>
         </View>
       </View>
-      <View style={styles.labRow}>
-        <Text style={styles.labRowLabel}>Lengths</Text>
-        <View style={styles.labDots}>
-          {[0, 1].map((x) => (
-            <View key={x} style={[styles.ingChip, { width: 56 }]} />
+
+      {/* My Lab card — mirrors the HomeScreen dark gradient card */}
+      <View style={styles.labMyLabCard}>
+        <LinearGradient
+          colors={['#000000', '#160B28', '#452277']}
+          locations={[0, 0.42, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+          borderRadius={14}
+        />
+        <Text style={styles.labMyLabKicker}>MY LAB</Text>
+        <Text style={styles.labMyLabNum}>7</Text>
+        <Text style={styles.labMyLabWord}>formulas</Text>
+        <Text style={styles.labMyLabSub}>this month</Text>
+        <View style={styles.labMyLabInitials}>
+          {['S', 'A', 'M'].map((l, i) => (
+            <View key={l} style={[styles.labInitialCircle, i > 0 && { marginLeft: -6 }]}>
+              <Text style={styles.labInitialTxt}>{l}</Text>
+            </View>
           ))}
-        </View>
-      </View>
-      <View style={styles.ingList}>
-        <View style={styles.ingLine}>
-          <View style={[styles.ingSwatch, { backgroundColor: '#2C2540' }]} />
-          <Text style={[OnboardingFonts.bodySm, styles.ingName]} numberOfLines={1}>6N + 30g</Text>
-          <Text style={[OnboardingFonts.labelSm, styles.ingAmt]}>1:2</Text>
-        </View>
-        <View style={styles.ingLine}>
-          <View style={[styles.ingSwatch, { backgroundColor: '#5E4FB3' }]} />
-          <Text style={[OnboardingFonts.bodySm, styles.ingName]} numberOfLines={1}>Gloss toner</Text>
-          <Text style={[OnboardingFonts.labelSm, styles.ingAmt]}>15 ml</Text>
         </View>
       </View>
     </View>
   );
 }
 
+const INV_ROWS = [
+  { name: 'Koleston 7/0 60ml', qty: '×12', unit: '€7.20',  total: '€86.40', color: '#4A4463', had: 5,  add: 7,  lowStock: true },
+  { name: 'Welloxon 6% 1L',    qty: '×3',  unit: '€11.40', total: '€34.20', color: '#7368A8', had: 2,  add: 3,  lowStock: true },
+  { name: 'Color Touch 8/0',   qty: '×6',  unit: '€7.00',  total: '€42.00', color: '#9B8EC4', had: 0,  add: 6,  lowStock: false },
+];
+
 function InvoiceMockup() {
   return (
     <View style={styles.invRoot}>
+      {/* Camera viewfinder with invoice */}
       <View style={styles.viewfinder}>
+        <View style={[styles.invCorner, styles.invCornerTL]} />
+        <View style={[styles.invCorner, styles.invCornerTR]} />
+        <View style={[styles.invCorner, styles.invCornerBL]} />
+        <View style={[styles.invCorner, styles.invCornerBR]} />
         <View style={styles.invPaper}>
-          <View style={styles.invLineWide} />
-          <View style={styles.invLineNarrow} />
-          <View style={[styles.invLineWide, { marginTop: 10 }]} />
+          <View style={styles.invHeader}>
+            <View>
+              <Text style={styles.invCompany}>WELLA PROFESSIONALS</Text>
+              <Text style={styles.invMeta}>Invoice #2847 · 02.05.2025</Text>
+            </View>
+            <View style={styles.invLogoBox}><Text style={styles.invLogoTxt}>W</Text></View>
+          </View>
+          <View style={styles.invDivider} />
+          <View style={styles.invTableHead}>
+            <Text style={[styles.invCol, { flex: 2 }]}>PRODUCT</Text>
+            <Text style={[styles.invCol, { width: 20, textAlign: 'center' }]}>QTY</Text>
+            <Text style={[styles.invCol, { width: 30, textAlign: 'right' }]}>UNIT</Text>
+            <Text style={[styles.invCol, { width: 34, textAlign: 'right' }]}>TOTAL</Text>
+          </View>
+          {INV_ROWS.map((r, i) => (
+            <View key={i} style={styles.invTableRow}>
+              <Text style={[styles.invRowTxt, { flex: 2 }]} numberOfLines={1}>{r.name}</Text>
+              <Text style={[styles.invRowTxt, { width: 20, textAlign: 'center' }]}>{r.qty}</Text>
+              <Text style={[styles.invRowTxt, { width: 30, textAlign: 'right' }]}>{r.unit}</Text>
+              <Text style={[styles.invRowTxt, { width: 34, textAlign: 'right' }]}>{r.total}</Text>
+            </View>
+          ))}
+          <View style={styles.invDivider} />
+          <View style={styles.invTableRow}>
+            <Text style={[styles.invRowTxt, { flex: 2, fontFamily: 'Manrope_700Bold' }]}>TOTAL</Text>
+            <Text style={[styles.invRowTxt, { width: 84, textAlign: 'right', fontFamily: 'Manrope_700Bold' }]}>€162.60</Text>
+          </View>
         </View>
       </View>
+
+      {/* Extracted items with stock delta + Add button */}
       <View style={styles.scanList}>
-        <View style={styles.scanPill}>
-          <View style={[styles.ingSwatch, { backgroundColor: '#4A4463' }]} />
-          <Text style={[OnboardingFonts.labelSm, styles.scanPillTxt]} numberOfLines={1}>Permanent color 60 ml</Text>
-        </View>
-        <View style={styles.scanPill}>
-          <View style={[styles.ingSwatch, { backgroundColor: '#7368A8' }]} />
-          <Text style={[OnboardingFonts.labelSm, styles.scanPillTxt]} numberOfLines={1}>Developer 1000 ml</Text>
+        {INV_ROWS.map((item, i) => (
+          <View key={i} style={styles.scanPill}>
+            <View style={[styles.ingSwatch, { backgroundColor: item.color }]} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={styles.scanPillTxt} numberOfLines={1}>{item.name}</Text>
+                {item.lowStock ? (
+                  <View style={styles.lowBadge}>
+                    <Text style={styles.lowBadgeTxt}>Low</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.scanPillStock}>
+                {item.had > 0 ? `${item.had} in stock · ` : ''}
+                <Text style={styles.scanPillAdd}>+{item.add}</Text>
+              </Text>
+            </View>
+            <Text style={styles.scanPillPrice}>{item.unit}</Text>
+          </View>
+        ))}
+        <View style={styles.invAddBtn}>
+          <Text style={styles.invAddBtnTxt}>Add to inventory</Text>
         </View>
       </View>
     </View>
@@ -238,19 +322,40 @@ function InvoiceMockup() {
 function FinanceMockup() {
   return (
     <View style={styles.finRoot}>
+      {/* Revenue card */}
       <View style={styles.finCard}>
-        <View style={styles.finRow}>
-          <Ionicons name="trending-up-outline" size={18} color={O.secondary} />
-          <Text style={[OnboardingFonts.labelSm, styles.finLbl]}>Income</Text>
+        <Text style={styles.finCardLabel}>REVENUE · MAY</Text>
+        <Text style={styles.finBigNum}>€4,222</Text>
+        <View style={styles.finSubRow}>
+          <Text style={styles.finSubItem}>25 bookings  <Text style={styles.finSubAmt}>€3,842</Text></Text>
+          <Text style={styles.finSubItem}>Retail sales  <Text style={styles.finSubAmt}>€380</Text></Text>
         </View>
-        <Text style={[OnboardingFonts.titlePage, styles.finNum]}>$3,842</Text>
       </View>
-      <View style={[styles.finCard]}>
-        <View style={styles.finRow}>
-          <Ionicons name="trending-down-outline" size={18} color={O.secondary} />
-          <Text style={[OnboardingFonts.labelSm, styles.finLbl]}>Expense</Text>
+
+      {/* Expenses card */}
+      <View style={styles.finCard}>
+        <Text style={styles.finCardLabel}>EXPENSES</Text>
+        {[
+          { label: 'Rent',        amt: '€950' },
+          { label: 'Electricity', amt: '€330' },
+          { label: 'Accountant',  amt: '€200' },
+        ].map((e, i) => (
+          <View key={i} style={styles.finExpRow}>
+            <Text style={styles.finExpLabel}>{e.label}</Text>
+            <Text style={styles.finExpAmt}>{e.amt}</Text>
+          </View>
+        ))}
+        <View style={styles.finExpDivider} />
+        <View style={styles.finExpRow}>
+          <Text style={[styles.finExpLabel, { fontFamily: 'Manrope_600SemiBold' }]}>Total</Text>
+          <Text style={[styles.finExpAmt, { fontFamily: 'Manrope_600SemiBold' }]}>€1,480</Text>
         </View>
-        <Text style={[OnboardingFonts.titlePage, styles.finNumLo]}>$1,076</Text>
+      </View>
+
+      {/* Net profit */}
+      <View style={[styles.finCard, styles.finNetCard]}>
+        <Text style={styles.finNetLabel}>NET PROFIT</Text>
+        <Text style={styles.finNetAmt}>€2,742</Text>
       </View>
     </View>
   );
@@ -389,41 +494,105 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Manrope_600SemiBold',
   },
-  mockLab: { flex: 1, paddingHorizontal: 4, paddingTop: 12 },
-  labClient: {
-    fontSize: 15,
-    color: O.text,
-    letterSpacing: -0.2,
-    marginBottom: 14,
-    fontFamily: 'Manrope_500Medium',
+  mockLab: { flex: 1, paddingHorizontal: 4, paddingTop: 8, gap: 8 },
+
+  // My Lab gradient card
+  labMyLabCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    padding: 12,
+    minHeight: 110,
+    justifyContent: 'space-between',
+    backgroundColor: '#000',
   },
-  labRow: {
+  labMyLabKicker: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 9,
+    color: '#FFFFFF',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  labMyLabNum: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 36,
+    color: '#FFFFFF',
+    lineHeight: 40,
+    marginTop: 4,
+  },
+  labMyLabWord: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 11,
+    color: '#FFFFFF',
+  },
+  labMyLabSub: {
+    fontFamily: 'Manrope_400Regular',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  labMyLabInitials: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  labInitialCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labInitialTxt: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 8,
+    color: '#FFFFFF',
+  },
+
+  // Formula card
+  labFormulaCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 10,
+    gap: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  labClientRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    justifyContent: 'space-between',
-    gap: 8,
+    gap: 7,
+    marginBottom: 2,
   },
-  labRowLabel: {
+  labAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#5E35B1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labAvatarInitial: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 10,
+    color: '#FFFFFF',
+  },
+  labClient: {
+    fontSize: 11,
+    color: O.text,
     fontFamily: 'Manrope_500Medium',
-    fontSize: 12,
-    color: O.secondary,
-    width: 56,
   },
-  labDots: {
-    flexDirection: 'row',
-    flex: 1,
-    gap: 6,
-    justifyContent: 'flex-start',
+  ingSection: { marginTop: 8, gap: 6 },
+  ingSectionLabel: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 9,
+    color: O.tertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 2,
   },
-  ingChip: {
-    height: 8,
-    flex: 1,
-    maxWidth: 62,
-    borderRadius: 4,
-    backgroundColor: 'rgba(27,26,43,0.12)',
-  },
-  ingList: { marginTop: 16, gap: 10 },
   ingLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -451,70 +620,220 @@ const styles = StyleSheet.create({
   viewfinder: {
     flex: 1,
     borderRadius: 14,
-    backgroundColor: '#12121C',
-    padding: 10,
+    backgroundColor: '#0D0D14',
+    padding: 14,
     minHeight: 120,
     justifyContent: 'center',
     marginBottom: 6,
+    position: 'relative',
   },
+  invCorner: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderColor: '#6B4EFF',
+    borderWidth: 0,
+  },
+  invCornerTL: { top: 8, left: 8, borderTopWidth: 2, borderLeftWidth: 2, borderTopLeftRadius: 4 },
+  invCornerTR: { top: 8, right: 8, borderTopWidth: 2, borderRightWidth: 2, borderTopRightRadius: 4 },
+  invCornerBL: { bottom: 8, left: 8, borderBottomWidth: 2, borderLeftWidth: 2, borderBottomLeftRadius: 4 },
+  invCornerBR: { bottom: 8, right: 8, borderBottomWidth: 2, borderRightWidth: 2, borderBottomRightRadius: 4 },
   invPaper: {
-    backgroundColor: '#F2F2F4',
-    borderRadius: 6,
-    padding: 10,
-    minHeight: 72,
-    justifyContent: 'flex-start',
+    backgroundColor: '#FAFAF8',
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 4,
   },
-  invLineWide: {
-    height: 6,
+  invHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 1,
+  },
+  invCompany: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 7,
+    color: '#1A1A1A',
+    letterSpacing: 0.3,
+  },
+  invLogoBox: {
+    width: 14,
+    height: 14,
     borderRadius: 3,
+    backgroundColor: '#1A1A2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  invLogoTxt: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 8,
+    color: '#FFFFFF',
+  },
+  invMeta: {
+    fontFamily: 'Manrope_400Regular',
+    fontSize: 6,
+    color: '#8A8A8E',
+    marginBottom: 2,
+  },
+  invDivider: {
+    height: StyleSheet.hairlineWidth,
     backgroundColor: '#DCDCE0',
-    width: '100%',
+    marginVertical: 2,
   },
-  invLineNarrow: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#EEEEF1',
-    width: '70%',
-    marginTop: 8,
+  invTableHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
   },
-  scanList: { gap: 8 },
+  invCol: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 6,
+    color: '#8A8A8E',
+    letterSpacing: 0.3,
+  },
+  invTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  invRowTxt: {
+    fontFamily: 'Manrope_400Regular',
+    fontSize: 7,
+    color: '#1A1A1A',
+    lineHeight: 11,
+  },
+  scanList: { gap: 5 },
   scanPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#FFFFFF',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: O.borderLight,
   },
   scanPillTxt: {
-    flex: 1,
     color: O.text,
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: 'Manrope_500Medium',
+    lineHeight: 15,
+  },
+  scanPillStock: {
+    fontSize: 10,
+    fontFamily: 'Manrope_400Regular',
+    color: O.secondary,
+    lineHeight: 14,
+  },
+  scanPillAdd: {
+    fontFamily: 'Manrope_600SemiBold',
+    color: '#00A86B',
+  },
+  lowBadge: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  lowBadgeTxt: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 9,
+    color: '#FF6B35',
+  },
+  scanPillPrice: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 11,
+    color: '#5E35B1',
+    flexShrink: 0,
+  },
+  invAddBtn: {
+    backgroundColor: '#5E35B1',
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  invAddBtnTxt: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 12,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   finRoot: {
     flex: 1,
-    gap: 12,
-    paddingVertical: 10,
-    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 6,
   },
   finCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: O.borderLight,
-    padding: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  finRow: {
+  finCardLabel: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 9,
+    color: O.tertiary,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  finBigNum: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 22,
+    color: O.text,
+    letterSpacing: -0.8,
+    lineHeight: 26,
+  },
+  finSubRow: { marginTop: 5, gap: 2 },
+  finSubItem: {
+    fontFamily: 'Manrope_400Regular',
+    fontSize: 10,
+    color: O.secondary,
+  },
+  finSubAmt: {
+    fontFamily: 'Manrope_600SemiBold',
+    color: '#00A86B',
+  },
+  finExpRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
+    marginTop: 4,
   },
-  finLbl: { color: O.secondary },
-  finNum: { fontSize: 22, letterSpacing: -0.8, color: O.text, fontFamily: 'Manrope_700Bold' },
-  finNumLo: { fontSize: 22, letterSpacing: -0.8, color: '#4A4860', fontFamily: 'Manrope_700Bold' },
+  finExpLabel: {
+    fontFamily: 'Manrope_400Regular',
+    fontSize: 11,
+    color: O.text,
+  },
+  finExpAmt: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 11,
+    color: '#B71C1C',
+  },
+  finExpDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: O.borderLight,
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  finNetCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  finNetLabel: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 10,
+    color: O.text,
+    letterSpacing: 0.4,
+  },
+  finNetAmt: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 18,
+    color: '#00A86B',
+    letterSpacing: -0.5,
+  },
 });

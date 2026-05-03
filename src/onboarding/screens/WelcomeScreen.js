@@ -27,7 +27,7 @@ export default function WelcomeScreen({ navigation }) {
       />
       <StatusBar style="light" />
       <View style={styles.mid}>
-        <Text style={[OnboardingFonts.titleHuge, styles.brand]}>ColorTrack</Text>
+        <Text style={[OnboardingFonts.titleHuge, styles.brand]}>ColorBar Suite</Text>
         <View style={styles.accentRule} />
         <Text style={styles.tag}>Your color formulas. Always with you.</Text>
         <Text style={styles.tag2}>Your revenue and your expenses daily.</Text>

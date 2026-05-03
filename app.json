@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ColorTrack",
-    "slug": "ColorTrack",
+    "name": "ColorBar Suite",
+    "slug": "ColorBar-Suite",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach reference photos to the client dossier.",
-        "NSCalendarsUsageDescription": "ColorTrack shows your device calendar next to salon appointments (e.g. hours from Fresha, Booksy, iCloud).",
+        "NSCalendarsUsageDescription": "ColorBar Suite shows your device calendar next to salon appointments (e.g. hours from Fresha, Booksy, iCloud).",
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
@@ -47,7 +47,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow ColorTrack to add photos to the dossier."
+          "photosPermission": "Allow ColorBar Suite to add photos to the dossier."
         }
       ],
       "@react-native-community/datetimepicker",
@@ -62,7 +62,7 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "ColorTrack reads calendar events to show Booksy, Fresha and other bookings next to your salon schedule."
+          "calendarPermission": "ColorBar Suite reads calendar events to show Booksy, Fresha and other bookings next to your salon schedule."
         }
       ],
       "expo-apple-authentication",

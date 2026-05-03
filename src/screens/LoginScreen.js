@@ -153,7 +153,7 @@ export default function LoginScreen({ onLoggedIn }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.card, { width: cardMax, maxWidth: cardMax, alignSelf: 'center' }]}>
-            <Text style={styles.brand}>ColorTrack</Text>
+            <Text style={styles.brand}>ColorBar Suite</Text>
             <Text style={styles.headline}>
               {isSignUp ? 'Create your account' : 'Welcome back'}
             </Text>

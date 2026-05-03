@@ -26,6 +26,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import WelcomeScreen from './src/onboarding/screens/WelcomeScreen';
 import OnboardingCarouselScreen from './src/onboarding/screens/OnboardingCarouselScreen';
 import OnboardingAuthScreen from './src/onboarding/screens/OnboardingAuthScreen';
+import OnboardingEmailScreen from './src/onboarding/screens/OnboardingEmailScreen';
 import { isOnboardingComplete } from './src/onboarding/storage';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
@@ -329,7 +330,7 @@ export default function App() {
           {!signedIn ? (
             <GuestStack.Navigator
               key={`guest-${String(onboardingDone)}`}
-              initialRouteName={onboardingDone ? 'Login' : 'OnboardingWelcome'}
+              initialRouteName={onboardingDone ? 'OnboardingEmail' : 'OnboardingWelcome'}
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: '#FFFFFF' },
@@ -346,6 +347,9 @@ export default function App() {
               <GuestStack.Screen name="OnboardingCarousel" component={OnboardingCarouselScreen} />
               <GuestStack.Screen name="OnboardingAuth">
                 {(props) => <OnboardingAuthScreen {...props} onLoggedIn={() => setSignedIn(true)} />}
+              </GuestStack.Screen>
+              <GuestStack.Screen name="OnboardingEmail">
+                {(props) => <OnboardingEmailScreen {...props} onLoggedIn={() => setSignedIn(true)} />}
               </GuestStack.Screen>
               <GuestStack.Screen name="Login">
                 {(props) => <LoginScreen {...props} onLoggedIn={() => setSignedIn(true)} />}

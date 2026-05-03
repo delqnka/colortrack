@@ -396,7 +396,7 @@ export default function FinanceScreen() {
                     style={styles.input}
                     value={modal.title}
                     onChangeText={(t) => setModal({ ...modal, title: t })}
-                    placeholderTextColor="#8E8E93"
+                    placeholderTextColor="#8A8A8E"
                   />
                 </>
               ) : modal?.type === 'retail' ? (
@@ -406,7 +406,7 @@ export default function FinanceScreen() {
                     style={styles.input}
                     value={modal.description}
                     onChangeText={(t) => setModal({ ...modal, description: t })}
-                    placeholderTextColor="#8E8E93"
+                    placeholderTextColor="#8A8A8E"
                   />
 
                   <View style={styles.retailRow}>
@@ -417,7 +417,7 @@ export default function FinanceScreen() {
                         keyboardType="decimal-pad"
                         value={modal.quantity}
                         onChangeText={(t) => setModal({ ...modal, quantity: t })}
-                        placeholderTextColor="#8E8E93"
+                        placeholderTextColor="#8A8A8E"
                       />
                     </View>
                     <View style={[styles.retailCol, styles.retailColWide]}>
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   },
   statOut: { color: '#B71C1C' },
   statNet: { color: '#1565C0' },
-  statLbl: { ...Type.tabBarLabel, color: '#636366' },
+  statLbl: { ...Type.tabBarLabel, color: '#AEAEB2' },
   addCardsCol: { gap: 10, marginBottom: 22 },
   addCard: {
     flexDirection: 'row',
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   },
   lineMain: { flex: 1, minWidth: 0 },
   lineTitle: { ...Type.listPrimary, color: '#1C1C1E' },
-  lineSub: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 4 },
+  lineSub: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: '#8A8A8E', marginTop: 4 },
   lineAmt: { ...Type.price },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
@@ -589,10 +589,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
     marginRight: 8,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#E5E5EA',
   },
   chipOn: { backgroundColor: 'rgba(94, 53, 177, 0.12)', borderColor: CHIP_BORDER_ON },
   chipTxt: { ...Type.secondary, fontFamily: FontFamily.medium, color: '#1C1C1E' },
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.semibold,
-    color: '#8E8E93',
+    color: '#8A8A8E',
     paddingLeft: 4,
   },
   retailRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 4 },

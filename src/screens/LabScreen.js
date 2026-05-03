@@ -302,7 +302,7 @@ export default function LabScreen({ navigation }) {
           <TextInput
             style={styles.searchInput}
             placeholder="Search"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor="#8A8A8E"
             value={searchQ}
             onChangeText={onSearchChange}
             autoCapitalize="none"
@@ -499,7 +499,7 @@ export default function LabScreen({ navigation }) {
             <TextInput
               style={styles.modalInput}
               placeholder="Search"
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               value={clientQuery}
               onChangeText={onClientQueryChange}
               autoCapitalize="none"
@@ -549,7 +549,7 @@ export default function LabScreen({ navigation }) {
             <TextInput
               style={styles.modalInput}
               placeholder="Required"
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               value={saveTplName}
               onChangeText={setSaveTplName}
             />
@@ -598,7 +598,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: 15,
     lineHeight: typeLh(15),
-    color: '#8E8E93',
+    color: '#8A8A8E',
     textAlign: 'center',
     paddingHorizontal: 32,
     paddingVertical: 40,
@@ -641,7 +641,9 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -660,39 +662,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
     marginRight: 8,
   },
   chipOn: {
     backgroundColor: '#FFFFFF',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#1C1C1E',
+    borderWidth: 1.5,
+    borderColor: '#0D0D0D',
   },
   chipTxt: { fontSize: 14, lineHeight: typeLh(14), fontFamily: FontFamily.regular, color: '#1C1C1E' },
   chipTxtOn: { fontFamily: FontFamily.semibold, color: '#1C1C1E' },
   sectionLabel: {
     ...Type.sectionLabel,
     marginBottom: 10,
-    color: '#000000',
   },
   visitCardOuter: {
     marginBottom: 12,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.12,
+    shadowRadius: 15,
+    elevation: 10,
   },
   visitCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EDEDED',
   },
   visitMain: { flex: 1, padding: 14 },
   visitTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -704,12 +705,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.41,
   },
   visitProc: { ...Type.listPrimary, color: '#1C1C1E', marginTop: 4 },
-  visitDate: { ...Type.secondary, marginTop: 4, color: '#8E8E93' },
-  visitPreview: { ...Type.secondary, marginTop: 8, color: '#636366' },
+  visitDate: { ...Type.secondary, marginTop: 4, color: '#8A8A8E' },
+  visitPreview: { ...Type.secondary, marginTop: 8, color: '#8A8A8E' },
   visitMeta: {
     ...Type.tabBarLabel,
     marginTop: 6,
-    color: '#8E8E93',
+    color: '#8A8A8E',
   },
   visitActions: {
     width: 92,
@@ -730,7 +731,7 @@ const styles = StyleSheet.create({
   visitActLabel: {
     ...Type.tabBarLabel,
     lineHeight: typeLh(11),
-    color: '#636366',
+    color: '#8A8A8E',
     marginTop: 3,
     textAlign: 'center',
   },
@@ -743,13 +744,13 @@ const styles = StyleSheet.create({
   },
   tplRowOuter: {
     marginBottom: 10,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.12,
+    shadowRadius: 15,
+    elevation: 10,
   },
   tplRow: {
     flexDirection: 'row',
@@ -757,13 +758,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 14,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EDEDED',
   },
   tplName: { ...Type.listPrimary, color: '#000000' },
-  tplMeta: { ...Type.secondary, marginTop: 2, color: '#8E8E93' },
+  tplMeta: { ...Type.secondary, marginTop: 2, color: '#8A8A8E' },
   tplApply: {
     backgroundColor: BRAND_PURPLE,
     paddingHorizontal: 14,
@@ -799,7 +798,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: 13,
     lineHeight: typeLh(13),
-    color: '#636366',
+    color: '#8A8A8E',
     marginBottom: 16,
     letterSpacing: -0.24,
   },
@@ -811,7 +810,7 @@ const styles = StyleSheet.create({
   },
   modalInput: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#C6C6C8',
+    borderColor: '#E5E5EA',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -824,15 +823,15 @@ const styles = StyleSheet.create({
   modalDatePick: {
     marginBottom: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#C6C6C8',
+    borderColor: '#E5E5EA',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
     minHeight: 48,
   },
-  clientHit: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F2F2F7' },
+  clientHit: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E5EA' },
   clientHitName: { ...Type.listPrimary, color: '#000000' },
-  clientHitPhone: { ...Type.secondary, color: '#8E8E93', marginTop: 2 },
+  clientHitPhone: { ...Type.secondary, color: '#8A8A8E', marginTop: 2 },
   modalCancel: { marginTop: 12, alignItems: 'center' },
   modalCancelTxt: { fontSize: 15, lineHeight: typeLh(15), fontFamily: FontFamily.regular, color: BRAND_PURPLE },
   modalPrimary: {

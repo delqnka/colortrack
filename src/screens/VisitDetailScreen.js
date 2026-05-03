@@ -30,7 +30,7 @@ const SECTION_META = {
 const UNIT_SET = new Set(['g', 'oz', 'ml']);
 
 function sectionMeta(key) {
-  return SECTION_META[key] ?? { label: key, color: '#8E8E93' };
+  return SECTION_META[key] ?? { label: key, color: '#8A8A8E' };
 }
 
 function formatLine(fl) {
@@ -237,7 +237,7 @@ export default function VisitDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  miss: { textAlign: 'center', marginTop: 48, ...Type.secondary, color: '#8E8E93' },
+  miss: { textAlign: 'center', marginTop: 48, ...Type.secondary, color: '#8A8A8E' },
 
   scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
 
@@ -334,10 +334,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.13,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.12,
+    shadowRadius: 15,
+    elevation: 10,
   },
   mixCardHeader: {
     flexDirection: 'row',

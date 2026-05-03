@@ -532,11 +532,11 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           </View>
           <Text style={styles.pickPurpose}>Who is this formula for?</Text>
           <View style={styles.pickSearchRow}>
-            <SFIcon name="search-outline" iosName="magnifyingglass" size={20} color="#8E8E93" style={{ marginRight: 8 }} />
+            <SFIcon name="search-outline" iosName="magnifyingglass" size={20} color="#8A8A8E" style={{ marginRight: 8 }} />
             <TextInput
               style={styles.pickSearchField}
               placeholder="Search clients"
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               value={clientPickQuery}
               onChangeText={onClientPickQueryChange}
               autoCapitalize="none"
@@ -743,10 +743,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             hitSlop={10}
             style={{ marginLeft: 'auto' }}
           >
-            <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8E8E93" />
+            <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8A8A8E" />
           </TouchableOpacity>
         ) : (
-          <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#C6C6C8" style={{ marginLeft: 'auto' }} />
+          <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#AEAEB2" style={{ marginLeft: 'auto' }} />
         )}
       </TouchableOpacity>
 
@@ -757,7 +757,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           <TextInput
             style={styles.input}
             placeholder="Brand / name  e.g. Wella Koleston 8/0"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor="#8A8A8E"
             value={row.brand}
             onChangeText={(t) => updateDraftRow(row.key, { brand: t })}
             inputAccessoryViewID={iosAccessoryId}
@@ -773,7 +773,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         <TextInput
           style={[styles.input, styles.amountInput]}
           placeholder="0"
-          placeholderTextColor="#8E8E93"
+          placeholderTextColor="#8A8A8E"
           value={row.amount}
           onChangeText={(t) => updateDraftRow(row.key, { amount: t })}
           keyboardType="decimal-pad"
@@ -847,10 +847,10 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               hitSlop={10}
               style={{ marginLeft: 'auto' }}
             >
-              <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8E8E93" />
+              <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8A8A8E" />
             </TouchableOpacity>
           ) : (
-            <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#C6C6C8" style={{ marginLeft: 'auto' }} />
+            <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#AEAEB2" style={{ marginLeft: 'auto' }} />
           )}
         </TouchableOpacity>
 
@@ -860,7 +860,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             <TextInput
               style={styles.input}
               placeholder="e.g. Wella Welloxon 6%"
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               value={draftDeveloper.brand}
               onChangeText={(t) => setDraftDeveloper((d) => ({ ...d, brand: t }))}
               inputAccessoryViewID={iosAccessoryId}
@@ -875,7 +875,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           <TextInput
             style={[styles.input, styles.amountInput]}
             placeholder="0"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor="#8A8A8E"
             value={draftDeveloper.amount}
             onChangeText={(t) => setDraftDeveloper((d) => ({ ...d, amount: t }))}
             keyboardType="decimal-pad"
@@ -950,7 +950,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       <TextInput
         style={styles.input}
         placeholder="e.g. Full colour + toner"
-        placeholderTextColor="#8E8E93"
+        placeholderTextColor="#8A8A8E"
         value={procedureName}
         onChangeText={setProcedureName}
         inputAccessoryViewID={iosAccessoryId}
@@ -1038,7 +1038,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           <TextInput
             style={styles.invSearch}
             placeholder="Search by name, brand…"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor="#8A8A8E"
             value={invSearch}
             onChangeText={onInvSearchChange}
             autoCorrect={false}
@@ -1157,9 +1157,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    backgroundColor: '#E8E8ED',
+    backgroundColor: '#FFFFFF',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#C6C6C8',
+    borderTopColor: '#E5E5EA',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -1210,7 +1210,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 12,
     lineHeight: typeLh(12),
-    color: '#8E8E93',
+    color: '#8A8A8E',
     paddingHorizontal: 24,
     marginBottom: 10,
     marginTop: 4,
@@ -1243,7 +1243,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: 13,
     lineHeight: typeLh(13),
-    color: '#8E8E93',
+    color: '#8A8A8E',
     marginBottom: 20,
     letterSpacing: -0.2,
   },
@@ -1431,7 +1431,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#8A8A8E',
     marginBottom: 6,
     marginTop: 2,
     letterSpacing: 0.1,
@@ -1439,7 +1439,7 @@ const styles = StyleSheet.create({
   fieldLabelOr: {
     fontFamily: FontFamily.regular,
     fontSize: 11,
-    color: '#C6C6C8',
+    color: '#AEAEB2',
     textAlign: 'center',
     marginVertical: 8,
     letterSpacing: 0.2,
@@ -1472,7 +1472,7 @@ const styles = StyleSheet.create({
   stockPickerName: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#8A8A8E',
     marginTop: 1,
   },
   addColourRowBtn: {
@@ -1483,7 +1483,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 14,
     borderRadius: 12,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
   },
   addColourRowBtnTxt: {
     fontFamily: FontFamily.semibold,
@@ -1500,7 +1502,7 @@ const styles = StyleSheet.create({
   },
   unitToggle: {
     flexDirection: 'row',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: 'rgba(94,53,177,0.07)',
     borderRadius: 10,
     padding: 3,
     gap: 2,
@@ -1521,7 +1523,7 @@ const styles = StyleSheet.create({
   unitBtnTxt: {
     fontFamily: FontFamily.medium,
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#8A8A8E',
   },
   unitBtnTxtActive: {
     color: '#1C1C1E',
@@ -1587,7 +1589,7 @@ const styles = StyleSheet.create({
   sectionDivider: {
     fontFamily: FontFamily.semibold,
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#8A8A8E',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     marginTop: 20,
@@ -1684,7 +1686,7 @@ const styles = StyleSheet.create({
   pickEmpty: {
     fontFamily: FontFamily.regular,
     fontSize: 15,
-    color: '#8E8E93',
+    color: '#8A8A8E',
     textAlign: 'center',
     paddingVertical: 28,
     paddingHorizontal: 20,
@@ -1733,7 +1735,7 @@ const styles = StyleSheet.create({
   invRowMeta: { marginTop: 2, ...Type.secondary },
   invEmpty: {
     textAlign: 'center',
-    color: '#8E8E93',
+    color: '#8A8A8E',
     fontSize: 15,
     fontFamily: FontFamily.regular,
     paddingVertical: 28,

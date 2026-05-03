@@ -275,7 +275,7 @@ export default function ProfileScreen() {
               value={nameDraft}
               onChangeText={setNameDraft}
               placeholder=""
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               autoCapitalize="words"
               editable={!saving}
             />
@@ -286,7 +286,7 @@ export default function ProfileScreen() {
               value={emailDraft}
               onChangeText={setEmailDraft}
               placeholder=""
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
@@ -301,7 +301,7 @@ export default function ProfileScreen() {
                   value={currentPasswordDraft}
                   onChangeText={setCurrentPasswordDraft}
                   placeholder=""
-                  placeholderTextColor="#8E8E93"
+                  placeholderTextColor="#8A8A8E"
                   secureTextEntry
                   autoComplete="password"
                   editable={!saving}
@@ -315,7 +315,7 @@ export default function ProfileScreen() {
               value={newPasswordDraft}
               onChangeText={setNewPasswordDraft}
               placeholder=""
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               secureTextEntry
               autoComplete="password-new"
               editable={!saving}
@@ -327,7 +327,7 @@ export default function ProfileScreen() {
               value={confirmPasswordDraft}
               onChangeText={setConfirmPasswordDraft}
               placeholder=""
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor="#8A8A8E"
               secureTextEntry
               autoComplete="password-new"
               editable={!saving}
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   emailMuted: {
     marginTop: 4,
     ...Type.secondary,
-    color: '#8E8E93',
+    color: '#8A8A8E',
     alignSelf: 'stretch',
     textAlign: 'center',
   },

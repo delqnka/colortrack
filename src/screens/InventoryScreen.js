@@ -1521,7 +1521,7 @@ const styles = StyleSheet.create({
   },
   lowPickRowMain: { flex: 1, paddingRight: 10 },
   lowPickName: { ...Type.listPrimary, color: '#1C1C1E' },
-  lowPickMeta: { marginTop: 4, ...Type.secondary, color: '#8E8E93' },
+  lowPickMeta: { marginTop: 4, ...Type.secondary, color: '#8A8A8E' },
   lowPickQty: {
     marginRight: 4,
     fontSize: 15,

@@ -207,6 +207,7 @@ export default function HomeScreen() {
   const homeFocusedRef = useRef(false);
   const homeFocusInitial = useRef(true);
   const dateStripScrollRef = useRef(null);
+  const homeDateCacheRef = useRef(new Map()); // per-date data cache
   const [financeSummary, setFinanceSummary] = useState(null);
   const { currency } = useCurrency();
 
@@ -257,19 +258,15 @@ export default function HomeScreen() {
   const refreshHomeDataSilent = useCallback(async () => {
     const ymd = toYMDLocal(selectedDateRef.current);
     try {
-      const dashP = apiGet(`/api/dashboard/day?date=${encodeURIComponent(ymd)}`, {
+      const home = await apiGet(`/api/dashboard/home?date=${encodeURIComponent(ymd)}`, {
         allowStaleCache: false,
       }).catch(() => null);
-      const labP = apiGet('/api/lab/stats', { allowStaleCache: false }).catch(() => null);
-      const finP = apiGet(`/api/finance/summary?date=${encodeURIComponent(ymd)}`, {
-        allowStaleCache: false,
-      }).catch(() => null);
-      const [dash, lab, fin] = await Promise.all([dashP, labP, finP]);
       if (toYMDLocal(selectedDateRef.current) !== ymd) return;
-      /** Keep prior dashboard/lab data on transient failures to avoid FALLBACK placeholders + wiping lab stats */
-      setData((prev) => (dash != null ? dash : prev != null ? prev : FALLBACK_DASH));
-      setLabStats((prev) => (lab != null ? lab : prev));
-      setFinanceSummary((prev) => (fin != null ? fin : prev));
+      if (home != null) {
+        setData(home);
+        setFinanceSummary({ service_income_cents: home.income_cents, expenses_cents: home.expense_cents, product_sales_cents: 0 });
+        homeDateCacheRef.current.set(ymd, home);
+      }
     } catch {
       if (toYMDLocal(selectedDateRef.current) !== ymd) return;
     }
@@ -308,26 +305,41 @@ export default function HomeScreen() {
     return () => cancelAnimationFrame(id);
   }, [strip, selectedDate, windowWidth]);
 
+  // Load labStats once — it's date-independent
+  useEffect(() => {
+    apiGet('/api/lab/stats').then(lab => {
+      if (lab != null) setLabStats(lab);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    setFinanceSummary(null);
+    const ymd = toYMDLocal(selectedDate);
+
+    // Show cached data immediately if available
+    const cached = homeDateCacheRef.current.get(ymd);
+    if (cached) {
+      setData(cached);
+      setFinanceSummary({ service_income_cents: cached.income_cents ?? 0, expenses_cents: cached.expense_cents ?? 0, product_sales_cents: 0 });
+    } else {
+      setFinanceSummary(null);
+    }
+
     (async () => {
-      if (!hasFetchedOnce.current) setLoading(true);
+      if (!hasFetchedOnce.current && !cached) setLoading(true);
       try {
-        const ymd = toYMDLocal(selectedDate);
-        const dashP = apiGet(`/api/dashboard/day?date=${encodeURIComponent(ymd)}`).catch(() => null);
-        const labP = apiGet('/api/lab/stats').catch(() => null);
-        const finP = apiGet(`/api/finance/summary?date=${encodeURIComponent(ymd)}`).catch(() => null);
-        const [dash, lab, fin] = await Promise.all([dashP, labP, finP]);
+        const home = await apiGet(`/api/dashboard/home?date=${encodeURIComponent(ymd)}`).catch(() => null);
         if (!cancelled) {
-          setData((prev) => (dash != null ? dash : prev != null ? prev : FALLBACK_DASH));
-          setLabStats((prev) => (lab != null ? lab : prev));
-          setFinanceSummary(fin ?? null);
+          if (home != null) {
+            setData(home);
+            setFinanceSummary({ service_income_cents: home.income_cents ?? 0, expenses_cents: home.expense_cents ?? 0, product_sales_cents: 0 });
+            homeDateCacheRef.current.set(ymd, home);
+          } else {
+            setData((prev) => prev ?? FALLBACK_DASH);
+          }
         }
       } catch {
-        if (!cancelled) {
-          setData((prev) => (prev != null ? prev : FALLBACK_DASH));
-        }
+        if (!cancelled) setData((prev) => prev ?? FALLBACK_DASH);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -335,9 +347,7 @@ export default function HomeScreen() {
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [selectedDate]);
 
   useEffect(() => {

@@ -547,6 +547,37 @@ app.get('/api/dashboard/today', async (req, res, next) => {
   }
 });
 
+// Lightweight combined endpoint for HomeScreen — 1 round trip, 4 DB queries total.
+// Replaces two separate calls: /api/dashboard/day + /api/finance/summary
+app.get('/api/dashboard/home', async (req, res, next) => {
+  try {
+    const raw = req.query.date;
+    if (!raw || typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const [dash, svcIncome, productIncome, expenseTotal] = await Promise.all([
+      buildDashboard(sql, raw, sid),
+      sql`SELECT COALESCE(SUM(amount_paid_cents),0)::bigint AS s FROM visits
+          WHERE salon_id = ${sid} AND visit_date = ${raw}::date`,
+      sql`SELECT COALESCE(SUM(amount_cents),0)::bigint AS s FROM salon_product_sales
+          WHERE salon_id = ${sid} AND sale_date = ${raw}::date`,
+      sql`SELECT COALESCE(SUM(amount_cents),0)::bigint AS s FROM salon_expenses
+          WHERE salon_id = ${sid} AND expense_date = ${raw}::date`,
+    ]);
+    res.json({
+      ...dash,
+      dashboardDate: raw,
+      banner: { title: 'Schedule', subtitle: '' },
+      income_cents: Number(svcIncome[0].s) + Number(productIncome[0].s),
+      expense_cents: Number(expenseTotal[0].s),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.get('/api/dashboard/day', async (req, res, next) => {
   try {
     const raw = req.query.date;

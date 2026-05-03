@@ -1010,6 +1010,7 @@ app.get('/api/inventory', async (req, res, next) => {
         low_stock_threshold,
         price_per_unit_cents,
         supplier_hint,
+        sell_price_cents,
         (quantity <= low_stock_threshold) AS is_low_stock
       FROM inventory_items
       WHERE salon_id = ${req.auth.salonId}
@@ -1203,6 +1204,11 @@ app.post('/api/inventory', async (req, res, next) => {
       if (!Number.isFinite(cents) || cents < 0) return res.status(400).json({ error: 'bad_request' });
       price_per_unit_cents = Math.min(cents, 1000000000);
     }
+    let sell_price_cents = null;
+    if (b.sell_price_cents !== undefined && b.sell_price_cents !== null && b.sell_price_cents !== '') {
+      const cents = Math.round(Number(b.sell_price_cents));
+      if (Number.isFinite(cents) && cents >= 0) sell_price_cents = Math.min(cents, 1000000000);
+    }
 
     const sql = getSql();
     const rows = await sql`
@@ -1218,7 +1224,8 @@ app.post('/api/inventory', async (req, res, next) => {
         quantity,
         low_stock_threshold,
         price_per_unit_cents,
-        supplier_hint
+        supplier_hint,
+        sell_price_cents
       )
       VALUES (
         ${req.auth.salonId},
@@ -1232,7 +1239,8 @@ app.post('/api/inventory', async (req, res, next) => {
         ${quantity},
         ${low_stock_threshold},
         ${price_per_unit_cents},
-        ${supplier_hint}
+        ${supplier_hint},
+        ${sell_price_cents}
       )
       RETURNING
         id,
@@ -1247,6 +1255,7 @@ app.post('/api/inventory', async (req, res, next) => {
         low_stock_threshold,
         price_per_unit_cents,
         supplier_hint,
+        sell_price_cents,
         (quantity <= low_stock_threshold) AS is_low_stock
     `;
     res.status(201).json(rows[0]);
@@ -1329,6 +1338,7 @@ app.get('/api/inventory/:id', async (req, res, next) => {
         low_stock_threshold,
         price_per_unit_cents,
         supplier_hint,
+        sell_price_cents,
         (quantity <= low_stock_threshold) AS is_low_stock
       FROM inventory_items
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
@@ -1437,6 +1447,15 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         newPrice = Math.min(cents, 1000000000);
       }
     }
+    let newSellPrice = cur.sell_price_cents ?? null;
+    if (b.sell_price_cents !== undefined) {
+      if (b.sell_price_cents === null || b.sell_price_cents === '') {
+        newSellPrice = null;
+      } else {
+        const cents = Math.round(Number(b.sell_price_cents));
+        if (Number.isFinite(cents) && cents >= 0) newSellPrice = Math.min(cents, 1000000000);
+      }
+    }
 
     const oldQty = Number(cur.quantity);
     const delta = newQty - oldQty;
@@ -1463,7 +1482,8 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         quantity = ${newQty},
         low_stock_threshold = ${newThresh},
         unit = ${newUnit},
-        category = ${newCategory}
+        category = ${newCategory},
+        sell_price_cents = ${newSellPrice}
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       RETURNING
         id,
@@ -1478,6 +1498,7 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         low_stock_threshold,
         price_per_unit_cents,
         supplier_hint,
+        sell_price_cents,
         (quantity <= low_stock_threshold) AS is_low_stock
     `;
     res.json(updated[0]);

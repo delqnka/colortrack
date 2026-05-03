@@ -294,6 +294,7 @@ async function ensureSchema(sql) {
     )
   `;
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS custom_subcategory TEXT`;
+  await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sell_price_cents BIGINT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_global_products_brand ON global_products(brand)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_global_products_count ON global_products(confirmed_count DESC)`;
 }

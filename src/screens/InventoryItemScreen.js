@@ -103,6 +103,7 @@ export default function InventoryItemScreen({ route, navigation }) {
   const [shadeStr, setShadeStr] = useState('');
   const [packageSizeStr, setPackageSizeStr] = useState('');
   const [priceStr, setPriceStr] = useState('');
+  const [sellPriceStr, setSellPriceStr] = useState('');
   const [categoryPreset, setCategoryPreset] = useState('consumable');
   const [categoryCustom, setCategoryCustom] = useState('');
   const [categoryDraft, setCategoryDraft] = useState('');
@@ -132,6 +133,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       setShadeStr(row.shade_code || '');
       setPackageSizeStr(row.package_size || '');
       setPriceStr(priceTextFromCents(row.price_per_unit_cents));
+      setSellPriceStr(priceTextFromCents(row.sell_price_cents));
       const rc = row.category || 'consumable';
       if (PRESET_CATEGORY_KEYS.has(rc)) {
         setCategoryPreset(rc);
@@ -172,6 +174,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       setShadeStr('');
       setPackageSizeStr('');
       setPriceStr('');
+      setSellPriceStr('');
       setCategoryPreset(initialPresetCategory);
       setCategoryCustom(initialCategory && !PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : '');
       setCategoryDraft('');
@@ -235,6 +238,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
           custom_subcategory: subcategoryStr.trim() || null,
+          sell_price_cents: centsFromPriceText(sellPriceStr),
         });
         navigation.goBack();
       } else {
@@ -366,8 +370,10 @@ export default function InventoryItemScreen({ route, navigation }) {
             </View>
           ) : null}
 
-          {/* ── Price ── */}
-          <Text style={styles.label}>Price ({currency})</Text>
+          {/* ── Price (cost) ── */}
+          <Text style={styles.label}>
+            {categoryPreset === 'retail' ? `Cost price (${currency})` : `Price (${currency})`}
+          </Text>
           <TextInput
             style={styles.input}
             placeholder="0.00"
@@ -376,6 +382,34 @@ export default function InventoryItemScreen({ route, navigation }) {
             onChangeText={setPriceStr}
             keyboardType="decimal-pad"
           />
+
+          {/* ── Sell price + margin — retail only ── */}
+          {categoryPreset === 'retail' ? (() => {
+            const cost = centsFromPriceText(priceStr);
+            const sell = centsFromPriceText(sellPriceStr);
+            const marginPct = cost != null && sell != null && cost > 0 && sell > cost
+              ? Math.round((sell - cost) / sell * 100)
+              : null;
+            return (
+              <>
+                <Text style={styles.label}>Sell price ({currency})</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  placeholderTextColor="#AEAEB2"
+                  value={sellPriceStr}
+                  onChangeText={setSellPriceStr}
+                  keyboardType="decimal-pad"
+                />
+                {marginPct != null ? (
+                  <View style={styles.marginRow}>
+                    <Text style={styles.marginTxt}>Margin  </Text>
+                    <Text style={styles.marginPct}>{marginPct}%</Text>
+                  </View>
+                ) : null}
+              </>
+            );
+          })() : null}
 
           {/* ── Unit + Quantity inline ── */}
           <Text style={styles.label}>Stock</Text>
@@ -530,6 +564,23 @@ const styles = StyleSheet.create({
   },
   sectionBtnTxtOn: {
     color: '#FFFFFF',
+  },
+  marginRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    marginTop: -6,
+  },
+  marginTxt: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: '#8A8A8E',
+  },
+  marginPct: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: '#00A86B',
+    letterSpacing: -0.2,
   },
   labelHint: {
     fontFamily: FontFamily.regular,

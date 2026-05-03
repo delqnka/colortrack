@@ -772,10 +772,15 @@ export default function InventoryScreen({ navigation }) {
                 {list.map((item) => {
                   const detailParts = [item.brand, item.shade_code, item.package_size].filter(Boolean);
                   const metaText = detailParts.join(' · ');
-                  const priceLine =
-                    item.price_per_unit_cents != null
-                      ? formatMinorFromStoredCents(item.price_per_unit_cents, currency)
-                      : null;
+                  const isRetail = item.category === 'retail';
+                  const costLine = item.price_per_unit_cents != null
+                    ? formatMinorFromStoredCents(item.price_per_unit_cents, currency) : null;
+                  const sellLine = item.sell_price_cents != null
+                    ? formatMinorFromStoredCents(item.sell_price_cents, currency) : null;
+                  const priceLine = isRetail ? sellLine : costLine;
+                  const marginPct = isRetail && item.sell_price_cents > 0 && item.price_per_unit_cents > 0
+                    ? Math.round((item.sell_price_cents - item.price_per_unit_cents) / item.sell_price_cents * 100)
+                    : null;
                   return (
                     <TouchableOpacity
                       key={item.id}
@@ -802,6 +807,9 @@ export default function InventoryScreen({ navigation }) {
                           </View>
                           {priceLine ? (
                             <Text style={styles.rowPrice} numberOfLines={1}>{priceLine}</Text>
+                          ) : null}
+                          {marginPct != null ? (
+                            <Text style={styles.rowMargin}>{marginPct}%</Text>
                           ) : null}
                         </View>
                         <SFIcon
@@ -1482,6 +1490,13 @@ const styles = StyleSheet.create({
   },
   rowPriceUnit: { display: 'none' },
   rowPricePlaceholder: { display: 'none' },
+  rowMargin: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    color: '#00A86B',
+    letterSpacing: -0.1,
+    marginTop: 1,
+  },
   chevronText: {
     fontSize: 20,
     lineHeight: typeLh(20),

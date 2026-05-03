@@ -47,6 +47,89 @@ function extForType(contentType) {
   return ALLOWED_TYPES.get(contentType) || null;
 }
 
+/** Presigned uploads for invoice import OCR (temporary objects). */
+const INVOICE_IMPORT_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/jpg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+  ['application/pdf', 'pdf'],
+]);
+
+function normalizeInvoiceImportContentType(raw) {
+  if (typeof raw !== 'string') return null;
+  const s = raw.split(';')[0].trim().toLowerCase();
+  if (s === 'image/jpg') return 'image/jpeg';
+  return INVOICE_IMPORT_TYPES.has(s) ? s : null;
+}
+
+function invoiceImportExt(contentType) {
+  return INVOICE_IMPORT_TYPES.get(contentType) || null;
+}
+
+function invoiceImportPrefixForSalon(salonId) {
+  const sid = Number(salonId);
+  if (!Number.isFinite(sid) || sid <= 0) return null;
+  return `salons/${sid}/invoice-imports/`;
+}
+
+function buildInvoiceImportKey(salonId, contentType) {
+  const prefix = invoiceImportPrefixForSalon(salonId);
+  const ext = invoiceImportExt(contentType);
+  if (!prefix || !ext) return null;
+  return `${prefix}${randomUUID()}.${ext}`;
+}
+
+function keyBelongsToSalonInvoiceImport(salonId, key) {
+  const prefix = invoiceImportPrefixForSalon(salonId);
+  if (typeof key !== 'string' || key.includes('..') || !prefix) return false;
+  if (!key.startsWith(prefix)) return false;
+  const rest = key.slice(prefix.length);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|pdf)$/i.test(rest);
+}
+
+/** Presigned uploads for service price-list OCR (temporary images only). */
+function serviceImportPrefixForSalon(salonId) {
+  const sid = Number(salonId);
+  if (!Number.isFinite(sid) || sid <= 0) return null;
+  return `salons/${sid}/service-imports/`;
+}
+
+function buildServiceImportKey(salonId, contentType) {
+  const prefix = serviceImportPrefixForSalon(salonId);
+  const ext = extForType(contentType);
+  if (!prefix || !ext) return null;
+  return `${prefix}${randomUUID()}.${ext}`;
+}
+
+function keyBelongsToSalonServiceImport(salonId, key) {
+  const prefix = serviceImportPrefixForSalon(salonId);
+  if (typeof key !== 'string' || key.includes('..') || !prefix) return false;
+  if (!key.startsWith(prefix)) return false;
+  const rest = key.slice(prefix.length);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i.test(rest);
+}
+
+async function getObjectBuffer(key) {
+  const client = getS3Client();
+  const out = await client.send(
+    new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+    }),
+  );
+  const headCt = typeof out.ContentType === 'string' ? out.ContentType.split(';')[0].trim().toLowerCase() : '';
+  if (!out.Body) {
+    return { buffer: Buffer.alloc(0), contentType: headCt };
+  }
+  const chunks = [];
+  for await (const chunk of out.Body) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const buffer = Buffer.concat(chunks);
+  return { buffer, contentType: headCt };
+}
+
 function keyPrefixForClient(clientId) {
   return `clients/${clientId}/`;
 }
@@ -129,13 +212,19 @@ async function deleteObject(key) {
 module.exports = {
   r2Configured,
   normalizeContentType,
+  normalizeInvoiceImportContentType,
   buildObjectKey,
   buildAvatarKey,
   buildStaffAvatarKey,
+  buildInvoiceImportKey,
+  buildServiceImportKey,
   keyBelongsToClient,
   keyBelongsToClientAvatar,
   keyBelongsToStaffAvatar,
+  keyBelongsToSalonInvoiceImport,
+  keyBelongsToSalonServiceImport,
   presignPut,
   presignGet,
+  getObjectBuffer,
   deleteObject,
 };

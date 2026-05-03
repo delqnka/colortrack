@@ -9,13 +9,15 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  DeviceEventEmitter,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { apiDelete, apiGet, apiPatch, apiPost, saveSessionToken } from '../api/client';
+import { apiDelete, apiGet, apiPatch, apiPost, saveSessionToken, resolveImagePublicUri } from '../api/client';
 import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 
 const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
@@ -124,6 +126,7 @@ export default function ProfileScreen() {
       setCurrentPasswordDraft('');
       setNewPasswordDraft('');
       setConfirmPasswordDraft('');
+      DeviceEventEmitter.emit('colortrack:profile-changed');
     } catch (e) {
       Alert.alert('', messageForProfileSaveFailure(e));
     } finally {
@@ -163,6 +166,7 @@ export default function ProfileScreen() {
         contentType: presign.contentType,
       });
       setMe((prev) => (prev ? { ...prev, avatar_url: nextUrl } : prev));
+      DeviceEventEmitter.emit('colortrack:profile-changed');
     } catch (e) {
       Alert.alert('', e.message || 'Upload failed');
     } finally {
@@ -205,7 +209,11 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const avatarUri = me?.avatar_url || DEFAULT_AVATAR;
+  const rawStaffAvatar = String(me?.avatar_url ?? '').trim();
+  const avatarUri =
+    rawStaffAvatar.length > 0
+      ? resolveImagePublicUri(rawStaffAvatar) || DEFAULT_AVATAR
+      : DEFAULT_AVATAR;
   const titleLine = me?.display_name?.trim() || me?.email?.split('@')[0] || '';
 
   return (
@@ -371,11 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  topTitle: {
-    fontSize: 18,
-    fontFamily: FontFamily.semibold,
-    color: '#1C1C1E',
-  },
+  topTitle: { ...Type.screenTitle, color: '#1C1C1E' },
   loadingBox: {
     flex: 1,
     justifyContent: 'center',
@@ -410,25 +414,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   namePreview: {
-    fontSize: 20,
-    fontFamily: FontFamily.semibold,
+    ...Type.screenTitle,
     color: '#1C1C1E',
     alignSelf: 'stretch',
     textAlign: 'center',
   },
   emailMuted: {
     marginTop: 4,
-    fontSize: 14,
-    fontFamily: FontFamily.regular,
+    ...Type.secondary,
     color: '#8E8E93',
     alignSelf: 'stretch',
     textAlign: 'center',
   },
   salonMuted: {
     marginTop: 2,
-    fontSize: 13,
-    fontFamily: FontFamily.regular,
-    color: '#AEAEB2',
+    ...Type.greetingDate,
     alignSelf: 'stretch',
     textAlign: 'center',
   },
@@ -436,7 +436,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: 16,
     marginBottom: 8,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: typeLh(13),
     fontFamily: FontFamily.medium,
     color: '#1C1C1E',
   },
@@ -450,7 +451,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     backgroundColor: '#FFFFFF',
@@ -469,8 +471,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: FontFamily.semibold,
+    ...Type.buttonLabel,
   },
   signOut: {
     marginTop: 32,
@@ -478,8 +479,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   signOutText: {
-    fontSize: 16,
-    fontFamily: FontFamily.medium,
+    ...Type.buttonLabel,
     color: '#C62828',
   },
   deleteFooter: {
@@ -493,8 +493,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   deleteProfileText: {
-    fontSize: 16,
-    fontFamily: FontFamily.semibold,
+    ...Type.buttonLabel,
     color: '#8E1616',
   },
 });

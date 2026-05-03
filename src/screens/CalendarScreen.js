@@ -21,6 +21,9 @@ import {
   fetchDeviceEventsForDay,
   getDeviceCalendarPermissionStatus,
 } from '../lib/deviceCalendar';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
+import { hapticImpactLight } from '../theme/haptics';
 
 const WD = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -250,6 +253,7 @@ export default function CalendarScreen() {
 
   const pickDay = (dayNum) => {
     if (!dayNum) return;
+    hapticImpactLight();
     setSelected(new Date(cursor.y, cursor.m, dayNum));
   };
 
@@ -293,6 +297,7 @@ export default function CalendarScreen() {
 
   const openDeviceEventActions = useCallback(
     (ev) => {
+      hapticImpactLight();
       const detail =
         [
           fmtDeviceTime(ev),
@@ -439,7 +444,10 @@ export default function CalendarScreen() {
               <View key={row.key} style={styles.card}>
                 <TouchableOpacity
                   activeOpacity={0.92}
-                  onPress={() => navigation.navigate('AppointmentForm', { appointment: row.salon })}
+                  onPress={() => {
+                    hapticImpactLight();
+                    navigation.navigate('AppointmentForm', { appointment: row.salon });
+                  }}
                 >
                   <Text style={styles.cardTitle}>{row.salon.title}</Text>
                   {row.salon.client_name ? (
@@ -457,9 +465,10 @@ export default function CalendarScreen() {
                     {row.salon.visit_id ? (
                       <TouchableOpacity
                         style={styles.cardActionBtn}
-                        onPress={() =>
-                          navigation.navigate('VisitDetail', { visitId: row.salon.visit_id })
-                        }
+                        onPress={() => {
+                          hapticImpactLight();
+                          navigation.navigate('VisitDetail', { visitId: row.salon.visit_id });
+                        }}
                         activeOpacity={0.85}
                       >
                         <Text style={styles.cardActionTxt}>Visit record</Text>
@@ -468,7 +477,8 @@ export default function CalendarScreen() {
                     ) : (
                       <TouchableOpacity
                         style={styles.cardActionBtn}
-                        onPress={() =>
+                        onPress={() => {
+                          hapticImpactLight();
                           navigation.navigate('FormulaBuilder', {
                             clientId: row.salon.client_id,
                             appointmentId: row.salon.id,
@@ -476,8 +486,8 @@ export default function CalendarScreen() {
                             initialDate: row.salon.day_local,
                             initialChair: row.salon.chair_label,
                             initialNotes: row.salon.notes,
-                          })
-                        }
+                          });
+                        }}
                         activeOpacity={0.85}
                       >
                         <Text style={styles.cardActionTxt}>Add color formula</Text>
@@ -526,7 +536,7 @@ const styles = StyleSheet.create({
   addBtn: {
     ...glassPurpleFabBar,
   },
-  title: { fontSize: 28, fontWeight: '400', color: '#1C1C1E' },
+  title: { ...Type.screenTitle, color: '#1C1C1E' },
   calHint: {
     marginHorizontal: 24,
     marginBottom: 10,
@@ -538,8 +548,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  calHintTxt: { flex: 1, fontSize: 13, color: '#636366' },
-  calHintLink: { fontSize: 14, fontWeight: '600', color: '#007AFF' },
+  calHintTxt: { flex: 1, ...Type.secondary, color: '#636366' },
+  calHintLink: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.semibold,
+    color: '#007AFF',
+  },
   calCard: {
     marginHorizontal: 24,
     marginBottom: 16,
@@ -564,9 +579,18 @@ const styles = StyleSheet.create({
     height: 40,
   },
   monthBtn: { padding: 4 },
-  monthTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  monthTitle: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
   wdRow: { flexDirection: 'row', marginBottom: 18 },
-  wd: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '400', color: '#1C1C1E' },
+  wd: {
+    flex: 1,
+    textAlign: 'center',
+    ...Type.calendarWeekdayAbbrev,
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 0 },
   cell: {
     width: `${100 / 7}%`,
@@ -593,7 +617,9 @@ const styles = StyleSheet.create({
   dayOutlineSel: {
     borderColor: 'rgba(255,255,255,0.92)',
   },
-  cellTxt: { fontSize: 19, fontWeight: '500', color: '#1C1C1E' },
+  cellTxt: {
+    ...Type.calendarMonthCell,
+  },
   cellTxtSel: { color: '#fff' },
   loader: { paddingTop: 24, alignItems: 'center' },
   list: { paddingHorizontal: 24, paddingBottom: 24 },
@@ -608,10 +634,24 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  cardTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
-  client: { marginTop: 6, fontSize: 15, color: '#5E35B1', fontWeight: '400' },
-  time: { marginTop: 8, fontSize: 15, color: '#1C1C1E', fontWeight: '400' },
-  chair: { marginTop: 4, fontSize: 14, color: '#1C1C1E' },
+  cardTitle: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  client: {
+    marginTop: 6,
+    ...Type.listPrimary,
+    color: '#5E35B1',
+  },
+  time: {
+    marginTop: 8,
+    ...Type.listPrimary,
+    color: '#1C1C1E',
+    fontFamily: FontFamily.regular,
+  },
+  chair: { marginTop: 4, ...Type.secondary, color: '#1C1C1E' },
   cardActions: {
     marginTop: 12,
     paddingTop: 12,
@@ -624,7 +664,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 8,
   },
-  cardActionTxt: { fontSize: 15, fontWeight: '400', color: '#5E35B1' },
+  cardActionTxt: { ...Type.buttonLabel, color: '#5E35B1' },
   deviceCard: {
     backgroundColor: '#F8FAFC',
     borderRadius: 20,
@@ -635,13 +675,12 @@ const styles = StyleSheet.create({
   },
   deviceCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   devicePill: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...Type.sectionLabel,
     color: '#007AFF',
-    textTransform: 'uppercase',
     letterSpacing: 0.4,
+    marginBottom: 0,
   },
-  deviceTitle: { fontSize: 17, fontWeight: '500', color: '#1C1C1E' },
-  deviceTime: { marginTop: 6, fontSize: 15, color: '#475569' },
-  deviceLoc: { marginTop: 4, fontSize: 14, color: '#64748B' },
+  deviceTitle: { ...Type.greetingHello, color: '#1C1C1E' },
+  deviceTime: { marginTop: 6, ...Type.listPrimary, color: '#475569', fontFamily: FontFamily.regular },
+  deviceLoc: { marginTop: 4, ...Type.secondary, color: '#64748B' },
 });

@@ -1,13 +1,13 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { View, Pressable, Text, TextInput, Platform, useWindowDimensions, DeviceEventEmitter } from 'react-native';
-import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans';
+import { View, Pressable, Text, TextInput, StyleSheet, DeviceEventEmitter, Platform } from 'react-native';
+import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import * as SplashScreen from 'expo-splash-screen';
-import { NavigationContainer } from '@react-navigation/native';
-import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { BlurView } from 'expo-blur';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { SymbolView } from 'expo-symbols';
 import NetInfo from '@react-native-community/netinfo';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -28,8 +28,9 @@ import ServicesScreen from './src/screens/ServicesScreen';
 import { CurrencyProvider } from './src/context/CurrencyContext';
 import { loadStoredToken, flushOutbox } from './src/api/client';
 import { registerExpoPushIfPossible } from './src/push/registerPush';
-import { BRAND_PURPLE, glassPurpleTabBar } from './src/theme/glassUi';
 import { FontFamily } from './src/theme/fonts';
+import { TAB_BAR_ACTIVE_BUBBLE, MY_LAB_VIOLET } from './src/theme/glassUi';
+import SFIcon from './src/components/SFIcon';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -37,18 +38,28 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 const DashboardStack = createNativeStackNavigator();
 
-/** Side margin: ~6.5% + min 18px + safe area */
-const TAB_H = 64;
-/** Active white circle = full bar height (diameter TAB_H), like reference */
-const ICON_KNOB = TAB_H;
-const ICON_SIZE_ACTIVE = 28;
-const ICON_SIZE_INACTIVE = 22;
-const TAB_SIDE_RATIO = 0.065;
-const TAB_SIDE_MIN = 18;
+const NAV_BG_WHITE = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: '#FFFFFF',
+    card: '#FFFFFF',
+    border: 'rgba(0,0,0,0)',
+  },
+};
+
+const TAB_H = 74;
+const ICON_SIZE = 22;
+
 
 function DashboardStackScreen() {
   return (
-    <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
+    <DashboardStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#FFFFFF' },
+      }}
+    >
       <DashboardStack.Screen name="DashboardHome" component={HomeScreen} />
       <DashboardStack.Screen
         name="DashboardCalendar"
@@ -59,124 +70,94 @@ function DashboardStackScreen() {
   );
 }
 
-function MainTabs() {
-  const { width: windowWidth } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const baseSide = Math.max(TAB_SIDE_MIN, Math.round(windowWidth * TAB_SIDE_RATIO));
-  const padLeft = baseSide + insets.left;
-  const padRight = baseSide + insets.right;
-  const bottomOffset = Math.max(insets.bottom, 12) + 20;
+function GlassTabBar({ state, descriptors, navigation }) {
+  const icons = {
+    Dashboard: 'home',
+    Clients: 'people-outline',
+    Calendar: 'calendar-outline',
+  };
 
-  const screenOptions = ({ route }) => ({
+  return (
+    <View pointerEvents="box-none" style={styles.tabBarShell}>
+      <View style={styles.tabBar}>
+        <BlurView
+          tint="dark"
+          intensity={Platform.OS === 'ios' ? 52 : 72}
+          experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+        <View style={[StyleSheet.absoluteFillObject, styles.tabBarDarkVeil]} pointerEvents="none" />
+        <View style={[StyleSheet.absoluteFillObject, styles.tabBarGlassRim]} pointerEvents="none" />
+        <View style={styles.tabIconsRow}>
+          {state.routes.map((route, index) => {
+            const focused = state.index === index;
+            const { options } = descriptors[route.key];
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+
+              if (!focused && !event.defaultPrevented) {
+                navigation.navigate(route.name, route.params);
+              }
+            };
+            const onLongPress = () => {
+              navigation.emit({
+                type: 'tabLongPress',
+                target: route.key,
+              });
+            };
+
+            return (
+              <Pressable
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityState={focused ? { selected: true } : {}}
+                accessibilityLabel={options.tabBarAccessibilityLabel}
+                testID={options.tabBarButtonTestID}
+                onPress={onPress}
+                onLongPress={onLongPress}
+                style={styles.tabButton}
+                android_ripple={{ borderless: true }}
+              >
+                <View style={focused ? styles.activeIconCircle : styles.inactiveIconWrap}>
+                  {route.name === 'Inventory' ? (
+                    <SFIcon
+                      name="file-tray-full"
+                      iosName="cabinet.fill"
+                      size={focused ? 28 : ICON_SIZE}
+                      color={focused ? MY_LAB_VIOLET : '#FFFFFF'}
+                    />
+                  ) : (
+                    <Ionicons
+                      name={icons[route.name] || 'ellipse-outline'}
+                      size={focused ? 28 : ICON_SIZE}
+                      color={focused ? MY_LAB_VIOLET : '#FFFFFF'}
+                    />
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function MainTabs() {
+  const screenOptions = () => ({
     headerShown: false,
     tabBarShowLabel: false,
-    tabBarButton: (props) => (
-      <Pressable
-        {...props}
-        android_ripple={{ borderless: true }}
-        style={({ pressed }) => [
-          typeof props.style === 'function' ? props.style({ pressed }) : props.style,
-          {
-            flex: 1,
-            height: TAB_H,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 0,
-            paddingVertical: 0,
-            paddingHorizontal: 0,
-            margin: 0,
-          },
-        ]}
-      />
-    ),
-    tabBarItemStyle: {
-      height: TAB_H,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 0,
-      margin: 0,
-    },
-    tabBarIconStyle: {
-      width: ICON_KNOB,
-      height: TAB_H,
-      margin: 0,
-      marginTop: 0,
-    },
-    // RN BottomTabBar forces start/end: 0 — left/right in tabBarStyle do not inset. Real inset = wrapper padding.
-    tabBarStyle: {
-      height: TAB_H,
-      minHeight: TAB_H,
-      maxHeight: TAB_H,
-      paddingHorizontal: 12,
-      paddingTop: 0,
-      paddingBottom: 0,
-      borderRadius: TAB_H / 2,
-      borderTopWidth: 0,
-      ...glassPurpleTabBar,
-      elevation: 18,
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,
-      shadowRadius: 16,
-    },
-    tabBarIcon: ({ focused }) => {
-      const sfSymbols = {
-        Dashboard: focused ? 'house.fill'        : 'house',
-        Clients:   focused ? 'person.2.fill'     : 'person.2',
-        Inventory: focused ? 'cabinet.fill'      : 'cabinet',
-        Calendar:  'calendar',
-      };
-      const ionicons = {
-        Dashboard: focused ? 'home'              : 'home-outline',
-        Clients:   focused ? 'people'            : 'people-outline',
-        Inventory: focused ? 'filing'            : 'filing-outline',
-        Calendar:  focused ? 'calendar'          : 'calendar-outline',
-      };
-      const sf = sfSymbols[route.name] || 'circle';
-      const size = focused ? ICON_SIZE_ACTIVE : ICON_SIZE_INACTIVE;
-      const iconColor = focused ? BRAND_PURPLE : '#FFFFFF';
-
-      const icon = Platform.OS === 'ios'
-        ? <SymbolView name={sf} size={size} tintColor={iconColor} weight={focused ? 'semibold' : 'regular'} type="hierarchical" style={{ width: size, height: size }} />
-        : <Ionicons name={ionicons[route.name] || 'home-outline'} size={size} color={iconColor} />;
-
-      return (
-        <View style={{ width: ICON_KNOB, height: TAB_H, justifyContent: 'center', alignItems: 'center' }}>
-          {focused ? (
-            <View style={{
-              width: ICON_KNOB, height: ICON_KNOB, borderRadius: ICON_KNOB / 2,
-              backgroundColor: 'rgba(255,255,255,0.92)',
-              borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)',
-              justifyContent: 'center', alignItems: 'center',
-              shadowColor: '#000000', shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.45, shadowRadius: 6, elevation: 10,
-            }}>
-              {icon}
-            </View>
-          ) : icon}
-        </View>
-      );
-    },
+    sceneStyle: { flex: 1, backgroundColor: '#FFFFFF' },
   });
 
   return (
     <Tab.Navigator
-      tabBar={(props) => (
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            paddingLeft: padLeft,
-            paddingRight: padRight,
-            paddingBottom: bottomOffset,
-          }}
-        >
-          <BottomTabBar {...props} />
-        </View>
-      )}
+      tabBar={(props) => <GlassTabBar {...props} />}
       screenOptions={screenOptions}
     >
       <Tab.Screen name="Dashboard" component={DashboardStackScreen} />
@@ -187,13 +168,74 @@ function MainTabs() {
   );
 }
 
+const styles = StyleSheet.create({
+  tabBarShell: {
+    position: 'absolute',
+    left: 28,
+    right: 28,
+    bottom: 26,
+    height: TAB_H,
+    borderRadius: 999,
+    shadowColor: '#1C1C1E',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 14,
+  },
+  tabBar: {
+    flex: 1,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(18, 18, 22, 0.72)',
+  },
+  tabBarDarkVeil: {
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
+  },
+  tabBarGlassRim: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  tabIconsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 5,
+  },
+  tabButton: {
+    flex: 1,
+    minHeight: TAB_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: TAB_BAR_ACTIVE_BUBBLE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  inactiveIconWrap: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 1,
+  },
+});
+
 export default function App() {
   const [fontsLoaded] = useFonts({
-    PlusJakartaSans_400Regular,
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    PlusJakartaSans_700Bold,
-    PlusJakartaSans_800ExtraBold,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
   });
 
   const [authReady, setAuthReady] = useState(false);
@@ -231,12 +273,13 @@ export default function App() {
     const base = { fontFamily: FontFamily.regular };
     const merge = (Comp) => {
       const prev = Comp.defaultProps?.style;
+      /** Base defaults first — screen typography must override (no Regular last wiping Medium). */
       const nextStyle =
         prev == null
           ? base
           : Array.isArray(prev)
-            ? [...prev, base]
-            : [prev, base];
+            ? [base, ...prev]
+            : [base, prev];
       Comp.defaultProps = { ...Comp.defaultProps, style: nextStyle };
     };
     merge(Text);
@@ -255,8 +298,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <CurrencyProvider>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <NavigationContainer theme={NAV_BG_WHITE}>
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: '#FFFFFF' },
+            }}
+          >
             {!signedIn ? (
               <Stack.Screen name="Login">
                 {() => <LoginScreen onLoggedIn={() => setSignedIn(true)} />}

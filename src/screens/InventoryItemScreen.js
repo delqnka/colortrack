@@ -17,6 +17,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 import { useCurrency } from '../context/CurrencyContext';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 
 const COLOR_CATEGORY_OPTIONS = [
   { key: 'dye', label: 'Color' },
@@ -660,12 +662,28 @@ const styles = StyleSheet.create({
   iconBtn: {
     ...glassPurpleIconBtn,
   },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
+  headerTitle: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  subMeta: { fontSize: 14, color: '#1C1C1E', marginBottom: 4 },
-  supplier: { fontSize: 13, fontWeight: '400', color: '#5E35B1', marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
-  labelInRow: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
+  subMeta: { ...Type.listPrimary, color: '#1C1C1E', marginBottom: 4 },
+  supplier: {
+    ...Type.secondary,
+    color: '#5E35B1',
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  labelInRow: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -683,16 +701,18 @@ const styles = StyleSheet.create({
     ...reliefShadow,
   },
   addCategoryTxt: {
-    fontSize: 13,
-    fontWeight: '400',
+    ...Type.secondary,
     color: '#5E35B1',
+    fontFamily: FontFamily.medium,
   },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 4,
     ...reliefShadow,
@@ -721,8 +741,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 6,
   },
-  chipTxt: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
-  chipTxtOn: { color: '#fff' },
+  chipTxt: { ...Type.listPrimary, color: '#1C1C1E' },
+  chipTxtOn: { color: '#fff', fontFamily: FontFamily.medium, fontSize: 15, lineHeight: typeLh(15) },
   saveBtn: {
     marginTop: 28,
     backgroundColor: '#5E35B1',
@@ -736,15 +756,11 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  saveTxt: { color: '#fff', ...Type.buttonLabel },
   histSection: { marginTop: 32 },
   histTitle: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: '#1C1C1E',
+    ...Type.sectionLabel,
     marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   histRow: {
     flexDirection: 'row',
@@ -755,9 +771,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     ...reliefShadow,
   },
-  histDelta: { fontSize: 16, fontWeight: '400', color: '#2E7D32', minWidth: 56 },
+  histDelta: {
+    ...Type.price,
+    color: '#2E7D32',
+    minWidth: 56,
+  },
   histDeltaNeg: { color: '#C62828' },
   histMid: { flex: 1, paddingLeft: 8 },
-  histReason: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
-  histWhen: { marginTop: 4, fontSize: 12, color: '#1C1C1E' },
+  histReason: { ...Type.secondary, color: '#1C1C1E' },
+  histWhen: { marginTop: 4, ...Type.tabBarLabel, color: '#8A8A8E' },
 });

@@ -19,35 +19,31 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import MaskedView from '@react-native-masked-view/masked-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { apiGet } from '../api/client';
-import SFIcon from '../components/SFIcon';
-import { glassPurpleFab, BRAND_PURPLE } from '../theme/glassUi';
+import { apiGet, apiReadStaleCache, resolveImagePublicUri } from '../api/client';
+import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
+import { hapticImpactLight } from '../theme/haptics';
+import { useCurrency } from '../context/CurrencyContext';
+import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 import { FontFamily } from '../theme/fonts';
-import {
-  LAB_GRADIENT_COLORS,
-  LAB_GRADIENT_END,
-  LAB_GRADIENT_LOCATIONS,
-  LAB_GRADIENT_START,
-  LAB_ON_GRADIENT_TEXT,
-} from '../theme/labGradient';
-import {
-  SCHEDULE_BANNER_GRADIENT,
-  SCHEDULE_BANNER_GRADIENT_END,
-  SCHEDULE_BANNER_GRADIENT_START,
-  SCHEDULE_BANNER_LOCATIONS,
-  SCHEDULE_BANNER_LEAD_PINK,
-} from '../theme/scheduleBannerGradient';
+import { Type, typeLh } from '../theme/typography';
 
-const FINANCE_CARD_GRADIENT_COLORS = ['#BFDBFE', '#5AA7F7', '#2563EB', '#0E4788'];
-const FINANCE_CARD_GRADIENT_LOCATIONS = [0, 0.32, 0.68, 1];
-const FINANCE_CARD_GRADIENT_START = { x: 0.35, y: 0 };
-const FINANCE_CARD_GRADIENT_END = { x: 0.65, y: 1 };
-const LAB_PAINT_IMAGE = require('../../assets/lab-paint-colors-strip.png');
-const FINANCE_COINS_IMAGE = require('../../assets/finance-coins.png');
-const SERVICES_PRICE_LIST_IMAGE = require('../../assets/services-price-list.png');
+/** Per-card relief shadow — strong enough to read as raised; radius capped vs very wide blooms. */
+const HOME_RAISED_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.12,
+  shadowRadius: 15,
+  elevation: 10,
+};
+
+/** My lab rim; date-active bubble rim only — white cards rely on shadow, no strokes. */
+const SALON_LAB_GLASS_OUTLINE = 'rgba(255, 255, 255, 0.14)';
+
+/** Black → visible deep violet — two similar stops looked flat on OLED. */
+const SALON_LAB_GRADIENT_COLORS = ['#000000', '#160B28', MY_LAB_VIOLET];
+const SALON_LAB_GRADIENT_LOCATIONS = [0, 0.42, 1];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -97,6 +93,11 @@ function sameCalendarLocal(a, b) {
   );
 }
 
+function todayNoonLocal() {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 12, 0, 0, 0);
+}
+
 /**
  * One row = Mon–Sun for the week that contains the currently selected calendar day.
  * Choosing another day updates the whole home for that date; if the day lies in another week, the row re-centers on that week.
@@ -121,8 +122,8 @@ function weekDaysForContainingMonday(selected) {
   return out;
 }
 
-const HEADER_AVATAR_FALLBACK =
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
+/** Unused; kept so stale Metro bundles cannot throw ReferenceError on this identifier. */
+const HEADER_AVATAR_FALLBACK = null;
 
 const FALLBACK_DASH = {
   banner: { title: "Today's Schedule", subtitle: '' },
@@ -185,14 +186,18 @@ function planGridRowHeight(windowWidth) {
 }
 
 const STOCK_SPLIT_LOW_FLEX = 7;
-const STOCK_SPLIT_COMPACT_FLEX = 3;
-const STOCK_SPLIT_SERVICES_FLEX = 3;
+const STOCK_SPLIT_COMPACT_FLEX = 5;
+const STOCK_SPLIT_SERVICES_FLEX = 5;
+
+/** Fixed cell width ~ active bubble + styles.dateStrip gap — scroll-into-view + no edge clipping. */
+const HOME_DATE_GAP = 6;
+const HOME_DATE_CELL_W = 56;
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => todayNoonLocal());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -201,6 +206,9 @@ export default function HomeScreen() {
   const selectedDateRef = useRef(selectedDate);
   const homeFocusedRef = useRef(false);
   const homeFocusInitial = useRef(true);
+  const dateStripScrollRef = useRef(null);
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const { currency } = useCurrency();
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
@@ -214,10 +222,35 @@ export default function HomeScreen() {
 
   const [profileMe, setProfileMe] = useState(null);
   const loadProfileMe = useCallback(() => {
-    apiGet('/api/me', { allowStaleCache: false })
-      .then(setProfileMe)
-      .catch(() => setProfileMe(null));
+    apiGet('/api/me', { allowStaleCache: true })
+      .then((row) => {
+        if (row && typeof row === 'object') setProfileMe(row);
+      })
+      .catch(() => {
+        /* Keep last good name/avatar on transient errors; never blank to Unsplash mock. */
+      });
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const row = await apiReadStaleCache('/api/me');
+        if (cancelled || !row || typeof row !== 'object') return;
+        setProfileMe((prev) => prev ?? row);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const headerAvatarUri = useMemo(
+    () => resolveImagePublicUri(profileMe?.avatar_url),
+    [profileMe?.avatar_url],
+  );
 
   const refreshHomeDataSilent = useCallback(async () => {
     const ymd = toYMDLocal(selectedDateRef.current);
@@ -226,11 +259,15 @@ export default function HomeScreen() {
         allowStaleCache: false,
       }).catch(() => null);
       const labP = apiGet('/api/lab/stats', { allowStaleCache: false }).catch(() => null);
-      const [dash, lab] = await Promise.all([dashP, labP]);
+      const finP = apiGet(`/api/finance/summary?date=${encodeURIComponent(ymd)}`, {
+        allowStaleCache: false,
+      }).catch(() => null);
+      const [dash, lab, fin] = await Promise.all([dashP, labP, finP]);
       if (toYMDLocal(selectedDateRef.current) !== ymd) return;
       /** Keep prior dashboard/lab data on transient failures to avoid FALLBACK placeholders + wiping lab stats */
       setData((prev) => (dash != null ? dash : prev != null ? prev : FALLBACK_DASH));
       setLabStats((prev) => (lab != null ? lab : prev));
+      setFinanceSummary((prev) => (fin != null ? fin : prev));
     } catch {
       if (toYMDLocal(selectedDateRef.current) !== ymd) return;
     }
@@ -239,32 +276,51 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       homeFocusedRef.current = true;
+      const today = todayNoonLocal();
+      setSelectedDate(today);
+      selectedDateRef.current = today;
       loadProfileMe();
       if (homeFocusInitial.current) {
         homeFocusInitial.current = false;
-      } else {
-        refreshHomeDataSilent();
       }
       return () => {
         homeFocusedRef.current = false;
       };
-    }, [loadProfileMe, refreshHomeDataSilent]),
+    }, [loadProfileMe]),
   );
 
   const strip = useMemo(() => weekDaysForContainingMonday(selectedDate), [selectedDate]);
 
   useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      const selIdx = strip.findIndex((item) =>
+        sameCalendarLocal(parseYMD(item.ymd), selectedDate),
+      );
+      if (selIdx < 0 || !dateStripScrollRef.current) return;
+      const stride = HOME_DATE_CELL_W + HOME_DATE_GAP;
+      const containerInnerW = Math.max(stride * 3, windowWidth - 48);
+      let x = selIdx * stride - containerInnerW / 2 + stride / 2;
+      x = Math.max(0, x);
+      dateStripScrollRef.current.scrollTo({ x, animated: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [strip, selectedDate, windowWidth]);
+
+  useEffect(() => {
     let cancelled = false;
+    setFinanceSummary(null);
     (async () => {
       if (!hasFetchedOnce.current) setLoading(true);
       try {
         const ymd = toYMDLocal(selectedDate);
         const dashP = apiGet(`/api/dashboard/day?date=${encodeURIComponent(ymd)}`).catch(() => null);
         const labP = apiGet('/api/lab/stats').catch(() => null);
-        const [dash, lab] = await Promise.all([dashP, labP]);
+        const finP = apiGet(`/api/finance/summary?date=${encodeURIComponent(ymd)}`).catch(() => null);
+        const [dash, lab, fin] = await Promise.all([dashP, labP, finP]);
         if (!cancelled) {
           setData((prev) => (dash != null ? dash : prev != null ? prev : FALLBACK_DASH));
           setLabStats((prev) => (lab != null ? lab : prev));
+          setFinanceSummary(fin ?? null);
         }
       } catch {
         if (!cancelled) {
@@ -297,6 +353,11 @@ export default function HomeScreen() {
     });
     return () => sub.remove();
   }, [refreshHomeDataSilent]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('colortrack:profile-changed', loadProfileMe);
+    return () => sub.remove();
+  }, [loadProfileMe]);
 
   const onPullRefresh = useCallback(async () => {
     setPullRefreshing(true);
@@ -376,8 +437,10 @@ export default function HomeScreen() {
           ? `1 booking${upcoming?.start_at ? ` · ${fmtTime(upcoming.start_at)}` : ''} · tap for day`
           : `${appointmentCount} bookings · tap to view day`;
 
-  const openCalendarForSelection = () =>
+  const openCalendarForSelection = () => {
+    hapticImpactLight();
     navigation.navigate('DashboardCalendar', { openDate: toYMDLocal(selectedDate) });
+  };
 
   const nowTick = new Date();
 
@@ -412,30 +475,27 @@ export default function HomeScreen() {
     insets.bottom,
   ]);
 
-  const lowStockLine =
-    lowCount === 1
-      ? '1 product running low'
-      : `${lowCount} products running low`;
-  const greetingName = profileMe?.display_name?.trim();
   const formulasVisitCount = Number(labStats?.visits_with_formula_this_month ?? 0);
-  const formulasVisitLabel = ' this month';
+  const labInitialsRecent = Array.isArray(labStats?.formula_client_initials_last3)
+    ? labStats.formula_client_initials_last3.slice(0, 3)
+    : [];
+  const lowStockPhrase = lowCount === 1 ? '1 product low' : `${lowCount} products low`;
 
-  const lowStockCompactInner = (
-    <View style={styles.stockCompactStack}>
-      <Text style={styles.lowStockBadgeText}>Low stock</Text>
-      <Text style={styles.lowStockSummary} numberOfLines={2}>
-        {lowStockLine}
-      </Text>
-      <View style={styles.stockCompactFooter}>
-        <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
-          <SFIcon name="file-tray-full" iosName="cabinet.fill" size={13} color={BRAND_PURPLE} />
-        </View>
-        <View style={[styles.iconCircle, styles.iconCircleStockCompact, styles.iconCircleLowStock]}>
-          <Ionicons name="cart" size={13} color={BRAND_PURPLE} />
-        </View>
-      </View>
-    </View>
-  );
+  const financeIncomeExpenseParts = useMemo(() => {
+    if (financeSummary == null || typeof financeSummary !== 'object') {
+      return { income: '—', expense: '—' };
+    }
+    const inc =
+      Number(financeSummary.service_income_cents ?? 0) +
+      Number(financeSummary.product_sales_cents ?? 0);
+    const exp = Number(financeSummary.expenses_cents ?? 0);
+    return {
+      income: formatMinorFromStoredCents(inc, currency) ?? '—',
+      expense: formatMinorFromStoredCents(exp, currency) ?? '—',
+    };
+  }, [financeSummary, currency]);
+
+  const greetingName = profileMe?.display_name?.trim();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -466,24 +526,25 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Profile"
             >
-              <Image
-                source={{
-                  uri: profileMe?.avatar_url || HEADER_AVATAR_FALLBACK,
-                }}
-                style={styles.avatar}
-              />
+              {headerAvatarUri ? (
+                <Image source={{ uri: headerAvatarUri }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <Ionicons name="person" size={22} color="#AEAEB2" />
+                </View>
+              )}
             </TouchableOpacity>
-            <View>
+            <View style={styles.headerTextWrap}>
               <Text style={styles.greeting} numberOfLines={1}>
                 {greetingName ? `Hello, ${greetingName}` : 'Hello'}
               </Text>
               <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
             </View>
           </View>
-              <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
-                <Ionicons name="search" size={20} color="#1C1C1E" />
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
+            <Ionicons name="search" size={20} color={MY_LAB_VIOLET} />
+          </TouchableOpacity>
+        </View>
 
             {loading && !hasFetchedOnce.current ? (
               <View style={styles.loadingBanner}>
@@ -498,26 +559,25 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Calendar for ${toYMDLocal(selectedDate)}`}
             >
-              <LinearGradient
-                colors={SCHEDULE_BANNER_GRADIENT}
-                locations={SCHEDULE_BANNER_LOCATIONS}
-                start={SCHEDULE_BANNER_GRADIENT_START}
-                end={SCHEDULE_BANNER_GRADIENT_END}
-                style={styles.bannerGradient}
-              >
+              <View style={styles.bannerCardClip}>
+                <View style={styles.bannerCard}>
                 <View style={styles.bannerInnerRow}>
                   <View style={styles.bannerTextContainer}>
                     <Text style={styles.bannerTitle}>{bannerTitleDisplay}</Text>
                     <Text style={styles.bannerSubtitle}>{scheduleBannerSubtitle}</Text>
                     {appointmentCount != null && appointmentCount > 0 && !isDashboardStale ? (
                       <View style={styles.avatarGroup}>
-                        {avatars.slice(0, 3).map((uri, i) => (
-                          <Image
-                            key={uri + i}
-                            source={{ uri }}
-                            style={[styles.miniAvatar, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]}
-                          />
-                        ))}
+                        {avatars.slice(0, 3).map((uri, i) => {
+                          const r = resolveImagePublicUri(uri);
+                          if (!r) return null;
+                          return (
+                            <Image
+                              key={String(uri) + i}
+                              source={{ uri: r }}
+                              style={[styles.miniAvatar, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]}
+                            />
+                          );
+                        })}
                         {extra > 0 ? (
                           <View style={[styles.miniAvatarPlaceholder, { marginLeft: -10, zIndex: 0 }]}>
                             <Text style={styles.miniAvatarText}>+{extra}</Text>
@@ -527,19 +587,15 @@ export default function HomeScreen() {
                     ) : null}
                   </View>
                   <View style={styles.bannerCalendarCue}>
-                    <Ionicons name="calendar-outline" size={26} color="rgba(255,255,255,0.98)" />
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color="rgba(255,255,255,0.82)"
-                      style={{ marginTop: 4 }}
-                    />
+                    <Ionicons name="calendar-outline" size={26} color={MY_LAB_VIOLET} />
                   </View>
                 </View>
-              </LinearGradient>
+              </View>
+              </View>
             </TouchableOpacity>
 
             <ScrollView
+              ref={dateStripScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.dateStrip}
@@ -555,6 +611,7 @@ export default function HomeScreen() {
                     key={item.key}
                     style={styles.dateCell}
                     onPress={() => {
+                      hapticImpactLight();
                       setSelectedDate((prev) => {
                         if (sameCalendarLocal(cellDate, prev)) return prev;
                         return new Date(cellDate.getTime());
@@ -565,16 +622,22 @@ export default function HomeScreen() {
                     hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                   >
                     {isSelected ? (
-                      <LinearGradient
-                        colors={SCHEDULE_BANNER_GRADIENT}
-                        locations={SCHEDULE_BANNER_LOCATIONS}
-                        start={SCHEDULE_BANNER_GRADIENT_START}
-                        end={SCHEDULE_BANNER_GRADIENT_END}
-                        style={styles.dateActiveBubble}
-                      >
+                      <View style={styles.dateActiveBubble}>
+                        <LinearGradient
+                          colors={SALON_LAB_GRADIENT_COLORS}
+                          locations={SALON_LAB_GRADIENT_LOCATIONS}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.dateActiveBubbleGradient}
+                          pointerEvents="none"
+                        />
+                        <View
+                          style={[StyleSheet.absoluteFillObject, styles.dateActiveBubbleGlassRim]}
+                          pointerEvents="none"
+                        />
                         <Text style={styles.dateTextDayActive}>{item.day}</Text>
                         <Text style={styles.dateTextNumActive}>{item.num}</Text>
-                      </LinearGradient>
+                      </View>
                     ) : (
                       <>
                         <Text
@@ -603,48 +666,51 @@ export default function HomeScreen() {
             <Text style={styles.sectionTitle}>Salon tools</Text>
           </View>
 
-          <View>
+          <View style={styles.salonToolsGridWrap}>
             <View style={[styles.gridTopRow, { height: planGridRowH }]}>
             <View style={styles.gridLeft}>
               <TouchableOpacity
-                style={[styles.labCardOuter, styles.gridTallCard, styles.gridTallCardFill]}
+                style={[styles.salonLabCardTouchable, styles.gridTallCard, styles.gridTallCardFill]}
                 activeOpacity={0.92}
-                onPress={() => navigation.navigate('Lab')}
+                onPress={() => {
+                  hapticImpactLight();
+                  navigation.navigate('Lab');
+                }}
               >
                 <LinearGradient
-                  colors={LAB_GRADIENT_COLORS}
-                  locations={LAB_GRADIENT_LOCATIONS}
-                  start={LAB_GRADIENT_START}
-                  end={LAB_GRADIENT_END}
-                  style={styles.labCardGradient}
-                >
-                  <Text style={styles.badgeTextLab}>My lab</Text>
-                  <View style={styles.labCardMain}>
-                    <MaskedView
-                      style={styles.labPlanTitleMask}
-                      maskElement={<Text style={styles.labPlanTitle}>My formulas</Text>}
-                    >
-                      <LinearGradient
-                        colors={['#0B7A34', '#35D86F', '#E8FF36']}
-                        start={{ x: 0, y: 1 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.labPlanTitleGradient}
-                      />
-                    </MaskedView>
-                    <View style={styles.labIconCenter}>
-                      <View style={styles.labIconPlate}>
-                        <Ionicons name="flask" size={58} color="#F8FF35" />
-                      </View>
+                  colors={SALON_LAB_GRADIENT_COLORS}
+                  locations={SALON_LAB_GRADIENT_LOCATIONS}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.salonLabGradientFill}
+                  pointerEvents="none"
+                />
+                <View style={styles.salonLabCardInner}>
+                  <Text style={styles.salonLabKicker}>My lab</Text>
+                  <View>
+                    <Text style={styles.salonLabHugeNumber}>{String(formulasVisitCount)}</Text>
+                    <View style={styles.salonLabSubtitleBlock}>
+                      <Text style={styles.salonLabFormulasWord}>formulas</Text>
+                      <Text style={styles.salonLabThisMonth}>this month</Text>
                     </View>
-                    <Text style={[styles.labPlanMeta, styles.labPromoText]} numberOfLines={2}>
-                      <Text style={styles.labPlanMetaNumber}>{formulasVisitCount}</Text>
-                      {formulasVisitLabel}
-                    </Text>
                   </View>
-                  <View style={styles.labPaintFrame} pointerEvents="none">
-                    <Image source={LAB_PAINT_IMAGE} style={styles.labPaintImage} resizeMode="stretch" />
+                  {labInitialsRecent.length ? (
+                  <View style={styles.salonLabInitialsRow}>
+                    {labInitialsRecent.map((init, idx) => (
+                      <View
+                        key={`${idx}-${init}`}
+                        style={[
+                          styles.salonLabInitialCircle,
+                          idx > 0 ? styles.salonLabInitialOverlap : null,
+                          { zIndex: 10 - idx },
+                        ]}
+                      >
+                        <Text style={styles.salonLabInitialText}>{init}</Text>
+                      </View>
+                    ))}
                   </View>
-                </LinearGradient>
+                  ) : null}
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -652,73 +718,70 @@ export default function HomeScreen() {
               <View style={styles.stockVerticalStack}>
                 <TouchableOpacity
                   style={[
-                    styles.financeCardOuter,
+                    styles.salonFinanceCard,
                     styles.stockCardSized,
                     styles.stockLowInStack,
                     { flex: STOCK_SPLIT_LOW_FLEX },
                   ]}
                   activeOpacity={0.92}
-                  onPress={() =>
-                    navigation.navigate('Finance', { date: toYMDLocal(selectedDate) })
-                  }
+                  onPress={() => {
+                    hapticImpactLight();
+                    navigation.navigate('Finance', { date: toYMDLocal(selectedDate) });
+                  }}
                 >
-                  <LinearGradient
-                    colors={FINANCE_CARD_GRADIENT_COLORS}
-                    locations={FINANCE_CARD_GRADIENT_LOCATIONS}
-                    start={FINANCE_CARD_GRADIENT_START}
-                    end={FINANCE_CARD_GRADIENT_END}
-                    style={styles.financeCardGradient}
-                  >
-                    <View style={styles.financeCardHead}>
-                      <Text style={styles.financeBadgeText}>Finance</Text>
+                  <View style={styles.salonFinanceInner}>
+                    <Text style={styles.salonFinanceEyebrow}>Finance</Text>
+                    <View style={styles.salonFinanceAmountsBlock}>
+                      <Text style={styles.salonFinanceIncomeLine}>
+                        ↑ {financeIncomeExpenseParts.income}
+                      </Text>
+                      <Text style={styles.salonFinanceExpenseLine}>
+                        ↓ {financeIncomeExpenseParts.expense}
+                      </Text>
                     </View>
-                    <View style={styles.financeCardBody}>
-                      <Ionicons
-                        name="wallet-outline"
-                        size={36}
-                        color="#BFEAFF"
-                        style={styles.financeWalletIcon}
-                      />
-                      <Text style={styles.financeCardSubtitle}>Revenue & Expenses</Text>
-                    </View>
-                    <Image source={FINANCE_COINS_IMAGE} style={styles.financeCoinsImage} resizeMode="contain" />
-                  </LinearGradient>
+                </View>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
-                    styles.stockCompactSecondary,
-                    styles.lowStockCard,
+                    styles.salonLowStockCard,
                     styles.stockCardSized,
                     styles.stockCompactInStack,
                     { flex: STOCK_SPLIT_COMPACT_FLEX },
                   ]}
                   activeOpacity={0.92}
-                  onPress={() => navigation.navigate('InventoryStack')}
+                  onPress={() => {
+                    hapticImpactLight();
+                    navigation.navigate('InventoryStack');
+                  }}
                 >
-                  {lowStockCompactInner}
+                  <View style={styles.salonLowStockInner}>
+                    <Text style={styles.salonMutedKicker}>Low stock</Text>
+                    <View style={styles.salonLowStockPhraseRow}>
+                      <View style={styles.salonLowStockDot} />
+                      <Text style={styles.salonLowStockCopy}>{lowStockPhrase}</Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
-                    styles.stockCompactSecondary,
-                    styles.servicesCompactCard,
+                    styles.salonServicesCard,
                     styles.stockCardSized,
                     styles.stockCompactInStack,
                     { flex: STOCK_SPLIT_SERVICES_FLEX },
                   ]}
                   activeOpacity={0.92}
-                  onPress={() => navigation.navigate('Services')}
+                  onPress={() => {
+                    hapticImpactLight();
+                    navigation.navigate('Services');
+                  }}
                 >
-                  <View style={styles.servicesCompactInner}>
-                    <Text style={styles.servicesCompactBadge}>Services</Text>
-                    <Text style={styles.servicesCompactTitle} numberOfLines={2}>
-                      Price list
-                    </Text>
+                  <View style={styles.salonServicesInner}>
+                    <Text style={styles.salonMutedKicker}>Services</Text>
+                    <View style={styles.salonServicesBottomRow}>
+                      <Text style={styles.salonPriceList}>My price list</Text>
+                      <Text style={styles.salonArrowGlyph}>→</Text>
+                    </View>
                   </View>
-                  <Image
-                    source={SERVICES_PRICE_LIST_IMAGE}
-                    style={styles.servicesPriceListImage}
-                    resizeMode="contain"
-                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -770,6 +833,7 @@ export default function HomeScreen() {
                     style={styles.searchHit}
                     activeOpacity={0.88}
                     onPress={() => {
+                      hapticImpactLight();
                       closeSearch();
                       navigation.navigate('ClientDetail', { clientId: item.id });
                     }}
@@ -794,9 +858,11 @@ const styles = StyleSheet.create({
   },
   viewportFill: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
   },
   loadingBanner: {
@@ -807,13 +873,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 16,
     marginBottom: 18,
   },
   userInfo: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  headerTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    paddingTop: 2,
   },
   avatar: {
     width: 48,
@@ -821,34 +897,42 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     marginRight: 16,
   },
+  avatarPlaceholder: {
+    backgroundColor: '#EFEFF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   greeting: {
-    fontSize: 18,
-    fontWeight: '400',
-    color: '#1C1C1E',
+    ...Type.greetingHello,
   },
   date: {
-    fontSize: 14,
-    color: '#1C1C1E',
-    fontWeight: '400',
+    ...Type.greetingDate,
     marginTop: 2,
+    flexShrink: 1,
   },
   searchButton: {
-    ...glassPurpleFab,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
+    flexShrink: 0,
   },
   bannerTouchable: {
     borderRadius: 24,
-    overflow: 'hidden',
     marginBottom: 18,
-    shadowColor: '#5E35B1',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
+    backgroundColor: '#FFFFFF',
+    ...HOME_RAISED_SHADOW,
   },
-  bannerGradient: {
+  bannerCardClip: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  bannerCard: {
     paddingVertical: 18,
     paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
   },
   bannerInnerRow: {
     flexDirection: 'row',
@@ -859,18 +943,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bannerTitle: {
-    fontSize: 19,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    color: '#0D0D0D',
     marginBottom: 2,
-    textShadowColor: 'rgba(0,0,0,0.18)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
   bannerSubtitle: {
+    fontFamily: FontFamily.regular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.94)',
-    fontWeight: '400',
+    lineHeight: typeLh(13),
+    color: '#8A8A8E',
     marginBottom: 10,
   },
   bannerCalendarCue: {
@@ -890,66 +973,83 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.88)',
+    borderColor: '#EFEFF4',
   },
   miniAvatarPlaceholder: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: '#EFEFF4',
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.75)',
+    borderColor: '#E5E5EA',
     justifyContent: 'center',
     alignItems: 'center',
   },
   miniAvatarText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    lineHeight: typeLh(12),
+    fontFamily: FontFamily.semibold,
+    color: '#0D0D0D',
   },
   dateStrip: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 6,
-    paddingVertical: 8,
-    paddingRight: 8,
+    gap: HOME_DATE_GAP,
+    paddingVertical: 10,
+    paddingLeft: 2,
+    paddingRight: 2,
     marginBottom: 20,
   },
   dateCell: {
-    minWidth: 48,
-    minHeight: 56,
-    paddingHorizontal: 4,
+    width: HOME_DATE_CELL_W,
+    height: 60,
+    paddingHorizontal: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 4,
+    justifyContent: 'flex-end',
+    paddingBottom: 2,
+    overflow: 'visible',
   },
   dateActiveBubble: {
     width: 54,
     height: 54,
     borderRadius: 27,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#000000',
+  },
+  dateActiveBubbleGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  dateActiveBubbleGlassRim: {
+    borderRadius: 27,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SALON_LAB_GLASS_OUTLINE,
   },
   dateTextDayActive: {
     fontSize: 12,
-    fontWeight: '400',
+    lineHeight: typeLh(12),
+    fontFamily: FontFamily.regular,
     color: '#FFFFFF',
     marginBottom: 2,
   },
   dateTextNumActive: {
     fontSize: 16,
-    fontWeight: '400',
+    lineHeight: typeLh(16),
+    fontFamily: FontFamily.regular,
     color: '#FFFFFF',
   },
   dateTextDayIdle: {
     fontSize: 13,
-    fontWeight: '400',
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 4,
   },
   dateTextNumIdle: {
     fontSize: 16,
-    fontWeight: '400',
+    lineHeight: typeLh(16),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
   },
   dateTextDayToday: {
@@ -959,9 +1059,7 @@ const styles = StyleSheet.create({
     color: '#5E35B1',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '400',
-    color: '#1C1C1E',
+    ...Type.sectionLabel,
     marginBottom: 14,
   },
   /**
@@ -990,69 +1088,201 @@ const styles = StyleSheet.create({
   },
   stockLowInStack: {
     minHeight: 0,
-    overflow: 'hidden',
   },
   stockCompactInStack: {
     minHeight: 0,
     justifyContent: 'center',
-    overflow: 'hidden',
   },
-  financeCardOuter: {
-    borderRadius: 24,
+
+  salonLabCardTouchable: {
+    borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#0F4C9B',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.32,
-    shadowRadius: 10,
-    elevation: 6,
+    backgroundColor: '#000000',
+    ...HOME_RAISED_SHADOW,
   },
-  financeCardGradient: {
+  salonLabGradientFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+  },
+  salonLabCardInner: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  salonLabKicker: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+
+  salonLabHugeNumber: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 52,
+    lineHeight: 56,
+    color: '#FFFFFF',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonLabSubtitleBlock: {
+    marginTop: 10,
+  },
+  salonLabFormulasWord: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    color: '#FFFFFF',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonLabThisMonth: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    lineHeight: typeLh(12),
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonLabInitialsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  salonLabInitialCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  salonLabInitialOverlap: {
+    marginLeft: -8,
+  },
+  salonLabInitialText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    lineHeight: typeLh(11),
+    color: '#FFFFFF',
+  },
+  salonToolsGridWrap: {
+    backgroundColor: '#FFFFFF',
+  },
+  salonFinanceCard: {
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    ...HOME_RAISED_SHADOW,
+  },
+  salonFinanceInner: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    justifyContent: 'flex-start',
+  },
+  salonFinanceEyebrow: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    lineHeight: typeLh(11),
+    color: '#0D0D0D',
+    textTransform: 'uppercase',
+    letterSpacing: 0.85,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonFinanceAmountsBlock: {
+    marginTop: 12,
+  },
+  salonFinanceIncomeLine: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    color: '#00A86B',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonFinanceExpenseLine: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    color: '#FF6B35',
+    marginTop: 6,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonMutedKicker: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    lineHeight: typeLh(10),
+    color: '#0D0D0D',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonLowStockCard: {
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    ...HOME_RAISED_SHADOW,
+  },
+  salonLowStockInner: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 0,
-    overflow: 'hidden',
+    paddingVertical: 12,
+    justifyContent: 'center',
   },
-  financeCardHead: {
+  salonLowStockPhraseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  salonLowStockDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF6B35',
+    marginRight: 10,
+    flexShrink: 0,
+  },
+  salonLowStockCopy: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    color: '#FF6B35',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+  },
+  salonServicesCard: {
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    ...HOME_RAISED_SHADOW,
+  },
+  salonServicesInner: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: 'space-between',
+  },
+  salonServicesBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
-    zIndex: 1,
+    marginTop: 14,
   },
-  financeBadgeText: {
-    fontSize: 10,
-    fontFamily: FontFamily.bold,
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  financeCardBody: {
-    flex: 1,
-    minHeight: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    transform: [{ translateY: -10 }],
-    zIndex: 1,
-  },
-  financeWalletIcon: {
-    transform: [{ translateY: 5 }],
-  },
-  financeCardSubtitle: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 17,
+  salonPriceList: {
     fontFamily: FontFamily.medium,
-    color: '#BFEAFF',
-    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    color: '#8A8A8E',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
-  financeCoinsImage: {
-    position: 'absolute',
-    right: -15,
-    bottom: -9,
-    width: 72,
-    height: 86,
-    opacity: 0.92,
-    zIndex: 0,
+  salonArrowGlyph: {
+    fontFamily: FontFamily.medium,
+    fontSize: 18,
+    lineHeight: 22,
+    color: '#6B4EFF',
+  },
+
+  stockCardSized: {
+    width: '100%',
   },
   gridTallCard: {
     width: '100%',
@@ -1061,206 +1291,6 @@ const styles = StyleSheet.create({
   gridTallCardFill: {
     flex: 1,
     minHeight: 96,
-  },
-  lowStockCard: {
-    backgroundColor: SCHEDULE_BANNER_LEAD_PINK,
-    shadowColor: '#B8326E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.32,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 0,
-  },
-  lowStockBadgeText: {
-    fontSize: 9,
-    fontFamily: FontFamily.semibold,
-    color: '#7A1738',
-    alignSelf: 'flex-start',
-    marginBottom: 4,
-  },
-  lowStockSummary: {
-    marginTop: 5,
-    fontSize: 12,
-    fontFamily: FontFamily.semibold,
-    color: '#3A1020',
-    lineHeight: 16,
-  },
-  iconCircleLowStock: {
-    backgroundColor: 'rgba(255,255,255,0.48)',
-  },
-  servicesCompactCard: {
-    backgroundColor: '#F97316',
-    borderWidth: 0,
-    shadowColor: '#B7791F',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  servicesCompactInner: {
-    flex: 1,
-    width: '100%',
-    minHeight: 0,
-    justifyContent: 'flex-start',
-    paddingTop: 2,
-    zIndex: 1,
-  },
-  servicesCompactBadge: {
-    fontSize: 9,
-    fontFamily: FontFamily.semibold,
-    color: '#FFFFFF',
-    alignSelf: 'flex-start',
-    marginBottom: 5,
-  },
-  servicesCompactTitle: {
-    fontSize: 12,
-    fontFamily: FontFamily.semibold,
-    color: '#FFFFFF',
-    lineHeight: 16,
-  },
-  servicesCompactFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  iconCircleServices: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
-  },
-  servicesPriceListImage: {
-    position: 'absolute',
-    right: -7,
-    bottom: -14,
-    width: 54,
-    height: 74,
-    opacity: 0.92,
-    zIndex: 0,
-  },
-  stockCompactStack: {
-    flex: 1,
-    width: '100%',
-    minHeight: 0,
-    justifyContent: 'flex-start',
-    paddingTop: 2,
-  },
-  stockCompactFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  iconCircleStockCompact: {
-    width: 23,
-    height: 23,
-    borderRadius: 11,
-  },
-  stockCardSized: {
-    width: '100%',
-    overflow: 'hidden',
-  },
-  stockCompactSecondary: {
-    borderRadius: 24,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    justifyContent: 'center',
-  },
-  cardStockCompact: {
-    paddingVertical: 8,
-    paddingHorizontal: 11,
-  },
-  card: {
-    width: '48%',
-    borderRadius: 24,
-    padding: 20,
-  },
-  labCardOuter: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#14532d',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  labCardGradient: {
-    padding: 13,
-    flex: 1,
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  labPromoText: {
-    color: LAB_ON_GRADIENT_TEXT,
-  },
-  labPlanTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: 18,
-    lineHeight: 23,
-    textAlign: 'center',
-  },
-  labPlanTitleMask: {
-    height: 24,
-    marginBottom: 10,
-    alignSelf: 'center',
-  },
-  labPlanTitleGradient: {
-    width: 108,
-    height: 24,
-  },
-  labPlanMeta: {
-    fontFamily: FontFamily.regular,
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  labPlanMetaNumber: {
-    fontFamily: FontFamily.bold,
-    fontSize: 24,
-    lineHeight: 28,
-  },
-  badgeTextLab: {
-    fontSize: 12,
-    fontFamily: FontFamily.semibold,
-    color: LAB_ON_GRADIENT_TEXT,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
-  },
-  labCardMain: {
-    flex: 1,
-    minHeight: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 54,
-    transform: [{ translateY: -18 }],
-    zIndex: 1,
-  },
-  labPaintFrame: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 100,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
-    zIndex: 0,
-  },
-  labPaintImage: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.96,
-  },
-  labIconCenter: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  labIconPlate: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   badgeBlue: {
     backgroundColor: '#64B5F6',
@@ -1272,31 +1302,35 @@ const styles = StyleSheet.create({
   },
   badgeTextBlue: {
     fontSize: 11,
-    fontWeight: '500',
+    lineHeight: typeLh(11),
+    fontFamily: FontFamily.medium,
     color: '#FFF',
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: '400',
+    ...Type.listPrimary,
     color: '#1C1C1E',
     marginBottom: 8,
   },
   cardTitleStock: {
     marginBottom: 2,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '500',
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.medium,
+    color: '#1C1C1E',
   },
   cardSubtitleStock: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#8A8A8E',
     marginBottom: 0,
   },
   cardSubtitle: {
     fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 2,
-    fontWeight: '400',
   },
   cardFooter: {
     flexDirection: 'row',
@@ -1314,7 +1348,8 @@ const styles = StyleSheet.create({
   },
   cardFooterSubtitle: {
     fontSize: 13,
-    fontWeight: '400',
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
   },
   iconsRow: {
@@ -1370,8 +1405,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
-  modalClose: { fontSize: 17, fontWeight: '400', color: '#5E35B1' },
+  modalTitle: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  modalClose: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#5E35B1',
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1385,7 +1430,9 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
   },
   searchHit: {
@@ -1394,7 +1441,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  searchHitName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
-  searchHitPhone: { fontSize: 14, color: '#1C1C1E', marginTop: 4 },
+  searchHitName: { ...Type.listPrimary, color: '#1C1C1E' },
+  searchHitPhone: { marginTop: 4, ...Type.secondary },
   emptySearch: { textAlign: 'center', color: '#1C1C1E', marginTop: 24 },
 });

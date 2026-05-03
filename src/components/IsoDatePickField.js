@@ -12,6 +12,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { parseISODateToLocal, formatDisplayDate } from '../lib/formatDate';
 import { BRAND_PURPLE } from '../theme/glassUi';
+import { FontFamily } from '../theme/fonts';
+import { typeLh } from '../theme/typography';
 
 function toYMD(d) {
   const y = d.getFullYear();
@@ -162,7 +164,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   fieldText: {
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginRight: 8,
   },
@@ -208,9 +212,15 @@ const styles = StyleSheet.create({
   iosToolbarTitle: {
     flex: 1,
     fontSize: 17,
-    fontWeight: '400',
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     textAlign: 'center',
   },
-  doneTxt: { fontSize: 17, fontWeight: '400', color: BRAND_PURPLE },
+  doneTxt: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.medium,
+    color: BRAND_PURPLE,
+  },
 });

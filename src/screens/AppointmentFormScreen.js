@@ -23,6 +23,8 @@ import { glassPurpleIconBtn } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 
 function todayYMD() {
   const d = new Date();
@@ -99,10 +101,12 @@ export default function AppointmentFormScreen({ route, navigation }) {
 
   const loadServices = useCallback(async () => {
     try {
-      const rows = await apiGet('/api/services', { allowStaleCache: false });
-      setServices(Array.isArray(rows) ? rows : []);
+      const rows = await apiGet('/api/services', { allowStaleCache: true });
+      if (Array.isArray(rows)) {
+        setServices(rows);
+      }
     } catch {
-      setServices([]);
+      setServices((prev) => (Array.isArray(prev) ? prev : []));
     }
   }, []);
 
@@ -527,15 +531,24 @@ const styles = StyleSheet.create({
   iconBtn: {
     ...glassPurpleIconBtn,
   },
-  htitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
+  htitle: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
+  label: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+    marginBottom: 8,
+    marginTop: 4,
+  },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 4,
     ...reliefShadow,
@@ -551,7 +564,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     ...reliefShadow,
   },
-  pickerFieldText: { fontSize: 16, color: '#1C1C1E' },
+  pickerFieldText: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
   serviceChips: {
     gap: 8,
     paddingVertical: 8,
@@ -566,8 +584,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5EA',
     ...reliefShadow,
   },
-  serviceChipName: { fontSize: 14, fontWeight: '400', color: '#1C1C1E' },
-  serviceChipPrice: { marginTop: 3, fontSize: 12, fontWeight: '400', color: '#5E35B1' },
+  serviceChipName: { ...Type.listPrimary, color: '#1C1C1E' },
+  serviceChipPrice: { marginTop: 3, ...Type.price },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   row2: { flexDirection: 'row' },
   row2col: { flex: 1 },
@@ -583,8 +601,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     ...reliefShadow,
   },
-  clientTxt: { fontSize: 16, color: '#1C1C1E', flex: 1 },
-  clientPh: { fontSize: 16, color: '#1C1C1E', flex: 1 },
+  clientTxt: { ...Type.listPrimary, color: '#1C1C1E', flex: 1 },
+  clientPh: { ...Type.secondary, color: '#1C1C1E', flex: 1 },
   saveBtn: {
     marginTop: 28,
     backgroundColor: '#5E35B1',
@@ -598,7 +616,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  saveTxt: { color: '#fff', ...Type.buttonLabel },
   secondaryBtn: {
     marginTop: 16,
     paddingVertical: 14,
@@ -607,13 +625,13 @@ const styles = StyleSheet.create({
     borderColor: '#5E35B1',
     alignItems: 'center',
   },
-  secondaryBtnTxt: { fontSize: 16, fontWeight: '400', color: '#5E35B1' },
+  secondaryBtnTxt: { ...Type.buttonLabel, color: '#5E35B1' },
   delBtn: {
     marginTop: 16,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  delTxt: { color: '#C62828', fontSize: 16, fontWeight: '400' },
+  delTxt: { color: '#C62828', ...Type.buttonLabel },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -635,8 +653,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
-  modalClose: { fontSize: 17, fontWeight: '400', color: '#5E35B1' },
+  modalTitle: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  modalClose: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#5E35B1',
+  },
   stockRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -646,7 +674,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  stockName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E', flex: 1 },
+  stockName: { ...Type.listPrimary, color: '#1C1C1E', flex: 1 },
   iosPickerRoot: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -668,5 +696,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  iosPickerTitleText: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  iosPickerTitleText: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
 });

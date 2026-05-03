@@ -1,9 +1,18 @@
 /** Brand purple + frosted-glass chips (header close, FABs, tab bar tint). */
 
+const P = { r: 94, g: 53, b: 177 };
+
 export const BRAND_PURPLE = '#5E35B1';
+/** Focused tab icon + header accents aligned with bottom bar */
+export const TAB_BAR_ACCENT_PURPLE = '#6D43BE';
+/** Tab bar pill background (legacy / non-blur fallbacks) */
+export const TAB_BAR_FILL = `rgba(${P.r}, ${P.g}, ${P.b}, 0.88)`;
+/** My lab card gradient violet (end stop); matches focused tab-bar icon hue */
+export const MY_LAB_VIOLET = '#452277';
+/** Active tab: white circle behind icon; focused icon uses MY_LAB_VIOLET */
+export const TAB_BAR_ACTIVE_BUBBLE = '#FFFFFF';
 /** Warmer lilac from schedule gradients — reads less blue than BRAND_PURPLE on pale cards */
 export const BRAND_LILAC = '#B84AE0';
-const P = { r: 94, g: 53, b: 177 };
 
 export const glassPurpleIconBtn = {
   width: 40,
@@ -53,7 +62,7 @@ export const glassPurpleFabBar = {
 };
 
 export const glassPurpleTabBar = {
-  backgroundColor: `rgba(${P.r}, ${P.g}, ${P.b}, 0.76)`,
+  backgroundColor: '#1C1033',
   borderWidth: 1,
-  borderColor: 'rgba(255, 255, 255, 0.4)',
+  borderColor: 'rgba(255, 255, 255, 0.08)',
 };

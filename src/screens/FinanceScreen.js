@@ -20,6 +20,9 @@ import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCentsOrDash } from '../format/moneyDisplay';
 import CurrencyPickerModal from '../components/CurrencyPickerModal';
 import IsoDatePickField from '../components/IsoDatePickField';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
+import { hapticImpactLight } from '../theme/haptics';
 
 const CHIP_BORDER_ON = '#5E35B1';
 
@@ -114,10 +117,12 @@ export default function FinanceScreen() {
   );
 
   const openExpense = () => {
+    hapticImpactLight();
     setModal({ type: 'expense', category: 'utilities', title: '', amount: '' });
   };
 
   const openRetail = () => {
+    hapticImpactLight();
     setModal({ type: 'retail', description: '', quantity: '1', amount: '' });
   };
 
@@ -462,9 +467,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   backBtn: { width: 40, alignItems: 'center' },
-  title: { fontSize: 18, fontWeight: '600', color: '#1C1C1E', flex: 1, textAlign: 'center' },
+  title: { ...Type.screenTitle, flex: 1, textAlign: 'center', color: '#1C1C1E' },
   curBtn: { minWidth: 44, paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' },
-  curBtnTxt: { fontSize: 15, fontWeight: '700', color: '#5E35B1' },
+  curBtnTxt: { ...Type.price },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,9 +479,9 @@ const styles = StyleSheet.create({
   },
   datePickSlot: { flex: 1, minWidth: 0, alignItems: 'center' },
   datePickField: { minHeight: 40, paddingVertical: 4, justifyContent: 'center' },
-  dateLabel: { fontSize: 17, fontWeight: '500', color: '#1C1C1E' },
+  dateLabel: { ...Type.greetingHello, color: '#1C1C1E' },
   scroll: { paddingHorizontal: 20, paddingBottom: 24 },
-  summaryHeading: { fontSize: 13, fontWeight: '600', color: '#636366', marginBottom: 10 },
+  summaryHeading: { ...Type.sectionLabel, marginBottom: 10 },
   stats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -493,10 +498,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
   },
-  statVal: { fontSize: 17, fontWeight: '700', color: '#1C1C1E', marginTop: 8 },
+  statVal: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.semibold,
+    color: '#1C1C1E',
+    marginTop: 8,
+  },
   statOut: { color: '#B71C1C' },
   statNet: { color: '#1565C0' },
-  statLbl: { fontSize: 12, fontWeight: '600', color: '#636366' },
+  statLbl: { ...Type.tabBarLabel, color: '#636366' },
   addCardsCol: { gap: 10, marginBottom: 22 },
   addCard: {
     flexDirection: 'row',
@@ -518,8 +529,8 @@ const styles = StyleSheet.create({
   },
   addIconExpense: { backgroundColor: 'rgba(183, 28, 28, 0.09)' },
   addIconRetail: { backgroundColor: 'rgba(46, 125, 50, 0.09)' },
-  addCardTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
-  sec: { fontSize: 15, fontWeight: '600', color: '#1C1C1E', marginBottom: 10 },
+  addCardTitle: { flex: 1, ...Type.listPrimary, color: '#1C1C1E', fontFamily: FontFamily.semibold },
+  sec: { ...Type.listPrimary, color: '#1C1C1E', fontFamily: FontFamily.semibold, marginBottom: 10 },
   secPad: { marginTop: 8 },
   lineCard: {
     flexDirection: 'row',
@@ -534,9 +545,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   lineMain: { flex: 1, minWidth: 0 },
-  lineTitle: { fontSize: 15, fontWeight: '500', color: '#1C1C1E' },
-  lineSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
-  lineAmt: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
+  lineTitle: { ...Type.listPrimary, color: '#1C1C1E' },
+  lineSub: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 4 },
+  lineAmt: { ...Type.price },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   modalSheet: {
@@ -556,16 +567,22 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
     marginBottom: 0,
   },
-  modalTitle: { fontSize: 17, fontWeight: '600', color: '#1C1C1E' },
-  modalDone: { fontSize: 17, color: '#5E35B1' },
+  modalTitle: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.semibold,
+    color: '#1C1C1E',
+  },
+  modalDone: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.medium,
+    color: '#5E35B1',
+  },
   modalBody: { paddingTop: 16, paddingBottom: 8 },
   fieldLbl: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#636366',
+    ...Type.sectionLabel,
     marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.35,
   },
   chipsScroll: { marginBottom: 16, maxHeight: 44 },
   chip: {
@@ -578,7 +595,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   chipOn: { backgroundColor: 'rgba(94, 53, 177, 0.12)', borderColor: CHIP_BORDER_ON },
-  chipTxt: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
+  chipTxt: { ...Type.secondary, fontFamily: FontFamily.medium, color: '#1C1C1E' },
   chipTxtOn: { color: CHIP_BORDER_ON },
   input: {
     borderWidth: 1,
@@ -586,7 +603,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 14,
     backgroundColor: '#FFFFFF',
@@ -605,11 +624,18 @@ const styles = StyleSheet.create({
   inputAmountInner: {
     flex: 1,
     paddingVertical: 14,
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 28,
+    lineHeight: typeLh(28),
+    fontFamily: FontFamily.semibold,
     color: '#1C1C1E',
   },
-  amountCur: { fontSize: 15, fontWeight: '700', color: '#8E8E93', paddingLeft: 4 },
+  amountCur: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.semibold,
+    color: '#8E8E93',
+    paddingLeft: 4,
+  },
   retailRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 4 },
   retailCol: { flex: 1, minWidth: 0 },
   retailColWide: { flex: 1.6 },
@@ -621,5 +647,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
-  saveBtnTxt: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  saveBtnTxt: { color: '#FFFFFF', ...Type.buttonLabel },
 });

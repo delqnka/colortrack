@@ -27,6 +27,8 @@ import {
   SCHEDULE_BANNER_LOCATIONS,
 } from '../theme/scheduleBannerGradient';
 import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
+import { hapticImpactLight } from '../theme/haptics';
 import { formatDisplayDate } from '../lib/formatDate';
 import IsoDatePickField from '../components/IsoDatePickField';
 
@@ -351,7 +353,10 @@ export default function LabScreen({ navigation }) {
                 </View>
                 <TouchableOpacity
                   style={styles.tplApply}
-                  onPress={() => openApplyTemplate(t)}
+                  onPress={() => {
+                    hapticImpactLight();
+                    openApplyTemplate(t);
+                  }}
                   activeOpacity={0.88}
                 >
                   <Text style={styles.tplApplyTxt}>Apply</Text>
@@ -373,7 +378,10 @@ export default function LabScreen({ navigation }) {
           <TouchableOpacity
             style={styles.visitMain}
             activeOpacity={0.9}
-            onPress={() => navigation.navigate('VisitDetail', { visitId: item.id })}
+            onPress={() => {
+                  hapticImpactLight();
+                  navigation.navigate('VisitDetail', { visitId: item.id });
+                }}
           >
             <View style={styles.visitTop}>
               <Text style={styles.visitClient} numberOfLines={1}>
@@ -479,7 +487,7 @@ export default function LabScreen({ navigation }) {
               value={visitDate}
               onChange={(ymd) => setVisitDate(ymd)}
               style={styles.modalDatePick}
-              textStyle={{ fontFamily: FontFamily.regular, fontSize: 17, color: '#000000' }}
+              textStyle={{ fontFamily: FontFamily.regular, fontSize: 15, lineHeight: typeLh(15), color: '#000000' }}
             />
             <Text style={styles.modalLabel}>Procedure</Text>
             <TextInput
@@ -577,27 +585,23 @@ const styles = StyleSheet.create({
   },
   headerTitleBlock: { flex: 1, paddingRight: 12 },
   largeTitle: {
-    fontFamily: FontFamily.heavy,
-    fontSize: 34,
-    letterSpacing: 0.35,
+    ...Type.screenTitle,
     color: '#000000',
+    letterSpacing: 0.35,
   },
   pageSubhead: {
-    fontFamily: FontFamily.regular,
-    fontSize: 15,
-    color: '#8E8E93',
+    ...Type.secondary,
     marginTop: 6,
-    lineHeight: 20,
     letterSpacing: -0.24,
   },
   emptyList: {
     fontFamily: FontFamily.regular,
-    fontSize: 17,
+    fontSize: 15,
+    lineHeight: typeLh(15),
     color: '#8E8E93',
     textAlign: 'center',
     paddingHorizontal: 32,
     paddingVertical: 40,
-    lineHeight: 22,
   },
   addBtn: { ...glassPurpleFabBar },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -619,16 +623,17 @@ const styles = StyleSheet.create({
   statLabel: {
     fontFamily: FontFamily.semibold,
     fontSize: 13,
+    lineHeight: typeLh(13),
     color: 'rgba(255,255,255,0.92)',
     marginBottom: 4,
     letterSpacing: -0.08,
   },
   statValue: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semibold,
     fontSize: 28,
+    lineHeight: typeLh(28),
     color: '#FFFFFF',
     letterSpacing: 0.25,
-    lineHeight: 34,
     textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
@@ -642,7 +647,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
   },
-  searchInput: { flex: 1, fontSize: 17, fontFamily: FontFamily.regular, color: '#000000', padding: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#000000',
+    padding: 0,
+  },
   chipsScroll: { marginBottom: 16 },
   chip: {
     paddingHorizontal: 14,
@@ -656,14 +668,12 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#1C1C1E',
   },
-  chipTxt: { fontSize: 14, color: '#1C1C1E' },
-  chipTxtOn: { fontWeight: '700', color: '#1C1C1E' },
+  chipTxt: { fontSize: 14, lineHeight: typeLh(14), fontFamily: FontFamily.regular, color: '#1C1C1E' },
+  chipTxtOn: { fontFamily: FontFamily.semibold, color: '#1C1C1E' },
   sectionLabel: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 20,
-    color: '#000000',
+    ...Type.sectionLabel,
     marginBottom: 10,
-    letterSpacing: -0.45,
+    color: '#000000',
   },
   visitCardOuter: {
     marginBottom: 12,
@@ -687,17 +697,20 @@ const styles = StyleSheet.create({
   visitMain: { flex: 1, padding: 14 },
   visitTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   visitClient: {
-    fontSize: 17,
-    fontFamily: FontFamily.semibold,
+    ...Type.listPrimary,
     color: '#000000',
     flex: 1,
     marginRight: 8,
     letterSpacing: -0.41,
   },
-  visitProc: { fontSize: 15, color: '#1C1C1E', marginTop: 4 },
-  visitDate: { fontSize: 13, color: '#8E8E93', marginTop: 4 },
-  visitPreview: { fontSize: 13, color: '#636366', marginTop: 8 },
-  visitMeta: { fontSize: 12, color: '#8E8E93', marginTop: 6 },
+  visitProc: { ...Type.listPrimary, color: '#1C1C1E', marginTop: 4 },
+  visitDate: { ...Type.secondary, marginTop: 4, color: '#8E8E93' },
+  visitPreview: { ...Type.secondary, marginTop: 8, color: '#636366' },
+  visitMeta: {
+    ...Type.tabBarLabel,
+    marginTop: 6,
+    color: '#8E8E93',
+  },
   visitActions: {
     width: 92,
     alignItems: 'stretch',
@@ -715,8 +728,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   visitActLabel: {
-    fontSize: 10,
-    fontFamily: FontFamily.semibold,
+    ...Type.tabBarLabel,
+    lineHeight: typeLh(11),
     color: '#636366',
     marginTop: 3,
     textAlign: 'center',
@@ -724,10 +737,7 @@ const styles = StyleSheet.create({
   visitActLabelAccent: { color: BRAND_PURPLE },
   tplBlock: { marginTop: 28 },
   libraryEmpty: {
-    fontFamily: FontFamily.regular,
-    fontSize: 15,
-    color: '#8E8E93',
-    lineHeight: 20,
+    ...Type.secondary,
     marginBottom: 8,
     letterSpacing: -0.24,
   },
@@ -752,15 +762,15 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#EDEDED',
   },
-  tplName: { fontSize: 17, fontFamily: FontFamily.medium, color: '#000000' },
-  tplMeta: { fontSize: 15, fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 2 },
+  tplName: { ...Type.listPrimary, color: '#000000' },
+  tplMeta: { ...Type.secondary, marginTop: 2, color: '#8E8E93' },
   tplApply: {
     backgroundColor: BRAND_PURPLE,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
   },
-  tplApplyTxt: { color: '#FFFFFF', fontFamily: FontFamily.semibold, fontSize: 15 },
+  tplApplyTxt: { color: '#FFFFFF', ...Type.buttonLabel },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   modalSheet: {
@@ -780,24 +790,22 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   modalTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 20,
+    ...Type.screenTitle,
     color: '#000000',
     marginBottom: 8,
     letterSpacing: -0.45,
   },
   modalSubtitle: {
     fontFamily: FontFamily.regular,
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: typeLh(13),
     color: '#636366',
-    lineHeight: 20,
     marginBottom: 16,
     letterSpacing: -0.24,
   },
   modalLabel: {
+    ...Type.secondary,
     fontFamily: FontFamily.medium,
-    fontSize: 13,
-    color: '#8E8E93',
     marginBottom: 6,
     letterSpacing: -0.08,
   },
@@ -807,7 +815,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 17,
+    fontSize: 15,
+    lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
     marginBottom: 14,
     color: '#000000',
@@ -822,10 +831,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   clientHit: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F2F2F7' },
-  clientHitName: { fontSize: 17, fontFamily: FontFamily.regular, color: '#000000' },
-  clientHitPhone: { fontSize: 15, fontFamily: FontFamily.regular, color: '#8E8E93' },
+  clientHitName: { ...Type.listPrimary, color: '#000000' },
+  clientHitPhone: { ...Type.secondary, color: '#8E8E93', marginTop: 2 },
   modalCancel: { marginTop: 12, alignItems: 'center' },
-  modalCancelTxt: { fontSize: 17, fontFamily: FontFamily.regular, color: BRAND_PURPLE },
+  modalCancelTxt: { fontSize: 15, lineHeight: typeLh(15), fontFamily: FontFamily.regular, color: BRAND_PURPLE },
   modalPrimary: {
     backgroundColor: BRAND_PURPLE,
     borderRadius: 12,
@@ -833,5 +842,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  modalPrimaryTxt: { color: '#FFFFFF', fontFamily: FontFamily.semibold, fontSize: 17 },
+  modalPrimaryTxt: { color: '#FFFFFF', ...Type.buttonLabel },
 });

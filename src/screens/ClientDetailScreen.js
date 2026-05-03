@@ -14,11 +14,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { apiGet, apiPost, apiDelete } from '../api/client';
+import { apiGet, apiPost, apiDelete, resolveImagePublicUri } from '../api/client';
 import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
+import { hapticImpactLight } from '../theme/haptics';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
@@ -174,7 +177,7 @@ export default function ClientDetailScreen({route, navigation}) {
         <Image
           source={{
             uri:
-              client.avatar_url ||
+              resolveImagePublicUri(client.avatar_url || '') ||
               'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop',
           }}
           style={styles.hero}
@@ -185,7 +188,10 @@ export default function ClientDetailScreen({route, navigation}) {
         <TouchableOpacity
           style={styles.cta}
           activeOpacity={0.9}
-          onPress={() => navigation.navigate('FormulaBuilder', { clientId })}
+          onPress={() => {
+            hapticImpactLight();
+            navigation.navigate('FormulaBuilder', { clientId });
+          }}
         >
           <Ionicons name="brush-outline" size={22} color="#fff" />
           <Text style={styles.ctaText}>Visit</Text>
@@ -193,7 +199,10 @@ export default function ClientDetailScreen({route, navigation}) {
 
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={() => navigation.navigate('ClientForm', { clientId })}
+          onPress={() => {
+            hapticImpactLight();
+            navigation.navigate('ClientForm', { clientId });
+          }}
         >
           <View
             style={[
@@ -230,7 +239,10 @@ export default function ClientDetailScreen({route, navigation}) {
               key={v.id}
               style={styles.visitCard}
               activeOpacity={0.88}
-              onPress={() => navigation.navigate('VisitDetail', { visitId: v.id })}
+              onPress={() => {
+                hapticImpactLight();
+                navigation.navigate('VisitDetail', { visitId: v.id });
+              }}
             >
               <View style={styles.visitCardTop}>
                 <View style={styles.visitCardMain}>
@@ -266,9 +278,12 @@ export default function ClientDetailScreen({route, navigation}) {
 
         <Text style={styles.section}>Photos</Text>
         <View style={styles.photoGrid}>
-          {photos.map((p) => (
-            <View key={p.id} style={[styles.photoCell, { width: thumbW, height: thumbW }]}>
-              <Image source={{ uri: p.url }} style={styles.photoImage} />
+          {photos.map((p) => {
+            const u = resolveImagePublicUri(p.url || '');
+            if (!u) return null;
+            return (
+              <View key={p.id} style={[styles.photoCell, { width: thumbW, height: thumbW }]}>
+              <Image source={{ uri: u }} style={styles.photoImage} />
               <TouchableOpacity
                 style={styles.photoDeleteBtn}
                 onPress={() => confirmRemovePhoto(p)}
@@ -278,11 +293,15 @@ export default function ClientDetailScreen({route, navigation}) {
               >
                 <Ionicons name="trash-outline" size={18} color="#fff" />
               </TouchableOpacity>
-            </View>
-          ))}
+              </View>
+            );
+          })}
           <TouchableOpacity
             style={[styles.addPhotoCell, { width: thumbW, height: thumbW }]}
-            onPress={pickAndUpload}
+            onPress={() => {
+              hapticImpactLight();
+              pickAndUpload();
+            }}
             disabled={uploading}
             activeOpacity={0.85}
           >
@@ -313,7 +332,7 @@ const styles = StyleSheet.create({
   back: {
     ...glassPurpleIconBtn,
   },
-  topTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  topTitle: { ...Type.greetingHello, color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
   hero: {
     width: '100%',
@@ -322,8 +341,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ddd',
     marginTop: 8,
   },
-  name: { marginTop: 20, fontSize: 24, fontWeight: '400', color: '#1C1C1E' },
-  meta: { marginTop: 6, fontSize: 15, color: '#1C1C1E' },
+  name: { marginTop: 20, ...Type.screenTitle },
+  meta: { marginTop: 6, ...Type.secondary },
   cta: {
     marginTop: 18,
     flexDirection: 'row',
@@ -339,7 +358,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  ctaText: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  ctaText: { color: '#fff', ...Type.buttonLabel },
   patchTouch: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -351,9 +370,14 @@ const styles = StyleSheet.create({
   patchRowWarn: { backgroundColor: '#FFEBEE' },
   patchRowOk: { backgroundColor: '#E8F5E9' },
   patchMid: { flex: 1 },
-  patchTitle: { fontSize: 14, fontWeight: '400' },
-  patchDate: { fontSize: 13, color: '#1C1C1E', marginTop: 4 },
-  section: { marginTop: 28, fontSize: 18, fontWeight: '400', color: '#1C1C1E', marginBottom: 12 },
+  patchTitle: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  patchDate: { marginTop: 4, ...Type.secondary },
+  section: { marginTop: 28, marginBottom: 12, ...Type.sectionLabel },
   visitCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -372,14 +396,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   visitCardMain: { flex: 1 },
-  visitTitle: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
-  visitDate: { marginTop: 6, fontSize: 14, color: '#1C1C1E' },
-  visitPaid: { marginTop: 6, fontSize: 14, fontWeight: '500', color: '#2E7D32' },
-  visitSource: { marginTop: 4, fontSize: 12, color: '#007AFF' },
-  visitSub: { marginTop: 4, fontSize: 13, color: '#1C1C1E' },
+  visitTitle: { ...Type.listPrimary, color: '#1C1C1E' },
+  visitDate: { marginTop: 6, ...Type.secondary, color: '#1C1C1E' },
+  visitPaid: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.medium,
+    color: '#2E7D32',
+  },
+  visitSource: { marginTop: 4, ...Type.tabBarLabel, color: '#007AFF' },
+  visitSub: { marginTop: 4, ...Type.secondary, color: '#1C1C1E' },
   formulaBox: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E5EA' },
-  formulaLine: { fontSize: 13, color: '#1C1C1E', marginBottom: 6, lineHeight: 18 },
-  formulaSec: { fontWeight: '400', color: '#5E35B1' },
+  formulaLine: { ...Type.secondary, color: '#1C1C1E', marginBottom: 6 },
+  formulaSec: { fontFamily: FontFamily.medium, fontSize: 13, lineHeight: typeLh(13), color: '#5E35B1' },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

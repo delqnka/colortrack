@@ -94,6 +94,36 @@ export function getApiResolvedUrl(path) {
   return apiFetchUrl(path);
 }
 
+/**
+ * Builds a usable absolute URI for <Image source={{ uri }} />.
+ * - Relative paths (/api/...) → current API base via getApiResolvedUrl
+ * - http(s) localhost / 127.0.0.1 (bad for device) → remapped to current API base + path
+ */
+export function resolveImagePublicUri(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/^data:/i.test(s)) return s;
+  if (/^file:\/\//i.test(s)) return s;
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s);
+      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+        return getApiResolvedUrl(`${u.pathname}${u.search || ''}`);
+      }
+    } catch {
+      /* keep original */
+    }
+    return s;
+  }
+  const pathOnly = s.startsWith('/') ? s : `/${s}`;
+  return getApiResolvedUrl(pathOnly);
+}
+
+/** @deprecated Use resolveImagePublicUri (same behaviour). Kept for older bundles / callers. */
+export function resolveStaffAvatarUri(raw) {
+  return resolveImagePublicUri(raw);
+}
+
 const TOKEN_KEY = 'auth_token';
 const API_BASE_KEY = 'colortrack_token_api_base';
 const OUTBOX_KEY = 'api_outbox';
@@ -192,6 +222,11 @@ async function writeCache(path, data) {
   } catch {
     /* noop */
   }
+}
+
+/** Cached JSON from last successful GET (same key as offline fallback in apiGet). Hydrate UI without a network round-trip. */
+export async function apiReadStaleCache(path) {
+  return readCache(path);
 }
 
 async function enqueueOutbox(item) {

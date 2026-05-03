@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { getCountryCallingCode } from 'libphonenumber-js';
-import { apiGet, apiPatch, apiPost } from '../api/client';
+import { apiGet, apiPatch, apiPost, resolveImagePublicUri } from '../api/client';
 import {
   getPhoneCountries,
   formatE164,
@@ -28,6 +28,8 @@ import {
 } from '../lib/phoneCountries';
 import IsoDatePickField from '../components/IsoDatePickField';
 import { glassPurpleIconBtn } from '../theme/glassUi';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
@@ -201,7 +203,10 @@ export default function ClientFormScreen({ route, navigation }) {
     setPendingAvatar({ uri: asset.uri, contentType });
   };
 
-  const displayAvatarUri = pendingAvatar?.uri || avatarUrl || null;
+  const trimmedAvatarFromServer = String(avatarUrl ?? '').trim();
+  const displayAvatarUri =
+    pendingAvatar?.uri ??
+    (trimmedAvatarFromServer.length > 0 ? resolveImagePublicUri(trimmedAvatarFromServer) : '');
 
   const tryUploadAvatar = async (id) => {
     if (!pendingAvatar) return;
@@ -494,15 +499,24 @@ const styles = StyleSheet.create({
   iconBtn: {
     ...glassPurpleIconBtn,
   },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '400', color: '#1C1C1E' },
+  title: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#1C1C1E' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  label: { fontSize: 14, fontWeight: '400', color: '#1C1C1E', marginBottom: 8, marginTop: 4 },
+  label: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+    marginBottom: 8,
+    marginTop: 4,
+  },
   input: {
     backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 4,
     ...reliefShadow,
@@ -524,14 +538,21 @@ const styles = StyleSheet.create({
     minWidth: 118,
     ...reliefShadow,
   },
-  countryBtnText: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
+  countryBtnText: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
   phoneInput: {
     flex: 1,
     backgroundColor: '#fff',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     ...reliefShadow,
   },
@@ -558,8 +579,8 @@ const styles = StyleSheet.create({
   },
   photoActions: { gap: 8 },
   photoLink: { paddingVertical: 4 },
-  photoLinkText: { fontSize: 16, fontWeight: '400', color: '#5E35B1' },
-  photoLinkMuted: { color: '#1C1C1E', fontWeight: '400' },
+  photoLinkText: { ...Type.buttonLabel, color: '#5E35B1' },
+  photoLinkMuted: { ...Type.listPrimary, color: '#1C1C1E', fontFamily: FontFamily.regular },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   saveBtn: {
     marginTop: 28,
@@ -574,7 +595,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   saveDisabled: { opacity: 0.6 },
-  saveTxt: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  saveTxt: { color: '#fff', ...Type.buttonLabel },
   modalSafe: { flex: 1, backgroundColor: '#FFFFFF' },
   modalHeader: {
     flexDirection: 'row',
@@ -585,7 +606,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
+  modalTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
   modalSearch: {
     marginHorizontal: 16,
     marginVertical: 10,
@@ -593,7 +621,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     ...reliefShadow,
   },
@@ -607,6 +637,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   countryRowFlag: { fontSize: 22 },
-  countryRowName: { flex: 1, fontSize: 16, color: '#1C1C1E' },
-  countryRowDial: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
+  countryRowName: { flex: 1, ...Type.listPrimary, color: '#1C1C1E' },
+  countryRowDial: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
 });

@@ -13,14 +13,17 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
 import { glassPurpleIconBtn } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
+import { hapticImpactLight } from '../theme/haptics';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
@@ -66,10 +69,12 @@ export default function ServicesScreen({ navigation }) {
   const loadServices = useCallback(async () => {
     try {
       setLoading(true);
-      const rows = await apiGet('/api/services', { allowStaleCache: false });
-      setServices(Array.isArray(rows) ? rows : []);
+      const rows = await apiGet('/api/services', { allowStaleCache: true });
+      if (Array.isArray(rows)) {
+        setServices(rows);
+      }
     } catch {
-      setServices([]);
+      setServices((prev) => (Array.isArray(prev) ? prev : []));
     } finally {
       setLoading(false);
     }
@@ -96,6 +101,41 @@ export default function ServicesScreen({ navigation }) {
     ]);
   };
 
+  const humanizeServiceImportError = (msg) => {
+    const m = String(msg || '').trim();
+    if (m === 'ocr_failed') return 'Could not read this price list.';
+    if (m === 'missing_ocr_key') return 'Import is not available on this server.';
+    if (m === 'import_key_required' || m === 'bad_request') return 'Something went wrong. Try again.';
+    if (m === 'r2_unconfigured')
+      return 'File storage is not configured. Check server environment variables.';
+    if (m === 'import_not_found' || m === 'bad_import_key') return 'Upload expired. Try again.';
+    if (m === 'upload_failed') return 'Upload failed.';
+    return m || 'Import failed';
+  };
+
+  const importPriceListViaR2 = async (localUri, contentType) => {
+    const presign = await apiPost(
+      '/api/services/import/ocr/presign',
+      { content_type: contentType },
+      { queueOffline: false },
+    );
+    const uploadUrl = presign?.uploadUrl;
+    const key = presign?.key;
+    const ct = presign?.contentType ?? contentType;
+    if (!uploadUrl || !key) {
+      throw new Error('bad_request');
+    }
+    const up = await FileSystem.uploadAsync(uploadUrl, localUri, {
+      httpMethod: 'PUT',
+      headers: { 'Content-Type': ct },
+    });
+    const st = typeof up.status === 'number' ? up.status : 0;
+    if (st < 200 || st >= 300) {
+      throw new Error('upload_failed');
+    }
+    return apiPost('/api/services/import/ocr', { import_key: key }, { queueOffline: false });
+  };
+
   const importPriceList = async (source) => {
     if (importBusy) return;
     try {
@@ -115,23 +155,18 @@ export default function ServicesScreen({ navigation }) {
       const picker = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
       const result = await picker({
         mediaTypes: IMAGE_MEDIA_TYPES,
-        base64: true,
         quality: 0.85,
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      if (!asset.base64) {
+      const contentType =
+        asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+      if (!asset.uri) {
         Alert.alert('', 'Image');
         return;
       }
-      const contentType =
-        asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
       setImportBusy(true);
-      const data = await apiPost(
-        '/api/services/import/ocr',
-        { image_base64: asset.base64, content_type: contentType },
-        { queueOffline: false },
-      );
+      const data = await importPriceListViaR2(asset.uri, contentType);
       const rows = previewRowsFromServices(data?.services);
       if (!rows.length) {
         Alert.alert('', 'No services found.');
@@ -140,7 +175,7 @@ export default function ServicesScreen({ navigation }) {
       setPreviewRows(rows);
       setPreviewOpen(true);
     } catch (e) {
-      Alert.alert('', e.message || 'Import failed');
+      Alert.alert('', humanizeServiceImportError(e?.message));
     } finally {
       setImportBusy(false);
     }
@@ -284,7 +319,13 @@ export default function ServicesScreen({ navigation }) {
                     </Text>
                   ) : null}
                 </View>
-                <TouchableOpacity onPress={() => openEditService(service)} hitSlop={10}>
+                <TouchableOpacity
+                  onPress={() => {
+                    hapticImpactLight();
+                    openEditService(service);
+                  }}
+                  hitSlop={10}
+                >
                   <Ionicons name="pencil" size={20} color="#5E35B1" />
                 </TouchableOpacity>
               </View>
@@ -438,8 +479,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 18,
-    fontFamily: FontFamily.regular,
+    ...Type.screenTitle,
     color: '#1C1C1E',
   },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
@@ -461,8 +501,7 @@ const styles = StyleSheet.create({
   actionBtnDisabled: { opacity: 0.6 },
   actionBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: FontFamily.semibold,
+    ...Type.buttonLabel,
   },
   list: {
     gap: 10,
@@ -481,16 +520,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
   },
-  serviceName: {
-    fontSize: 16,
-    fontFamily: FontFamily.medium,
-    color: '#1C1C1E',
-  },
+  serviceName: { ...Type.listPrimary, color: '#1C1C1E' },
   servicePrice: {
     marginTop: 4,
-    fontSize: 14,
-    fontFamily: FontFamily.regular,
-    color: '#5E35B1',
+    ...Type.price,
   },
   modalBackdrop: {
     flex: 1,
@@ -519,8 +552,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { fontSize: 17, fontFamily: FontFamily.regular, color: '#1C1C1E' },
-  modalClose: { fontSize: 17, fontFamily: FontFamily.regular, color: '#5E35B1' },
+  modalTitle: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  modalClose: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#5E35B1',
+  },
   previewContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -538,6 +581,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     ...reliefShadow,
   },
@@ -549,7 +594,7 @@ const styles = StyleSheet.create({
   },
   currencyLabel: {
     minWidth: 34,
-    fontSize: 13,
+    ...Type.secondary,
     fontFamily: FontFamily.medium,
     color: '#5E35B1',
   },
@@ -558,11 +603,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  addRowTxt: {
-    fontSize: 15,
-    fontFamily: FontFamily.regular,
-    color: '#5E35B1',
-  },
+  addRowTxt: { ...Type.buttonLabel, color: '#5E35B1' },
   saveBtn: {
     marginTop: 18,
     backgroundColor: '#5E35B1',
@@ -577,7 +618,8 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   editLabel: {
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 8,
@@ -587,7 +629,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     marginBottom: 14,
     ...reliefShadow,
@@ -604,8 +648,7 @@ const styles = StyleSheet.create({
   },
   editCurrencyLabel: {
     minWidth: 42,
-    fontSize: 15,
-    fontFamily: FontFamily.medium,
+    ...Type.price,
     color: '#5E35B1',
   },
 });

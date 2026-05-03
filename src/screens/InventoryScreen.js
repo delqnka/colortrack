@@ -11,24 +11,31 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPost } from '../api/client';
-import { glassPurpleFabBar } from '../theme/glassUi';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
+import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 import SFIcon from '../components/SFIcon';
 import {
   importCategoryForItem,
   inventoryCategoryKey,
   isColorItem,
 } from '../inventory/inventoryCategories';
+import { hapticImpactLight } from '../theme/haptics';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 const ORDER = ['dye', 'oxidant', 'retail', 'consumable'];
+const BRAND_ACCENT = '#6B4EFF';
+const LOW_STOCK_ORANGE = '#FF6B35';
 
 const LABEL = {
   dye: 'Color',
@@ -79,6 +86,97 @@ function sectionTitle(cat) {
   return s.replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
+/** BGR queries often don’t match Latin product names — map to EN/category needles. */
+const SEARCH_NEEDLE_ALIASES = {
+  // Avoid 'color/colour/colors': they match unrelated retail/consumables ("Colour care" etc.).
+  боя: ['dye', 'colorant', 'tint'],
+  бои: ['dye', 'colorant'],
+  боичка: ['dye', 'tint'],
+  боички: ['dye', 'dyes'],
+  цвят: ['shade', 'dye'],
+  окиснител: ['oxidant', 'developer', 'oxydant'],
+  оксид: ['oxidant', 'developer'],
+  оксидант: ['oxidant', 'developer'],
+  тонер: ['toner'],
+  микстон: ['mixtone'],
+  микстони: ['mixtone'],
+};
+
+function normalizedSearchTokens(query) {
+  const raw = String(query || '')
+    .normalize('NFC')
+    .trim()
+    .toLowerCase();
+  if (!raw) return [];
+  const parts = raw.split(/\s+/).filter(Boolean);
+  return parts.length ? parts : [raw];
+}
+
+function needlesForToken(token) {
+  const t = String(token || '')
+    .normalize('NFC')
+    .trim()
+    .toLowerCase();
+  if (!t) return [];
+  const set = new Set([t]);
+  const extra = SEARCH_NEEDLE_ALIASES[t];
+  if (extra) {
+    for (const e of extra) {
+      const n = String(e).normalize('NFC').trim().toLowerCase();
+      if (n) set.add(n);
+    }
+  }
+  const out = [...set];
+  return out.filter((needle) => {
+    if (!needle) return false;
+    if (/[\u0370-\u04FF\u2000-\u2BFF]/u.test(needle)) return true;
+    if (/^\d+$/.test(needle)) return true;
+    if (needle.length < 2) return false;
+    return true;
+  });
+}
+
+/** When typing a query: search ALL inventory (tabs only filter idle list). */
+function itemMatchesInventorySearch(item, queryRaw) {
+  const tokens = normalizedSearchTokens(queryRaw);
+  if (!tokens.length) return false;
+
+  const ck = inventoryCategoryKey(item?.category);
+  const hayStrings = [
+    item?.name,
+    item?.brand,
+    item?.shade_code,
+    item?.package_size,
+    item?.supplier_hint,
+    item?.category,
+    ck,
+    LABEL[ck],
+    sectionTitle(ck),
+    isRetailItem(item) ? 'retail' : '',
+  ]
+    .filter((x) => x != null && String(x).trim() !== '')
+    .map((x) =>
+      String(x)
+        .normalize('NFC')
+        .trim()
+        .toLowerCase(),
+    );
+
+  return tokens.every((token) => {
+    const needles = needlesForToken(token);
+    if (!needles.length) return false;
+    return needles.some(
+      (needle) => needle.length > 0 && hayStrings.some((hay) => hay.includes(needle)),
+    );
+  });
+}
+
+function inventoryAccentForItem(item) {
+  if (isRetailItem(item)) return '#34D399';
+  if (isColorItem(item)) return '#C084FC';
+  return '#60A5FA';
+}
+
 function priceTextFromCents(cents) {
   if (cents == null || cents === '') return '';
   const n = Number(cents);
@@ -127,6 +225,10 @@ export default function InventoryScreen({ navigation }) {
   const [previewRows, setPreviewRows] = useState([]);
   const [savingImport, setSavingImport] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState('stock');
+  const [lowListOpen, setLowListOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [inventorySearchOpen, setInventorySearchOpen] = useState(false);
+  const [inventorySearchQ, setInventorySearchQ] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -152,15 +254,22 @@ export default function InventoryScreen({ navigation }) {
     return rows.filter((item) => !isRetailItem(item) && !isColorItem(item));
   }, [inventoryFilter, rows]);
 
+  const inventorySearchNorm = inventorySearchQ.normalize('NFC').trim();
+
+  const searchFilteredRows = useMemo(() => {
+    if (!inventorySearchNorm) return filteredRows;
+    return rows.filter((item) => itemMatchesInventorySearch(item, inventorySearchNorm));
+  }, [rows, filteredRows, inventorySearchNorm]);
+
   const grouped = useMemo(() => {
     const m = {};
-    for (const item of filteredRows) {
+    for (const item of searchFilteredRows) {
       const key = inventoryCategoryKey(item.category);
       if (!m[key]) m[key] = [];
       m[key].push(item);
     }
     return m;
-  }, [filteredRows]);
+  }, [searchFilteredRows]);
 
   const sectionKeys = useMemo(() => {
     const keys = Object.keys(grouped);
@@ -170,6 +279,26 @@ export default function InventoryScreen({ navigation }) {
   }, [grouped]);
 
   const lowCount = rows.filter((r) => r.is_low_stock).length;
+
+  const lowStockItems = useMemo(() => rows.filter((r) => r.is_low_stock), [rows]);
+  const primaryLowStockItem = lowStockItems[0] || null;
+
+  const onRefresh = useCallback(async () => {
+    // Micro-interaction: pull to refresh uses a purple spinner instead of a default gray one.
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  const onLowBadgePress = useCallback(() => {
+    if (lowStockItems.length === 0) return;
+    hapticImpactLight();
+    if (lowStockItems.length === 1) {
+      navigation.navigate('InventoryItem', { itemId: lowStockItems[0].id });
+      return;
+    }
+    setLowListOpen(true);
+  }, [lowStockItems, navigation]);
 
   const updatePreviewRow = (key, patch) => {
     setPreviewRows((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
@@ -196,58 +325,149 @@ export default function InventoryScreen({ navigation }) {
     );
   };
 
-  const importInvoice = async (source) => {
+  const importInvoiceViaR2 = async (localUri, contentType) => {
+    const presign = await apiPost(
+      '/api/inventory/import/invoice/presign',
+      { content_type: contentType },
+      { queueOffline: false },
+    );
+    const uploadUrl = presign?.uploadUrl;
+    const key = presign?.key;
+    const ct = presign?.contentType ?? contentType;
+    if (!uploadUrl || !key) {
+      throw new Error('bad_request');
+    }
+    const up = await FileSystem.uploadAsync(uploadUrl, localUri, {
+      httpMethod: 'PUT',
+      headers: { 'Content-Type': ct },
+    });
+    const st = typeof up.status === 'number' ? up.status : 0;
+    if (st < 200 || st >= 300) {
+      throw new Error('upload_failed');
+    }
+    return apiPost('/api/inventory/import/invoice', { import_key: key }, { queueOffline: false });
+  };
+
+  const humanizeInvoiceError = (msg) => {
+    const m = String(msg || '').trim();
+    if (m === 'pdf_no_extractable_text') return 'No selectable text in this PDF.';
+    if (m === 'pdf_invalid') return 'Could not open this PDF.';
+    if (m === 'ocr_failed') return 'Could not read this invoice.';
+    if (m === 'missing_ocr_key') return 'Import is not available on this server.';
+    if (m === 'import_key_required' || m === 'bad_request') return 'Something went wrong. Try again.';
+    if (m === 'r2_unconfigured')
+      return 'File storage is not configured. Check server environment variables.';
+    if (m === 'import_not_found' || m === 'bad_import_key') return 'Upload expired. Try again.';
+    if (m === 'upload_failed') return 'Upload failed.';
+    if (m === 'not_found') return 'Inventory import is not available on this server yet.';
+    return m || 'Import failed';
+  };
+
+  const applyInvoiceResponse = async (data) => {
+    const parsed = invoiceRowsFromItems(data?.items);
+    if (!parsed.length) {
+      Alert.alert('', 'No products found.');
+      return;
+    }
+    setPreviewRows(parsed);
+    setPreviewOpen(true);
+  };
+
+  const importInvoiceFromCamera = async () => {
     if (importBusy) return;
     try {
-      if (source === 'camera') {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('', 'Camera access');
-          return;
-        }
-      } else {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('', 'Photo library access');
-          return;
-        }
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('', 'Camera access');
+        return;
       }
-      const picker = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
-      const result = await picker({
+      const result = await ImagePicker.launchCameraAsync({
         mediaTypes: IMAGE_MEDIA_TYPES,
-        base64: true,
         quality: 0.85,
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      if (!asset.base64) {
+      const contentType =
+        asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+      if (!asset.uri) {
         Alert.alert('', 'Image');
         return;
       }
-      const contentType =
-        asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
       setImportBusy(true);
-      const data = await apiPost(
-        '/api/inventory/import/invoice',
-        { image_base64: asset.base64, content_type: contentType },
-        { queueOffline: false },
-      );
-      const parsed = invoiceRowsFromItems(data?.items);
-      if (!parsed.length) {
-        Alert.alert('', 'No products found.');
-        return;
-      }
-      setPreviewRows(parsed);
-      setPreviewOpen(true);
+      const data = await importInvoiceViaR2(asset.uri, contentType);
+      await applyInvoiceResponse(data);
     } catch (e) {
-      const message =
-        String(e?.message || '') === 'not_found'
-          ? 'Inventory import is not available on this server yet.'
-          : e.message || 'Import failed';
-      Alert.alert('', message);
+      Alert.alert('', humanizeInvoiceError(e?.message));
     } finally {
       setImportBusy(false);
     }
+  };
+
+  const importInvoiceFromPhotoLibrary = async () => {
+    if (importBusy) return;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('', 'Photo library access');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: IMAGE_MEDIA_TYPES,
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const contentType =
+        asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+      if (!asset.uri) {
+        Alert.alert('', 'Image');
+        return;
+      }
+      setImportBusy(true);
+      const data = await importInvoiceViaR2(asset.uri, contentType);
+      await applyInvoiceResponse(data);
+    } catch (e) {
+      Alert.alert('', humanizeInvoiceError(e?.message));
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const importInvoiceFromPdf = async () => {
+    if (importBusy) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const file = result.assets[0];
+      const uri = file.uri;
+      if (!uri) {
+        Alert.alert('', 'PDF');
+        return;
+      }
+      const mime =
+        typeof file.mimeType === 'string' && file.mimeType.toLowerCase().includes('pdf')
+          ? 'application/pdf'
+          : 'application/pdf';
+      setImportBusy(true);
+      const data = await importInvoiceViaR2(uri, mime);
+      await applyInvoiceResponse(data);
+    } catch (e) {
+      Alert.alert('', humanizeInvoiceError(e?.message));
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const openImportInvoiceMenu = () => {
+    if (importBusy) return;
+    Alert.alert('', undefined, [
+      { text: 'Photos', onPress: () => importInvoiceFromPhotoLibrary() },
+      { text: 'PDF', onPress: () => importInvoiceFromPdf() },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const saveInvoiceImport = async () => {
@@ -281,34 +501,95 @@ export default function InventoryScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.title}>Inventory</Text>
-        <View style={styles.headerRight}>
-          {lowCount > 0 ? (
-            <View style={styles.badge}>
-              <Ionicons name="alert-circle" size={18} color="#fff" />
-              <Text style={styles.badgeText}>{lowCount} low</Text>
+        {inventorySearchOpen ? (
+          <View style={styles.headerSearchRow}>
+            <Ionicons name="search-outline" size={18} color="#AEAEB2" style={styles.headerSearchLeadIcon} />
+            <TextInput
+              value={inventorySearchQ}
+              onChangeText={setInventorySearchQ}
+              style={styles.headerSearchInput}
+              placeholder=""
+              placeholderTextColor="#AEAEB2"
+              autoFocus
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              accessibilityLabel="Search inventory"
+            />
+            {inventorySearchQ.length > 0 ? (
+              <TouchableOpacity
+                onPress={() => setInventorySearchQ('')}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Clear"
+              >
+                <Ionicons name="close-circle" size={20} color="#C7C7CC" />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              onPress={() => {
+                setInventorySearchOpen(false);
+                setInventorySearchQ('');
+              }}
+              hitSlop={10}
+              style={styles.headerSearchCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
+            >
+              <Ionicons name="close" size={22} color="#0D0D0D" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerTitles}>
+              <Text style={styles.title}>Inventory</Text>
+              <Text style={styles.subtitle}>Add stock from a photo or invoice</Text>
             </View>
-          ) : null}
-        </View>
+            <TouchableOpacity
+              style={styles.headerSearchOpenBtn}
+              onPress={() => setInventorySearchOpen(true)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+            >
+              <Ionicons name="search-outline" size={22} color="#0D0D0D" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
-      <View style={styles.importRow}>
-        <TouchableOpacity
-          style={[styles.importBtn, importBusy && styles.importBtnDisabled]}
-          onPress={() => importInvoice('camera')}
-          disabled={importBusy}
-          activeOpacity={0.88}
-        >
-          <Text style={styles.importBtnText}>Camera</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.importBtn, importBusy && styles.importBtnDisabled]}
-          onPress={() => importInvoice('library')}
-          disabled={importBusy}
-          activeOpacity={0.88}
-        >
-          {importBusy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.importBtnText}>Import invoice</Text>}
-        </TouchableOpacity>
+      <View style={styles.importSection}>
+        <View style={styles.importRow}>
+          <TouchableOpacity
+            style={[styles.importBtnCamera, importBusy && styles.importBtnDisabled]}
+            onPress={() => importInvoiceFromCamera()}
+            disabled={importBusy}
+            activeOpacity={0.6}
+          >
+            <Ionicons name="add" size={14} color="#0D0D0D" />
+            <Ionicons name="camera-outline" size={14} color="#0D0D0D" />
+            <Text style={styles.importBtnLabelSecondary}>Camera</Text>
+          </TouchableOpacity>
+
+          <View style={styles.importDivider} />
+
+          <TouchableOpacity
+            style={[styles.importBtnInvoice, importBusy && styles.importBtnDisabled]}
+            onPress={() => openImportInvoiceMenu()}
+            disabled={importBusy}
+            activeOpacity={0.6}
+          >
+            {importBusy ? (
+              <ActivityIndicator color={BRAND_ACCENT} size="small" />
+            ) : (
+              <>
+                <Ionicons name="add" size={14} color={BRAND_ACCENT} />
+                <Ionicons name="document-text-outline" size={14} color={BRAND_ACCENT} />
+                <Text style={styles.importBtnLabelPrimary}>Import invoice</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.filterRow}>
@@ -319,7 +600,7 @@ export default function InventoryScreen({ navigation }) {
               key={option.key}
               style={[styles.filterCard, selected && styles.filterCardOn]}
               onPress={() => setInventoryFilter(option.key)}
-              activeOpacity={0.85}
+              activeOpacity={0.86}
             >
               <TouchableOpacity
                 style={styles.filterAddBtn}
@@ -332,72 +613,183 @@ export default function InventoryScreen({ navigation }) {
                 activeOpacity={0.85}
                 hitSlop={6}
               >
-                <Ionicons name="add" size={18} color="#FFFFFF" />
+                <Ionicons name="add" size={16} color="#FFFFFF" />
               </TouchableOpacity>
               <View style={[styles.filterIconBubble, selected && styles.filterIconBubbleOn]}>
                 <SFIcon
                   name={option.icon}
                   iosName={option.iosIcon}
-                  size={26}
-                  color={selected ? '#E84D93' : '#5E35B1'}
+                  size={20}
+                  color={selected ? BRAND_ACCENT : '#0D0D0D'}
+                  weight="semibold"
                 />
               </View>
-              <Text style={styles.filterCardText}>{option.label}</Text>
+              <Text style={[styles.filterCardText, selected && styles.filterCardTextOn]}>
+                {option.label}
+              </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator />
+        <View style={styles.loaderFill}>
+          {[0, 1, 2, 3].map((n) => (
+            <View key={n} style={styles.skeletonCard}>
+              <View style={styles.skeletonTitle} />
+              <View style={styles.skeletonMeta} />
+            </View>
+          ))}
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollFill}
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND_ACCENT} />
+          }
+        >
+          {primaryLowStockItem && !inventorySearchNorm ? (
+            <TouchableOpacity
+              style={styles.lowBanner}
+              onPress={onLowBadgePress}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel="Low stock"
+            >
+              <View style={styles.lowBannerLeft}>
+                <View style={styles.lowBannerDot} />
+              </View>
+              <View style={styles.lowBannerBody}>
+                <Text style={styles.lowBannerName} numberOfLines={1}>
+                  {[primaryLowStockItem.brand, primaryLowStockItem.name]
+                    .filter(Boolean)
+                    .join(' ') || primaryLowStockItem.name}
+                </Text>
+                {primaryLowStockItem.shade_code ? (
+                  <Text style={styles.lowBannerShade} numberOfLines={1}>
+                    {primaryLowStockItem.shade_code}
+                    {primaryLowStockItem.package_size
+                      ? `  ·  ${primaryLowStockItem.package_size}`
+                      : ''}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.lowBannerRight}>
+                <Text style={styles.lowBannerQtyNum}>
+                  {primaryLowStockItem.quantity}
+                </Text>
+                <Text style={styles.lowBannerQtyUnit}>
+                  {primaryLowStockItem.unit}
+                </Text>
+              </View>
+              {lowCount > 1 ? (
+                <View style={styles.lowBannerMore}>
+                  <Text style={styles.lowBannerMoreText}>+{lowCount - 1}</Text>
+                </View>
+              ) : null}
+              <Ionicons
+                name="chevron-forward"
+                size={13}
+                color="rgba(204,68,0,0.45)"
+                style={{ marginRight: 14 }}
+              />
+            </TouchableOpacity>
+          ) : null}
+
           {sectionKeys.map((cat) => {
             const list = grouped[cat];
             if (!list?.length) return null;
             return (
               <View key={cat} style={styles.section}>
                 <Text style={styles.sectionTitle}>{sectionTitle(cat)}</Text>
-                {list.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.row, item.is_low_stock && styles.rowLow]}
-                    activeOpacity={0.85}
-                    onPress={() => navigation.navigate('InventoryItem', { itemId: item.id })}
-                  >
-                    <View style={styles.rowMain}>
-                      <Text style={styles.rowName}>{item.name}</Text>
-                      <Text style={styles.rowMeta}>
-                        {[
-                          item.brand,
-                          item.shade_code,
-                          item.package_size,
-                          item.price_per_unit_cents != null
-                            ? `${formatMinorFromStoredCents(item.price_per_unit_cents, currency)} / ${item.unit}`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ') || '—'}
-                      </Text>
-                    </View>
-                    <View style={styles.qtyRow}>
-                      <View style={styles.qty}>
-                        <Text style={[styles.qtyVal, item.is_low_stock && styles.qtyWarn]}>
-                          {item.quantity} {item.unit}
+                {list.map((item) => {
+                  const detailParts = [item.brand, item.shade_code, item.package_size].filter(Boolean);
+                  const qtyLabel = `${item.quantity} ${item.unit}`;
+                  const metaText = detailParts.length ? [...detailParts, qtyLabel].join(' · ') : qtyLabel;
+                  const priceLine =
+                    item.price_per_unit_cents != null
+                      ? formatMinorFromStoredCents(item.price_per_unit_cents, currency)
+                      : null;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.row}
+                      activeOpacity={0.78}
+                      onPress={() => {
+                        hapticImpactLight();
+                        navigation.navigate('InventoryItem', { itemId: item.id });
+                      }}
+                    >
+                      <View style={[styles.rowAccent, { backgroundColor: inventoryAccentForItem(item) }]} />
+                      <View style={styles.rowMain}>
+                        <Text style={styles.rowName} numberOfLines={2}>
+                          {item.name}
                         </Text>
-                        {item.is_low_stock ? (
-                          <Text style={styles.lowLbl}>{item.low_stock_threshold}</Text>
-                        ) : null}
+                        <Text style={styles.rowMeta} numberOfLines={1}>
+                          {metaText}
+                        </Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                      <View style={styles.rowRight}>
+                        {priceLine != null ? (
+                          <View style={styles.rowPriceBlock}>
+                            <Text style={styles.rowPrice} numberOfLines={1}>
+                              {priceLine}
+                            </Text>
+                            <Text style={styles.rowPriceUnit} numberOfLines={1}>
+                              / {item.unit}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.rowPricePlaceholder} numberOfLines={1}>
+                            —
+                          </Text>
+                        )}
+                        <SFIcon
+                          name="chevron-forward"
+                          iosName="chevron.right"
+                          size={11}
+                          color="rgba(13,13,13,0.28)"
+                          weight="regular"
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             );
           })}
+
+          {!sectionKeys.length ? (
+            <View style={styles.emptyState}>
+              {inventorySearchNorm && rows.length > 0 ? (
+                <>
+                  <View style={styles.emptyIllustration}>
+                    <Ionicons name="search-outline" size={30} color={BRAND_ACCENT} />
+                  </View>
+                  <Text style={styles.emptyTitleMuted}>—</Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.emptyIllustration}>
+                    <Ionicons name="cube-outline" size={34} color={BRAND_ACCENT} />
+                  </View>
+                  <Text style={styles.emptyTitle}>
+                    No items in{' '}
+                    {INVENTORY_FILTERS.find((f) => f.key === inventoryFilter)?.label || 'Stock'}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.emptyCta}
+                    onPress={openImportInvoiceMenu}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.emptyCtaText}>Import invoice</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          ) : null}
 
           <View style={{ height: 130 }} />
         </ScrollView>
@@ -597,6 +989,52 @@ export default function InventoryScreen({ navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal
+        visible={lowListOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setLowListOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={styles.lowModalBackdropHit} activeOpacity={1} onPress={() => setLowListOpen(false)} />
+          <View style={[styles.modalSheet, styles.lowModalSheet]}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Low stock</Text>
+              <TouchableOpacity onPress={() => setLowListOpen(false)} hitSlop={10}>
+                <Text style={styles.modalClose}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.lowPickList}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {lowStockItems.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.lowPickRow}
+                  onPress={() => {
+                    hapticImpactLight();
+                    setLowListOpen(false);
+                    navigation.navigate('InventoryItem', { itemId: item.id });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.lowPickRowMain}>
+                    <Text style={styles.lowPickName} numberOfLines={2}>{item.name}</Text>
+                    <Text style={styles.lowPickMeta} numberOfLines={1}>
+                      {[item.brand, item.shade_code].filter(Boolean).join(' · ') || '—'}
+                    </Text>
+                  </View>
+                  <Text style={styles.lowPickQty}>{item.quantity} {item.unit}</Text>
+                  <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -604,133 +1042,432 @@ export default function InventoryScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingTop: 18,
+    paddingBottom: 28,
   },
-  title: { fontSize: 28, fontWeight: '800', color: '#1C1C1E' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  addBtn: {
-    ...glassPurpleFabBar,
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
-  badge: {
+  headerTitles: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  headerSearchOpenBtn: {
+    marginTop: 2,
+    padding: 6,
+  },
+  headerSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#E53935',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
   },
-  badgeText: { color: '#fff', fontWeight: '400', fontSize: 13 },
+  headerSearchLeadIcon: {
+    marginRight: 6,
+  },
+  headerSearchInput: {
+    flex: 1,
+    minHeight: 40,
+    paddingVertical: 8,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#0D0D0D',
+    letterSpacing: -0.2,
+  },
+  headerSearchCloseBtn: {
+    marginLeft: 4,
+    padding: 4,
+  },
+  title: {
+    ...Type.screenTitle,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#AEAEB2',
+    letterSpacing: -0.2,
+  },
+  importSection: {
+    paddingHorizontal: 24,
+    paddingBottom: 28,
+  },
   importRow: {
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingBottom: 12,
+    alignItems: 'center',
+    height: 36,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
   },
-  importBtn: {
+  importDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+    backgroundColor: 'rgba(60,60,67,0.22)',
+  },
+  importBtnCamera: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 15,
-    backgroundColor: '#5E35B1',
+    height: 36,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 5,
+    gap: 5,
   },
-  importBtnDisabled: { opacity: 0.6 },
-  importBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  importBtnInvoice: {
+    flex: 1.55,
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  importBtnDisabled: { opacity: 0.45 },
+  importBtnLabelSecondary: {
+    color: '#0D0D0D',
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    letterSpacing: -0.15,
+  },
+  importBtnLabelPrimary: {
+    color: BRAND_ACCENT,
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    letterSpacing: -0.15,
+  },
+  importBtnText: { color: '#fff', ...Type.buttonLabel },
   filterRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 24,
-    paddingBottom: 18,
+    paddingBottom: 20,
   },
   filterCard: {
     flex: 1,
-    minHeight: 112,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#F3D3E2',
+    minHeight: 96,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.14)',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
     paddingVertical: 14,
     position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      default: {},
+    }),
   },
   filterCardOn: {
-    borderColor: '#5E35B1',
-    backgroundColor: '#F8F3FF',
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(107,78,255,0.32)',
+    borderWidth: 1.5,
+  },
+  filterAddBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 29,
+    height: 29,
+    borderRadius: 14.5,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 4,
   },
   filterIconBubble: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#F5EAFE',
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
   },
-  filterIconBubbleOn: { backgroundColor: '#FFD7EA' },
-  filterCardText: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
-  filterAddBtn: {
-    position: 'absolute',
-    top: 9,
-    right: 9,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#5E35B1',
+  filterIconBubbleOn: {
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(107,78,255,0.28)',
+  },
+  filterCardText: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
+    letterSpacing: -0.18,
+    textAlign: 'center',
+  },
+  filterCardTextOn: {
+    color: BRAND_ACCENT,
+  },
+  scrollFill: { flex: 1, backgroundColor: '#FFFFFF' },
+  loaderFill: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingTop: 8,
+  },
+  skeletonCard: {
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(60,60,67,0.22)',
+    marginBottom: 9,
+    padding: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.07,
+        shadowRadius: 8,
+      },
+      default: { elevation: 2 },
+    }),
+  },
+  skeletonTitle: {
+    width: '58%',
+    height: 13,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  skeletonMeta: {
+    width: '38%',
+    height: 11,
+    borderRadius: 5,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    marginTop: 12,
+  },
+  scroll: { paddingHorizontal: 24, paddingBottom: 24 },
+  lowBanner: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,53,0.22)',
+    ...Platform.select({
+      ios: {
+        shadowColor: LOW_STOCK_ORANGE,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  lowBannerLeft: {
+    width: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#5E35B1',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 5,
-    elevation: 4,
+    alignSelf: 'stretch',
   },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { paddingHorizontal: 24, paddingBottom: 24 },
+  lowBannerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: LOW_STOCK_ORANGE,
+  },
+  lowBannerBody: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  lowBannerName: {
+    ...Type.listPrimary,
+    letterSpacing: -0.15,
+  },
+  lowBannerShade: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: LOW_STOCK_ORANGE,
+    letterSpacing: 0.05,
+  },
+  lowBannerRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  lowBannerQtyNum: {
+    ...Type.price,
+    color: '#0D0D0D',
+    letterSpacing: -0.2,
+  },
+  lowBannerQtyUnit: {
+    ...Type.tabBarLabel,
+    lineHeight: typeLh(11),
+    color: '#AEAEB2',
+    letterSpacing: 0,
+  },
+  lowBannerMore: {
+    marginRight: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,107,53,0.10)',
+  },
+  lowBannerMoreText: {
+    ...Type.tabBarLabel,
+    fontFamily: FontFamily.medium,
+    lineHeight: typeLh(11),
+    color: LOW_STOCK_ORANGE,
+  },
   section: { marginBottom: 22 },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: '#1C1C1E',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...Type.sectionLabel,
+    marginBottom: 12,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: 'rgba(60,60,67,0.22)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 9,
+    minHeight: 0,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.07,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {},
+    }),
   },
-  rowLow: { borderColor: '#FFCDD2', backgroundColor: '#FFF8F8' },
-  rowMain: { flex: 1, paddingRight: 12 },
-  rowName: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
-  rowMeta: { marginTop: 4, fontSize: 13, color: '#1C1C1E' },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  qty: { alignItems: 'flex-end' },
-  qtyVal: { fontSize: 16, fontWeight: '400', color: '#1C1C1E' },
-  qtyWarn: { color: '#C62828' },
-  lowLbl: { marginTop: 4, fontSize: 11, fontWeight: '400', color: '#E53935' },
+  rowAccent: {
+    position: 'absolute',
+    left: 0,
+    top: '22%',
+    height: '56%',
+    width: 2,
+    borderRadius: 999,
+  },
+  rowMain: { flex: 1, paddingRight: 8 },
+  rowName: {
+    ...Type.listPrimary,
+    letterSpacing: -0.18,
+  },
+  rowMeta: {
+    marginTop: 4,
+    ...Type.secondary,
+    letterSpacing: -0.05,
+  },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rowPriceBlock: { alignItems: 'flex-end' },
+  rowPrice: {
+    ...Type.price,
+    letterSpacing: -0.15,
+    color: BRAND_ACCENT,
+  },
+  rowPriceUnit: {
+    marginTop: 0,
+    fontSize: 9,
+    lineHeight: typeLh(9),
+    fontFamily: FontFamily.regular,
+    color: '#AEAEB2',
+    letterSpacing: 0,
+  },
+  rowPricePlaceholder: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#C7C7CC',
+    marginRight: 2,
+  },
+  chevronText: {
+    fontSize: 20,
+    lineHeight: typeLh(20),
+    fontFamily: FontFamily.semibold,
+    color: 'rgba(13,13,13,0.4)',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 54,
+    paddingBottom: 30,
+  },
+  emptyIllustration: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(107,78,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
+    marginBottom: 18,
+    textAlign: 'center',
+  },
+  emptyTitleMuted: {
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
+    color: '#C7C7CC',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyCta: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: BRAND_ACCENT,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCtaText: {
+    color: '#FFFFFF',
+    ...Type.buttonLabel,
+    fontFamily: FontFamily.medium,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -752,8 +1489,46 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  modalTitle: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
-  modalClose: { fontSize: 17, fontWeight: '400', color: '#5E35B1' },
+  modalTitle: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  modalClose: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.regular,
+    color: '#5E35B1',
+  },
+  lowModalBackdropHit: {
+    flex: 1,
+  },
+  lowModalSheet: {
+    maxHeight: '52%',
+  },
+  lowPickList: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 28,
+  },
+  lowPickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  lowPickRowMain: { flex: 1, paddingRight: 10 },
+  lowPickName: { ...Type.listPrimary, color: '#1C1C1E' },
+  lowPickMeta: { marginTop: 4, ...Type.secondary, color: '#8E8E93' },
+  lowPickQty: {
+    marginRight: 4,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.semibold,
+    color: '#C62828',
+  },
   previewContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -792,7 +1567,12 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 4,
   },
-  previewChoiceText: { fontSize: 13, fontWeight: '600', color: '#5E35B1' },
+  previewChoiceText: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.semibold,
+    color: '#5E35B1',
+  },
   previewCategoryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -811,7 +1591,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1C1E',
     borderColor: '#1C1C1E',
   },
-  previewCategoryText: { fontSize: 12, fontWeight: '600', color: '#1C1C1E' },
+  previewCategoryText: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.medium,
+    color: '#1C1C1E',
+  },
   previewCategoryTextOn: { color: '#FFFFFF' },
   previewAddCategory: {
     borderRadius: 12,
@@ -824,7 +1609,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  previewAddCategoryText: { fontSize: 12, fontWeight: '600', color: '#5E35B1' },
+  previewAddCategoryText: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.medium,
+    color: '#5E35B1',
+  },
   previewNewCategoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -838,13 +1628,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
-  previewCategoryDoneText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  previewCategoryDoneText: { color: '#FFFFFF', ...Type.buttonLabel },
   previewInput: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
@@ -855,9 +1647,25 @@ const styles = StyleSheet.create({
   previewNameInput: { flex: 1 },
   previewSmallInput: { width: 70 },
   previewPriceInput: { width: 82 },
-  previewUnit: { minWidth: 28, fontSize: 13, color: '#1C1C1E' },
-  previewCurrency: { fontSize: 12, fontWeight: '600', color: '#5E35B1' },
-  previewTotal: { flex: 1, textAlign: 'right', fontSize: 13, fontWeight: '600', color: '#5E35B1' },
+  previewUnit: {
+    minWidth: 28,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#1C1C1E',
+  },
+  previewCurrency: {
+    ...Type.secondary,
+    fontFamily: FontFamily.semibold,
+    color: '#5E35B1',
+  },
+  previewTotal: {
+    flex: 1,
+    textAlign: 'right',
+    ...Type.secondary,
+    fontFamily: FontFamily.semibold,
+    color: '#5E35B1',
+  },
   saveImportBtn: {
     marginTop: 16,
     backgroundColor: '#5E35B1',

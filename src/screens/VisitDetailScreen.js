@@ -14,6 +14,7 @@ import { apiGet } from '../api/client';
 import { BRAND_PURPLE } from '../theme/glassUi';
 import { SCHEDULE_BANNER_LEAD_PINK } from '../theme/scheduleBannerGradient';
 import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 import { formatDisplayDate } from '../lib/formatDate';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
@@ -236,7 +237,7 @@ export default function VisitDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  miss: { textAlign: 'center', marginTop: 48, color: '#8E8E93', fontFamily: FontFamily.regular, fontSize: 16 },
+  miss: { textAlign: 'center', marginTop: 48, ...Type.secondary, color: '#8E8E93' },
 
   scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
 
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
 
   // hero
   procedure: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semibold,
     fontSize: 34,
     color: '#000000',
     letterSpacing: -0.8,
@@ -270,7 +271,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   paidLine: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semibold,
     fontSize: 17,
     color: '#2E7D32',
     marginBottom: 10,
@@ -287,6 +288,7 @@ const styles = StyleSheet.create({
   metaTag: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
+    lineHeight: typeLh(12),
     color: '#1C1C1E',
     borderWidth: 1,
     borderColor: '#1C1C1E',
@@ -304,23 +306,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   notesLabel: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 11,
-    color: '#8E8E93',
-    letterSpacing: 0.5,
+    ...Type.sectionLabel,
     marginBottom: 6,
   },
   notesBody: {
-    fontFamily: FontFamily.regular,
-    fontSize: 15,
+    ...Type.listPrimary,
     color: '#1C1C1E',
-    lineHeight: 22,
+    fontFamily: FontFamily.regular,
+    lineHeight: typeLh(15),
   },
 
   // formula heading
   formulaHeading: {
-    fontFamily: FontFamily.bold,
-    fontSize: 22,
+    ...Type.screenTitle,
     color: '#000000',
     letterSpacing: -0.5,
     marginTop: 28,
@@ -351,13 +349,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   sectionBadgeTxt: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.medium,
     fontSize: 13,
+    lineHeight: typeLh(13),
     letterSpacing: -0.1,
   },
   mixIndex: {
-    fontFamily: FontFamily.regular,
-    fontSize: 13,
+    ...Type.secondary,
     color: '#1C1C1E',
   },
 
@@ -386,24 +384,26 @@ const styles = StyleSheet.create({
   lineNumTxt: {
     fontFamily: FontFamily.semibold,
     fontSize: 12,
+    lineHeight: typeLh(12),
     color: '#000000',
   },
   lineBody: { flex: 1 },
   lineName: {
+    ...Type.listPrimary,
     fontFamily: FontFamily.semibold,
-    fontSize: 15,
     color: '#000000',
     letterSpacing: -0.2,
   },
   lineNameSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
+    ...Type.tabBarLabel,
     color: '#1C1C1E',
     marginTop: 1,
+    lineHeight: typeLh(11),
   },
   lineQty: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semibold,
     fontSize: 15,
+    lineHeight: typeLh(15),
     color: '#1C1C1E',
     letterSpacing: -0.3,
     flexShrink: 0,
@@ -431,14 +431,14 @@ const styles = StyleSheet.create({
     borderColor: '#0D74FF',
   },
   devName: {
-    fontFamily: FontFamily.regular,
-    fontSize: 14,
+    ...Type.secondary,
     color: '#0D74FF',
     letterSpacing: -0.1,
   },
   devQty: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14,
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    lineHeight: typeLh(13),
     color: '#0D74FF',
     letterSpacing: -0.2,
     flexShrink: 0,

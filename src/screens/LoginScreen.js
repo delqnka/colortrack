@@ -23,6 +23,8 @@ import {
 } from '../api/client';
 import { registerExpoPushIfPossible } from '../push/registerPush';
 import { BRAND_PURPLE } from '../theme/glassUi';
+import { FontFamily } from '../theme/fonts';
+import { typeLh } from '../theme/typography';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 const LAVENDER_BG = '#F5F2FF';
@@ -313,26 +315,29 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   brand: {
-    fontSize: 26,
-    fontWeight: '800',
+    fontSize: 22,
+    lineHeight: typeLh(22),
+    fontFamily: FontFamily.semibold,
     color: BRAND_PURPLE,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   headline: {
     marginTop: 14,
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1C1C1E',
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   sub: {
     marginTop: 8,
     marginBottom: 22,
-    fontSize: 15,
-    lineHeight: 21,
-    color: SUBTITLE,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
+    color: '#8A8A8E',
     textAlign: 'center',
     paddingHorizontal: 4,
   },
@@ -350,13 +355,17 @@ const styles = StyleSheet.create({
   fieldIcon: { marginRight: 10 },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
   },
   err: {
     color: '#B00020',
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.regular,
     marginBottom: 10,
     textAlign: 'center',
   },
@@ -371,7 +380,7 @@ const styles = StyleSheet.create({
   },
   btnPressed: { opacity: 0.92 },
   btnDisabled: { opacity: 0.75 },
-  btnTxt: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  btnTxt: { color: '#FFFFFF', fontFamily: FontFamily.medium, fontSize: 15, lineHeight: typeLh(15) },
   orRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -380,9 +389,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(28,28,30,0.2)' },
-  orTxt: { fontSize: 13, color: SUBTITLE, fontWeight: '600' },
+  orTxt: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: SUBTITLE },
   appleBtn: { width: '100%', height: 54 },
   switcher: { marginTop: 22, alignSelf: 'center', paddingVertical: 8 },
-  switcherTxt: { fontSize: 15, color: SUBTITLE, textAlign: 'center' },
-  switcherBold: { fontWeight: '700', color: BRAND_PURPLE },
+  switcherTxt: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: SUBTITLE, textAlign: 'center' },
+  switcherBold: { fontFamily: FontFamily.medium, fontSize: 15, lineHeight: typeLh(15), color: BRAND_PURPLE },
 });

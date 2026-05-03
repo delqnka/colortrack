@@ -12,6 +12,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { getAllSortedCurrencyCodes } from '../constants/currencyCodes';
+import { FontFamily } from '../theme/fonts';
+import { typeLh } from '../theme/typography';
 
 export default function CurrencyPickerModal({ visible, onClose, onSelect, currentCode }) {
   const [q, setQ] = useState('');
@@ -96,8 +98,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  title: { fontSize: 17, fontWeight: '600', color: '#1C1C1E' },
-  done: { fontSize: 17, color: '#5E35B1' },
+  title: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.semibold,
+    color: '#1C1C1E',
+  },
+  done: {
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    fontFamily: FontFamily.medium,
+    color: '#5E35B1',
+  },
   search: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -108,6 +120,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     fontSize: 16,
+    lineHeight: typeLh(16),
+    fontFamily: FontFamily.regular,
     color: '#1C1C1E',
   },
   row: {
@@ -120,6 +134,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   rowOn: { backgroundColor: 'rgba(94, 53, 177, 0.08)' },
-  code: { fontSize: 16, fontWeight: '500', color: '#1C1C1E' },
-  check: { fontSize: 16, color: '#5E35B1', fontWeight: '700' },
+  code: {
+    fontSize: 16,
+    lineHeight: typeLh(16),
+    fontFamily: FontFamily.medium,
+    color: '#1C1C1E',
+  },
+  check: { fontSize: 16, lineHeight: typeLh(16), color: '#5E35B1', fontFamily: FontFamily.semibold },
 });

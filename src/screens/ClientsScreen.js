@@ -11,8 +11,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
-import { apiGet } from '../api/client';
+import { apiGet, resolveImagePublicUri } from '../api/client';
 import { glassPurpleFabBar } from '../theme/glassUi';
+import { Type } from '../theme/typography';
+import { hapticImpactLight } from '../theme/haptics';
 
 export default function ClientsScreen({ navigation }) {
   const route = useRoute();
@@ -89,6 +91,7 @@ export default function ClientsScreen({ navigation }) {
               style={styles.row}
               activeOpacity={0.88}
               onPress={() => {
+                hapticImpactLight();
                 if (pickPayload) {
                   const {
                     deviceCalendarEventId,
@@ -114,7 +117,7 @@ export default function ClientsScreen({ navigation }) {
               <Image
                 source={{
                   uri:
-                    item.avatar_url ||
+                    resolveImagePublicUri(item.avatar_url || '') ||
                     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop',
                 }}
                 style={styles.avatar}
@@ -151,7 +154,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
-  title: { fontSize: 28, fontWeight: '800', color: '#1C1C1E' },
+  title: { ...Type.screenTitle },
   pickBanner: {
     marginHorizontal: 24,
     marginBottom: 10,
@@ -162,8 +165,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  pickBannerTxt: { flex: 1, fontSize: 14, color: '#1C1C1E' },
-  pickCancel: { fontSize: 14, fontWeight: '600', color: '#5E35B1' },
+  pickBannerTxt: { flex: 1, ...Type.secondary, color: '#1C1C1E' },
+  pickCancel: { ...Type.buttonLabel, color: '#5E35B1' },
   addBtn: {
     ...glassPurpleFabBar,
   },
@@ -190,8 +193,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   rowBody: { flex: 1 },
-  name: { fontSize: 17, fontWeight: '400', color: '#1C1C1E' },
-  phone: { marginTop: 4, fontSize: 14, color: '#1C1C1E' },
+  name: { ...Type.listPrimary },
+  phone: { marginTop: 4, ...Type.secondary },
   patchBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -201,5 +204,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  patchText: { color: '#fff', fontWeight: '400', fontSize: 12 },
+  patchText: { ...Type.tabBarLabel, color: '#fff' },
 });

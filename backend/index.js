@@ -6,6 +6,7 @@ const cors = require('cors');
 const { neon } = require('@neondatabase/serverless');
 const { ensureSchema } = require('./schemaEnsure');
 const r2 = require('./r2');
+const pdfParse = require('pdf-parse');
 const {
   authMiddleware,
   ensureBootstrapStaff,
@@ -1374,6 +1375,211 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
   return { ...rows[0], import_action: 'created' };
 }
 
+function invoiceVisionPromptBase() {
+  return [
+    'Extract purchased salon inventory items from this invoice image.',
+    'The invoice may be in English, Bulgarian, or mixed language. Read table rows and line items even if labels are abbreviated.',
+    'Return only JSON with an "items" array. Do not return markdown.',
+    'Each item: {"name": string, "category": "dye|oxidant|mixtone|toner|retail|consumable", "brand": string|null, "shade_code": string|null, "package_size": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
+    'For hair color like Wella Koleston 9.12 60 ml x 15 pieces, set shade_code 9.12, package_size 60 ml, quantity 15 and unit pcs.',
+    'Quantity words can appear as qty, count, бр, брой, бройки, x, pcs, pieces. Convert them to a number.',
+    'If the invoice shows 15 pcs at 10 each total 150, return quantity 15, price_per_unit 10, line_total 150.',
+    'Skip taxes, discounts, subtotals, shipping, addresses, and non-product rows.',
+  ].join(' ');
+}
+
+function invoiceTextPromptBase() {
+  return [
+    'Extract purchased salon inventory items from this invoice text (extracted from a PDF). Use only the lines that describe products.',
+    'The invoice may be in English, Bulgarian, or mixed language. Read table rows and line items even if labels are abbreviated.',
+    'Return only JSON with an "items" array. Do not return markdown.',
+    'Each item: {"name": string, "category": "dye|oxidant|mixtone|toner|retail|consumable", "brand": string|null, "shade_code": string|null, "package_size": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
+    'For hair color like Wella Koleston 9.12 60 ml x 15 pieces, set shade_code 9.12, package_size 60 ml, quantity 15 and unit pcs.',
+    'Quantity words can appear as qty, count, бр, брой, бройки, x, pcs, pieces. Convert them to a number.',
+    'If the invoice shows 15 pcs at 10 each total 150, return quantity 15, price_per_unit 10, line_total 150.',
+    'Skip taxes, discounts, subtotals, shipping, addresses, and non-product rows.',
+  ].join(' ');
+}
+
+function effectiveInvoiceMime(contentTypeHint, buffer, objectKeyHint) {
+  let ct =
+    typeof contentTypeHint === 'string' ? contentTypeHint.split(';')[0].trim().toLowerCase() : '';
+  if (ct === 'image/jpg') ct = 'image/jpeg';
+  const kh = typeof objectKeyHint === 'string' ? objectKeyHint.toLowerCase() : '';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') && kh.endsWith('.pdf'))
+    ct = 'application/pdf';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') && kh.endsWith('.png'))
+    ct = 'image/png';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') &&
+    kh.endsWith('.webp'))
+    ct = 'image/webp';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') &&
+    (kh.endsWith('.jpg') || kh.endsWith('.jpeg')))
+    ct = 'image/jpeg';
+  if (
+    buffer &&
+    buffer.length > 5 &&
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46
+  ) {
+    ct = ct || 'application/pdf';
+  }
+  if (/^image\/(jpeg|jpg|png|webp)$/i.test(ct || ''))
+    return (ct === 'image/jpg' ? 'image/jpeg' : ct).toLowerCase();
+  if (ct === 'application/pdf') return 'application/pdf';
+  return ct || null;
+}
+
+function effectiveServicesOcrMime(contentTypeHint, objectKeyHint) {
+  let ct =
+    typeof contentTypeHint === 'string' ? contentTypeHint.split(';')[0].trim().toLowerCase() : '';
+  if (ct === 'image/jpg') ct = 'image/jpeg';
+  const kh = typeof objectKeyHint === 'string' ? objectKeyHint.toLowerCase() : '';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') && kh.endsWith('.png'))
+    ct = 'image/png';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') &&
+    kh.endsWith('.webp'))
+    ct = 'image/webp';
+  if ((!ct || ct === 'binary/octet-stream' || ct === 'application/octet-stream') &&
+    (kh.endsWith('.jpg') || kh.endsWith('.jpeg')))
+    ct = 'image/jpeg';
+  if (/^image\/(jpeg|jpg|png|webp)$/i.test(ct || ''))
+    return (ct === 'image/jpg' ? 'image/jpeg' : ct).toLowerCase();
+  return 'image/jpeg';
+}
+
+async function invoiceLlmJsonItems(apiKey, usingOpenRouter, model, payloadBody) {
+  const ocrRes = await fetch(
+    usingOpenRouter
+      ? 'https://openrouter.ai/api/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        ...(usingOpenRouter
+          ? {
+              'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
+              'X-Title': 'ColorTrack',
+            }
+          : {}),
+      },
+      body: JSON.stringify(payloadBody),
+    },
+  );
+  const text = await ocrRes.text();
+  if (!ocrRes.ok) {
+    throw new Error('ocr_http');
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('ocr_parse');
+  }
+  const rawContent = data?.choices?.[0]?.message?.content;
+  const assistantText = Array.isArray(rawContent)
+    ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n')
+    : rawContent;
+  const parsed = parseJsonObjectFromText(assistantText);
+  const rows = Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
+  const items = [];
+  for (const row of rows) {
+    const item = normalizeInventoryImportCandidate(row);
+    if (!item) continue;
+    items.push(item);
+    if (items.length >= 120) break;
+  }
+  return items;
+}
+
+async function extractInvoiceItemsFromBuffer(buffer, meta) {
+  const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
+  const usingOpenRouter = Boolean(openRouterKey);
+  const apiKey = openRouterKey || openAiKey;
+  if (!apiKey) throw new Error('missing_ocr_key');
+  const model = usingOpenRouter
+    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
+    : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
+
+  const mimeRaw = typeof meta.mime === 'string' ? meta.mime : '';
+  const keyHint = typeof meta.importKeyHint === 'string' ? meta.importKeyHint : '';
+  const mime = effectiveInvoiceMime(mimeRaw, buffer, keyHint);
+  if (!buffer || buffer.length < 24) throw new Error('empty_buffer');
+
+  if (mime === 'application/pdf') {
+    let parsedPdf;
+    try {
+      parsedPdf = await pdfParse(buffer);
+    } catch {
+      throw new Error('pdf_invalid');
+    }
+    const invoiceText = String(parsedPdf.text || '').trim();
+    if (invoiceText.length < 28) throw new Error('pdf_no_extractable_text');
+    const prompt = invoiceTextPromptBase();
+    const textBody = `${prompt}\n\n---\n${invoiceText.slice(0, 100000)}`;
+    const payloadBody = {
+      model,
+      temperature: 0,
+      messages: [{ role: 'user', content: textBody }],
+    };
+    if (!usingOpenRouter) {
+      payloadBody.response_format = { type: 'json_object' };
+    }
+    return await invoiceLlmJsonItems(apiKey, usingOpenRouter, model, payloadBody);
+  }
+
+  let imgMime = mime;
+  if (!/^image\/(jpeg|jpg|png|webp)$/i.test(imgMime || '')) {
+    imgMime = 'image/jpeg';
+  }
+  if (imgMime === 'image/jpg') imgMime = 'image/jpeg';
+  const imageBase64 = buffer.toString('base64');
+  const prompt = invoiceVisionPromptBase();
+  const payloadBody = {
+    model,
+    temperature: 0,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:${imgMime};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+  };
+  if (!usingOpenRouter) {
+    payloadBody.response_format = { type: 'json_object' };
+  }
+  return await invoiceLlmJsonItems(apiKey, usingOpenRouter, model, payloadBody);
+}
+
+app.post('/api/inventory/import/invoice/presign', async (req, res, next) => {
+  try {
+    if (!r2.r2Configured()) {
+      return res.status(503).json({ error: 'r2_unconfigured' });
+    }
+    const b = req.body || {};
+    const ct = r2.normalizeInvoiceImportContentType(b.contentType ?? b.content_type);
+    if (!ct) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const key = r2.buildInvoiceImportKey(req.auth.salonId, ct);
+    if (!key) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const uploadUrl = await r2.presignPut(key, ct);
+    res.json({ uploadUrl, key, contentType: ct });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.post('/api/inventory/import/bulk', async (req, res, next) => {
   try {
     const input = Array.isArray((req.body || {}).items) ? req.body.items : [];
@@ -1399,97 +1605,65 @@ app.post('/api/inventory/import/bulk', async (req, res, next) => {
 });
 
 app.post('/api/inventory/import/invoice', async (req, res, next) => {
+  const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
+  const apiKey = openRouterKey || openAiKey;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'missing_ocr_key' });
+  }
+
+  const b = req.body || {};
+  const importKeyRaw =
+    typeof (b.import_key ?? b.importKey) === 'string' ? String(b.import_key ?? b.importKey).trim() : '';
+  if (!importKeyRaw) {
+    return res.status(400).json({ error: 'import_key_required' });
+  }
+  if (!r2.r2Configured()) {
+    return res.status(503).json({ error: 'r2_unconfigured' });
+  }
+  if (!r2.keyBelongsToSalonInvoiceImport(req.auth.salonId, importKeyRaw)) {
+    return res.status(400).json({ error: 'bad_import_key' });
+  }
+  let buffer;
+  let mimeFromObject = '';
+  const keyToDelete = importKeyRaw;
   try {
-    const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
-    const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
-    const usingOpenRouter = Boolean(openRouterKey);
-    const apiKey = openRouterKey || openAiKey;
-    if (!apiKey) {
-      return res.status(503).json({ error: 'missing_ocr_key' });
-    }
-    const b = req.body || {};
-    const imageBase64 = typeof b.image_base64 === 'string' ? b.image_base64.trim() : '';
-    const contentType = typeof b.content_type === 'string' ? b.content_type.trim().toLowerCase() : 'image/jpeg';
-    if (!imageBase64 || !/^image\/(jpeg|jpg|png|webp)$/i.test(contentType)) {
-      return res.status(400).json({ error: 'bad_request' });
-    }
-    const model = usingOpenRouter
-      ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
-      : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
-    const prompt = [
-      'Extract purchased salon inventory items from this invoice image.',
-      'The invoice may be in English, Bulgarian, or mixed language. Read table rows and line items even if labels are abbreviated.',
-      'Return only JSON with an "items" array. Do not return markdown.',
-      'Each item: {"name": string, "category": "dye|oxidant|mixtone|toner|retail|consumable", "brand": string|null, "shade_code": string|null, "package_size": string|null, "unit": "g|ml|pcs|oz", "quantity": number, "price_per_unit": number|null, "line_total": number|null, "supplier": string|null}.',
-      'For hair color like Wella Koleston 9.12 60 ml x 15 pieces, set shade_code 9.12, package_size 60 ml, quantity 15 and unit pcs.',
-      'Quantity words can appear as qty, count, бр, брой, бройки, x, pcs, pieces. Convert them to a number.',
-      'If the invoice shows 15 pcs at 10 each total 150, return quantity 15, price_per_unit 10, line_total 150.',
-      'Skip taxes, discounts, subtotals, shipping, addresses, and non-product rows.',
-    ].join(' ');
-    const body = {
-      model,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${contentType};base64,${imageBase64}` },
-            },
-          ],
-        },
-      ],
-    };
-    if (!usingOpenRouter) {
-      body.response_format = { type: 'json_object' };
-    }
-    const ocrRes = await fetch(
-      usingOpenRouter
-        ? 'https://openrouter.ai/api/v1/chat/completions'
-        : 'https://api.openai.com/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          ...(usingOpenRouter
-            ? {
-                'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
-                'X-Title': 'ColorTrack',
-              }
-            : {}),
-        },
-        body: JSON.stringify(body),
-      },
-    );
-    const text = await ocrRes.text();
-    if (!ocrRes.ok) {
-      return res.status(502).json({ error: 'ocr_failed' });
-    }
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return res.status(502).json({ error: 'ocr_failed' });
-    }
-    const rawContent = data?.choices?.[0]?.message?.content;
-    const content = Array.isArray(rawContent)
-      ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n')
-      : rawContent;
-    const parsed = parseJsonObjectFromText(content);
-    const rows = Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
-    const items = [];
-    for (const row of rows) {
-      const item = normalizeInventoryImportCandidate(row);
-      if (!item) continue;
-      items.push(item);
-      if (items.length >= 120) break;
-    }
+    const got = await r2.getObjectBuffer(importKeyRaw);
+    buffer = got.buffer;
+    mimeFromObject = got.contentType;
+  } catch {
+    return res.status(400).json({ error: 'import_not_found' });
+  }
+
+  try {
+    const items = await extractInvoiceItemsFromBuffer(buffer, {
+      mime: mimeFromObject,
+      importKeyHint: importKeyRaw || null,
+    });
     res.json({ items });
   } catch (e) {
-    next(e);
+    const code = e && typeof e.message === 'string' ? e.message : '';
+    if (code === 'missing_ocr_key') {
+      res.status(503).json({ error: 'missing_ocr_key' });
+    } else if (code === 'pdf_no_extractable_text') {
+      res.status(422).json({ error: 'pdf_no_extractable_text' });
+    } else if (code === 'pdf_invalid') {
+      res.status(400).json({ error: 'pdf_invalid' });
+    } else if (code === 'empty_buffer') {
+      res.status(400).json({ error: 'bad_request' });
+    } else if (code === 'ocr_http' || code === 'ocr_parse') {
+      res.status(502).json({ error: 'ocr_failed' });
+    } else {
+      next(e);
+    }
+  } finally {
+    if (keyToDelete && r2.r2Configured()) {
+      try {
+        await r2.deleteObject(keyToDelete);
+      } catch {
+        /* best-effort temp cleanup */
+      }
+    }
   }
 });
 
@@ -1552,6 +1726,96 @@ function parseJsonObjectFromText(text) {
     }
     return null;
   }
+}
+
+async function extractSalonServicesOcrFromBuffer(buffer, meta) {
+  const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
+  const usingOpenRouter = Boolean(openRouterKey);
+  const apiKey = openRouterKey || openAiKey;
+  if (!apiKey) throw new Error('missing_ocr_key');
+  const model = usingOpenRouter
+    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
+    : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
+
+  const mimeRaw = typeof meta.mime === 'string' ? meta.mime : '';
+  const keyHint = typeof meta.importKeyHint === 'string' ? meta.importKeyHint : '';
+  let imgMime = effectiveServicesOcrMime(mimeRaw, keyHint);
+  if (!/^image\/(jpeg|jpg|png|webp)$/i.test(imgMime || '')) {
+    imgMime = 'image/jpeg';
+  }
+  if (imgMime === 'image/jpg') imgMime = 'image/jpeg';
+  if (!buffer || buffer.length < 24) throw new Error('empty_buffer');
+
+  const imageBase64 = buffer.toString('base64');
+  const prompt = [
+    'Extract salon service names and prices from this price list image.',
+    'Return only JSON with a "services" array.',
+    'Each item: {"name": string, "price": number|null, "currency_code": "BGN" unless another currency is visible}.',
+    'Skip headers, categories, phone numbers, addresses, discounts, and non-service rows.',
+    'If a price is a range, use the lowest visible price.',
+  ].join(' ');
+  const body = {
+    model,
+    temperature: 0,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:${imgMime};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+  };
+  if (!usingOpenRouter) {
+    body.response_format = { type: 'json_object' };
+  }
+  const ocrRes = await fetch(
+    usingOpenRouter
+      ? 'https://openrouter.ai/api/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        ...(usingOpenRouter
+          ? {
+              'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
+              'X-Title': 'ColorTrack',
+            }
+          : {}),
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  const text = await ocrRes.text();
+  if (!ocrRes.ok) {
+    throw new Error('ocr_http');
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('ocr_parse');
+  }
+  const rawContent = data?.choices?.[0]?.message?.content;
+  const assistantText = Array.isArray(rawContent)
+    ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n')
+    : rawContent;
+  const parsed = parseJsonObjectFromText(assistantText);
+  const rows = Array.isArray(parsed?.services) ? parsed.services : [];
+  const services = [];
+  for (const row of rows) {
+    const service = normalizeServiceCandidate(row);
+    if (!service) continue;
+    if (!services.some((s) => s.name.toLowerCase() === service.name.toLowerCase())) {
+      services.push(service);
+    }
+    if (services.length >= 80) break;
+  }
+  return services;
 }
 
 async function upsertSalonService(sql, salonId, service) {
@@ -1665,94 +1929,82 @@ app.patch('/api/services/:id', async (req, res, next) => {
   }
 });
 
-app.post('/api/services/import/ocr', async (req, res, next) => {
+app.post('/api/services/import/ocr/presign', async (req, res, next) => {
   try {
-    const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
-    const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
-    const usingOpenRouter = Boolean(openRouterKey);
-    const apiKey = openRouterKey || openAiKey;
-    if (!apiKey) {
-      return res.status(503).json({ error: 'missing_ocr_key' });
+    if (!r2.r2Configured()) {
+      return res.status(503).json({ error: 'r2_unconfigured' });
     }
     const b = req.body || {};
-    const imageBase64 = typeof b.image_base64 === 'string' ? b.image_base64.trim() : '';
-    const contentType = typeof b.content_type === 'string' ? b.content_type.trim().toLowerCase() : 'image/jpeg';
-    if (!imageBase64 || !/^image\/(jpeg|jpg|png|webp)$/i.test(contentType)) {
+    const ct = r2.normalizeContentType(b.contentType ?? b.content_type);
+    if (!ct) {
       return res.status(400).json({ error: 'bad_request' });
     }
-    const model = usingOpenRouter
-      ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
-      : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
-    const prompt = [
-      'Extract salon service names and prices from this price list image.',
-      'Return only JSON with a "services" array.',
-      'Each item: {"name": string, "price": number|null, "currency_code": "BGN" unless another currency is visible}.',
-      'Skip headers, categories, phone numbers, addresses, discounts, and non-service rows.',
-      'If a price is a range, use the lowest visible price.',
-    ].join(' ');
-    const body = {
-      model,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${contentType};base64,${imageBase64}` },
-            },
-          ],
-        },
-      ],
-    };
-    if (!usingOpenRouter) {
-      body.response_format = { type: 'json_object' };
+    const key = r2.buildServiceImportKey(req.auth.salonId, ct);
+    if (!key) {
+      return res.status(400).json({ error: 'bad_request' });
     }
-    const ocrRes = await fetch(
-      usingOpenRouter
-        ? 'https://openrouter.ai/api/v1/chat/completions'
-        : 'https://api.openai.com/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          ...(usingOpenRouter
-            ? {
-                'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
-                'X-Title': 'ColorTrack',
-              }
-            : {}),
-        },
-        body: JSON.stringify(body),
-      },
-    );
-    const text = await ocrRes.text();
-    if (!ocrRes.ok) {
-      return res.status(502).json({ error: 'ocr_failed' });
-    }
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return res.status(502).json({ error: 'ocr_failed' });
-    }
-    const content = data?.choices?.[0]?.message?.content;
-    const parsed = parseJsonObjectFromText(content);
-    const rows = Array.isArray(parsed?.services) ? parsed.services : [];
-    const services = [];
-    for (const row of rows) {
-      const service = normalizeServiceCandidate(row);
-      if (!service) continue;
-      if (!services.some((s) => s.name.toLowerCase() === service.name.toLowerCase())) {
-        services.push(service);
-      }
-      if (services.length >= 80) break;
-    }
-    res.json({ services });
+    const uploadUrl = await r2.presignPut(key, ct);
+    res.json({ uploadUrl, key, contentType: ct });
   } catch (e) {
     next(e);
+  }
+});
+
+app.post('/api/services/import/ocr', async (req, res, next) => {
+  const openRouterKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const openAiKey = String(process.env.OPENAI_API_KEY || '').trim();
+  const apiKey = openRouterKey || openAiKey;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'missing_ocr_key' });
+  }
+  const b = req.body || {};
+  const importKeyRaw =
+    typeof (b.import_key ?? b.importKey) === 'string' ? String(b.import_key ?? b.importKey).trim() : '';
+  if (!importKeyRaw) {
+    return res.status(400).json({ error: 'import_key_required' });
+  }
+  if (!r2.r2Configured()) {
+    return res.status(503).json({ error: 'r2_unconfigured' });
+  }
+  if (!r2.keyBelongsToSalonServiceImport(req.auth.salonId, importKeyRaw)) {
+    return res.status(400).json({ error: 'bad_import_key' });
+  }
+  const keyToDelete = importKeyRaw;
+  let buffer;
+  let mimeFromObject = '';
+  try {
+    const got = await r2.getObjectBuffer(importKeyRaw);
+    buffer = got.buffer;
+    mimeFromObject = got.contentType;
+  } catch {
+    return res.status(400).json({ error: 'import_not_found' });
+  }
+
+  try {
+    const services = await extractSalonServicesOcrFromBuffer(buffer, {
+      mime: mimeFromObject,
+      importKeyHint: importKeyRaw,
+    });
+    res.json({ services });
+  } catch (e) {
+    const code = e && typeof e.message === 'string' ? e.message : '';
+    if (code === 'missing_ocr_key') {
+      res.status(503).json({ error: 'missing_ocr_key' });
+    } else if (code === 'empty_buffer') {
+      res.status(400).json({ error: 'bad_request' });
+    } else if (code === 'ocr_http' || code === 'ocr_parse') {
+      res.status(502).json({ error: 'ocr_failed' });
+    } else {
+      next(e);
+    }
+  } finally {
+    if (keyToDelete && r2.r2Configured()) {
+      try {
+        await r2.deleteObject(keyToDelete);
+      } catch {
+        /* best-effort temp cleanup */
+      }
+    }
   }
 });
 
@@ -2294,11 +2546,28 @@ app.get('/api/visits/:id', async (req, res, next) => {
   }
 });
 
+function initialsFromFullName(name) {
+  const s = String(name ?? '').trim();
+  if (!s) return '?';
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const a = (parts[0][0] || '').toUpperCase();
+    const b = (parts[parts.length - 1][0] || '').toUpperCase();
+    const out = `${a}${b}`.trim();
+    return out || '?';
+  }
+  const w = parts[0];
+  if (w.length >= 2) return w.slice(0, 2).toUpperCase();
+  return (w[0] || '?').toUpperCase();
+}
+
 app.get('/api/lab/stats', async (req, res, next) => {
   try {
     const sql = getSql();
     const sid = req.auth.salonId;
-    const row = await sql`
+
+    const [cntRows, recentRows] = await Promise.all([
+      sql`
       WITH bounds AS (
         SELECT
           (date_trunc('month', (now() AT TIME ZONE ${TZ})::timestamp))::date AS start_m,
@@ -2312,8 +2581,37 @@ app.get('/api/lab/stats', async (req, res, next) => {
       WHERE v.salon_id = ${sid}
         AND v.visit_date >= b.start_m
         AND v.visit_date < b.end_m
-    `;
-    res.json({ visits_with_formula_this_month: row[0]?.visits_with_formula_this_month ?? 0 });
+    `,
+      sql`
+      WITH bounds AS (
+        SELECT
+          (date_trunc('month', (now() AT TIME ZONE ${TZ})::timestamp))::date AS start_m,
+          ((date_trunc('month', (now() AT TIME ZONE ${TZ})::timestamp) + interval '1 month'))::date AS end_m
+      ),
+      per_client AS (
+        SELECT DISTINCT ON (v.client_id)
+          c.full_name,
+          v.visit_date,
+          v.created_at
+        FROM visits v
+        JOIN formula_lines fl ON fl.visit_id = v.id
+        JOIN clients c ON c.id = v.client_id AND c.salon_id = ${sid}
+        CROSS JOIN bounds b
+        WHERE v.salon_id = ${sid}
+          AND v.visit_date >= b.start_m
+          AND v.visit_date < b.end_m
+        ORDER BY v.client_id, v.visit_date DESC, v.created_at DESC
+      )
+      SELECT full_name
+      FROM per_client
+      ORDER BY visit_date DESC NULLS LAST, created_at DESC NULLS LAST
+      LIMIT 3
+    `,
+    ]);
+
+    const visits_with_formula_this_month = cntRows[0]?.visits_with_formula_this_month ?? 0;
+    const formula_client_initials_last3 = recentRows.map((r) => initialsFromFullName(r.full_name));
+    res.json({ visits_with_formula_this_month, formula_client_initials_last3 });
   } catch (e) {
     next(e);
   }

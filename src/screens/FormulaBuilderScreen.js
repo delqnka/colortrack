@@ -34,6 +34,7 @@ import {
   SCHEDULE_BANNER_LOCATIONS,
 } from '../theme/scheduleBannerGradient';
 import { FontFamily } from '../theme/fonts';
+import { Type, typeLh } from '../theme/typography';
 import IsoDatePickField from '../components/IsoDatePickField';
 import { isColourFormulaPickItem, isDeveloperInventoryPickItem } from '../inventory/inventoryCategories';
 
@@ -1163,7 +1164,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   kbAccessoryDoneBtn: { paddingVertical: 6, paddingHorizontal: 12 },
-  kbAccessoryDoneTxt: { fontSize: 17, fontFamily: FontFamily.semibold, color: BRAND_PURPLE },
+  kbAccessoryDoneTxt: { ...Type.buttonLabel, color: BRAND_PURPLE },
 
   // header
   header: {
@@ -1178,8 +1179,7 @@ const styles = StyleSheet.create({
   navHeadline: {
     flex: 1,
     textAlign: 'center',
-    fontFamily: FontFamily.bold,
-    fontSize: 17,
+    ...Type.screenTitle,
     letterSpacing: -0.41,
     color: '#000000',
   },
@@ -1209,6 +1209,7 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
+    lineHeight: typeLh(12),
     color: '#8E8E93',
     paddingHorizontal: 24,
     marginBottom: 10,
@@ -1223,23 +1224,25 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   stepQuestion: {
-    fontFamily: FontFamily.bold,
-    fontSize: 26,
+    fontFamily: FontFamily.semibold,
+    fontSize: 22,
+    lineHeight: typeLh(22),
     color: '#1C1C1E',
     letterSpacing: -0.5,
     marginBottom: 6,
-    lineHeight: 32,
   },
   stepSubtitle: {
     fontFamily: FontFamily.medium,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
     color: BRAND_LILAC,
     marginBottom: 20,
     letterSpacing: -0.2,
   },
   forClient: {
     fontFamily: FontFamily.regular,
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: typeLh(13),
     color: '#8E8E93',
     marginBottom: 20,
     letterSpacing: -0.2,
@@ -1297,8 +1300,7 @@ const styles = StyleSheet.create({
     height: 68,
   },
   zoneCardLabel: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 18,
+    ...Type.listPrimary,
     color: '#1C1C1E',
     letterSpacing: -0.3,
   },
@@ -1315,18 +1317,14 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   mixesSummaryTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: '#8E8E93',
+    ...Type.sectionLabel,
     marginBottom: 10,
-    letterSpacing: -0.01,
-    textTransform: 'uppercase',
   },
   mixesSummaryItem: {
     fontFamily: FontFamily.semibold,
-    fontSize: 17,
+    fontSize: 15,
+    lineHeight: typeLh(15),
     color: '#1C1C1E',
-    lineHeight: 24,
     letterSpacing: -0.41,
     marginBottom: 4,
   },
@@ -1374,7 +1372,8 @@ const styles = StyleSheet.create({
   },
   countCircleTxt: {
     fontSize: 15,
-    fontFamily: FontFamily.bold,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.semibold,
     color: BRAND_LILAC,
     letterSpacing: -0.4,
   },
@@ -1391,7 +1390,8 @@ const styles = StyleSheet.create({
   },
   moreColoursBtnTxt: {
     fontFamily: FontFamily.semibold,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: typeLh(15),
     color: BRAND_LILAC,
   },
 
@@ -1464,7 +1464,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stockPickerShade: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semibold,
     fontSize: 16,
     color: '#1C1C1E',
     letterSpacing: -0.2,
@@ -1647,7 +1647,7 @@ const styles = StyleSheet.create({
 
   // client picker
   pickPurpose: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semibold,
     fontSize: 24,
     color: '#1C1C1E',
     paddingHorizontal: 24,
@@ -1679,8 +1679,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  pickRowName: { fontSize: 17, fontFamily: FontFamily.regular, color: '#000000' },
-  pickRowPhone: { fontSize: 15, fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 2 },
+  pickRowName: { ...Type.listPrimary, color: '#000000' },
+  pickRowPhone: { marginTop: 2, ...Type.secondary },
   pickEmpty: {
     fontFamily: FontFamily.regular,
     fontSize: 15,
@@ -1710,7 +1710,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
   },
-  modalTitle: { fontSize: 18, fontFamily: FontFamily.semibold, color: '#1C1C1E' },
+  modalTitle: { ...Type.screenTitle, color: '#1C1C1E' },
   modalClose: { fontSize: 16, fontFamily: FontFamily.regular, color: BRAND_PURPLE },
   invSearch: {
     backgroundColor: '#F2F2F7',
@@ -1729,8 +1729,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  invRowName: { fontSize: 16, fontFamily: FontFamily.regular, color: '#1C1C1E' },
-  invRowMeta: { fontSize: 13, fontFamily: FontFamily.regular, color: '#8E8E93', marginTop: 2 },
+  invRowName: { ...Type.listPrimary, color: '#1C1C1E' },
+  invRowMeta: { marginTop: 2, ...Type.secondary },
   invEmpty: {
     textAlign: 'center',
     color: '#8E8E93',

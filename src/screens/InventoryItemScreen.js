@@ -662,9 +662,9 @@ const styles = StyleSheet.create({
   iconBtn: {
     ...glassPurpleIconBtn,
   },
-  headerTitle: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#1C1C1E' },
+  headerTitle: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#0D0D0D' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
-  subMeta: { ...Type.listPrimary, color: '#1C1C1E', marginBottom: 4 },
+  subMeta: { ...Type.listPrimary, color: '#0D0D0D', marginBottom: 4 },
   supplier: {
     ...Type.secondary,
     color: '#5E35B1',
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 8,
     marginTop: 4,
   },
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   labelRow: {
     flexDirection: 'row',
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 4,
     ...reliefShadow,
   },
@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 6,
   },
-  chipTxt: { ...Type.listPrimary, color: '#1C1C1E' },
+  chipTxt: { ...Type.listPrimary, color: '#0D0D0D' },
   chipTxtOn: { color: '#fff', fontFamily: FontFamily.medium, fontSize: 15, lineHeight: typeLh(15) },
   saveBtn: {
     marginTop: 28,
@@ -778,6 +778,6 @@ const styles = StyleSheet.create({
   },
   histDeltaNeg: { color: '#C62828' },
   histMid: { flex: 1, paddingLeft: 8 },
-  histReason: { ...Type.secondary, color: '#1C1C1E' },
+  histReason: { ...Type.secondary, color: '#0D0D0D' },
   histWhen: { marginTop: 4, ...Type.tabBarLabel, color: '#8A8A8E' },
 });

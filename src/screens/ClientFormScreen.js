@@ -398,7 +398,7 @@ export default function ClientFormScreen({ route, navigation }) {
             nullable
             toolbarTitle="Patch test"
             style={styles.input}
-            textStyle={{ fontSize: 16, color: '#1C1C1E' }}
+            textStyle={{ fontSize: 16, color: '#0D0D0D' }}
           />
 
           <Text style={styles.label}>Notes</Text>
@@ -499,13 +499,13 @@ const styles = StyleSheet.create({
   iconBtn: {
     ...glassPurpleIconBtn,
   },
-  title: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#1C1C1E' },
+  title: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#0D0D0D' },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
   label: {
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 8,
     marginTop: 4,
   },
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 4,
     ...reliefShadow,
   },
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   phoneInput: {
     flex: 1,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     ...reliefShadow,
   },
   photoRow: {
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
   photoActions: { gap: 8 },
   photoLink: { paddingVertical: 4 },
   photoLinkText: { ...Type.buttonLabel, color: '#5E35B1' },
-  photoLinkMuted: { ...Type.listPrimary, color: '#1C1C1E', fontFamily: FontFamily.regular },
+  photoLinkMuted: { ...Type.listPrimary, color: '#0D0D0D', fontFamily: FontFamily.regular },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   saveBtn: {
     marginTop: 28,
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: typeLh(17),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   modalSearch: {
     marginHorizontal: 16,
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     ...reliefShadow,
   },
   countryRow: {
@@ -637,11 +637,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   countryRowFlag: { fontSize: 22 },
-  countryRowName: { flex: 1, ...Type.listPrimary, color: '#1C1C1E' },
+  countryRowName: { flex: 1, ...Type.listPrimary, color: '#0D0D0D' },
   countryRowDial: {
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
 });

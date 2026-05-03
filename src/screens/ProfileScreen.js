@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  topTitle: { ...Type.screenTitle, color: '#1C1C1E' },
+  topTitle: { ...Type.screenTitle, color: '#0D0D0D' },
   loadingBox: {
     flex: 1,
     justifyContent: 'center',
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   },
   namePreview: {
     ...Type.screenTitle,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     alignSelf: 'stretch',
     textAlign: 'center',
   },
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.medium,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   firstFieldLabel: {
     marginTop: 28,
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     backgroundColor: '#FFFFFF',
   },
   saveBtn: {

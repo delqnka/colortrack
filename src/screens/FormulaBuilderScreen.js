@@ -963,7 +963,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         value={visitDate}
         onChange={setVisitDate}
         style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
-        textStyle={{ fontSize: 16, color: '#1C1C1E', flex: 1, fontFamily: FontFamily.regular }}
+        textStyle={{ fontSize: 16, color: '#0D0D0D', flex: 1, fontFamily: FontFamily.regular }}
       />
 
       <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Notes (optional)</Text>
@@ -1227,7 +1227,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semibold,
     fontSize: 22,
     lineHeight: typeLh(22),
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     letterSpacing: -0.5,
     marginBottom: 6,
   },
@@ -1301,7 +1301,7 @@ const styles = StyleSheet.create({
   },
   zoneCardLabel: {
     ...Type.listPrimary,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     letterSpacing: -0.3,
   },
   mixesSummaryBox: {
@@ -1324,7 +1324,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semibold,
     fontSize: 15,
     lineHeight: typeLh(15),
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     letterSpacing: -0.41,
     marginBottom: 4,
   },
@@ -1423,7 +1423,7 @@ const styles = StyleSheet.create({
   colourCardTitle: {
     fontFamily: FontFamily.semibold,
     fontSize: 15,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   devCardTitle: {
     color: '#0D74FF',
@@ -1460,13 +1460,13 @@ const styles = StyleSheet.create({
   stockPickerBtnTxt: {
     fontFamily: FontFamily.medium,
     fontSize: 15,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     flex: 1,
   },
   stockPickerShade: {
     fontFamily: FontFamily.semibold,
     fontSize: 16,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     letterSpacing: -0.2,
   },
   stockPickerName: {
@@ -1526,7 +1526,7 @@ const styles = StyleSheet.create({
     color: '#8A8A8E',
   },
   unitBtnTxtActive: {
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     fontFamily: FontFamily.semibold,
   },
 
@@ -1566,7 +1566,7 @@ const styles = StyleSheet.create({
   mixSummaryHeading: {
     fontFamily: FontFamily.semibold,
     fontSize: 18,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 10,
     letterSpacing: -0.43,
     lineHeight: 24,
@@ -1574,7 +1574,7 @@ const styles = StyleSheet.create({
   mixSummaryLine: {
     fontFamily: FontFamily.regular,
     fontSize: 15,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     lineHeight: 22,
     letterSpacing: -0.23,
   },
@@ -1626,7 +1626,7 @@ const styles = StyleSheet.create({
   addAnotherBtnTxt: {
     fontSize: 17,
     fontFamily: FontFamily.semibold,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   saveBtn: {
     backgroundColor: '#1C1C1E',
@@ -1651,7 +1651,7 @@ const styles = StyleSheet.create({
   pickPurpose: {
     fontFamily: FontFamily.semibold,
     fontSize: 24,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     paddingHorizontal: 24,
     marginTop: 12,
     marginBottom: 16,
@@ -1712,7 +1712,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
   },
-  modalTitle: { ...Type.screenTitle, color: '#1C1C1E' },
+  modalTitle: { ...Type.screenTitle, color: '#0D0D0D' },
   modalClose: { fontSize: 16, fontFamily: FontFamily.regular, color: BRAND_PURPLE },
   invSearch: {
     backgroundColor: '#F2F2F7',
@@ -1721,7 +1721,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     fontSize: 16,
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 12,
   },
   invRow: {
@@ -1731,7 +1731,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
-  invRowName: { ...Type.listPrimary, color: '#1C1C1E' },
+  invRowName: { ...Type.listPrimary, color: '#0D0D0D' },
   invRowMeta: { marginTop: 2, ...Type.secondary },
   invEmpty: {
     textAlign: 'center',

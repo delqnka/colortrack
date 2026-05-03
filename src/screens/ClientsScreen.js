@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  pickBannerTxt: { flex: 1, ...Type.secondary, color: '#1C1C1E' },
+  pickBannerTxt: { flex: 1, ...Type.secondary, color: '#0D0D0D' },
   pickCancel: { ...Type.buttonLabel, color: '#5E35B1' },
   addBtn: {
     ...glassPurpleFabBar,

@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   date: {
     fontFamily: FontFamily.regular,
     fontSize: 15,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginBottom: 8,
   },
   paidLine: {
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 12,
     lineHeight: typeLh(12),
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     borderWidth: 1,
     borderColor: '#1C1C1E',
     borderRadius: 8,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   },
   notesBody: {
     ...Type.listPrimary,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     fontFamily: FontFamily.regular,
     lineHeight: typeLh(15),
   },
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   },
   mixIndex: {
     ...Type.secondary,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
 
   // colour line
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   },
   lineNameSub: {
     ...Type.tabBarLabel,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     marginTop: 1,
     lineHeight: typeLh(11),
   },
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semibold,
     fontSize: 15,
     lineHeight: typeLh(15),
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     letterSpacing: -0.3,
     flexShrink: 0,
   },

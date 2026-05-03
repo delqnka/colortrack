@@ -505,7 +505,7 @@ export default function CalendarScreen() {
                 onPress={() => openDeviceEventActions(row.ev)}
               >
                 <View style={styles.deviceCardTop}>
-                  <Ionicons name="phone-portrait-outline" size={20} color="#007AFF" />
+                  <Ionicons name="phone-portrait-outline" size={20} color="#5E35B1" />
                   <Text style={styles.devicePill}>On this device</Text>
                 </View>
                 <Text style={styles.deviceTitle}>{row.ev.title || '(No title)'}</Text>
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
   addBtn: {
     ...glassPurpleFabBar,
   },
-  title: { ...Type.screenTitle, color: '#1C1C1E' },
+  title: { ...Type.screenTitle, color: '#0D0D0D' },
   calHint: {
     marginHorizontal: 24,
     marginBottom: 10,
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.semibold,
-    color: '#007AFF',
+    color: '#5E35B1',
   },
   calCard: {
     marginHorizontal: 24,
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: typeLh(17),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   wdRow: { flexDirection: 'row', marginBottom: 18 },
   wd: {
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   client: {
     marginTop: 6,
@@ -650,10 +650,10 @@ const styles = StyleSheet.create({
   time: {
     marginTop: 8,
     ...Type.listPrimary,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     fontFamily: FontFamily.regular,
   },
-  chair: { marginTop: 4, ...Type.secondary, color: '#1C1C1E' },
+  chair: { marginTop: 4, ...Type.secondary, color: '#0D0D0D' },
   cardActions: {
     marginTop: 12,
     paddingTop: 12,
@@ -668,21 +668,24 @@ const styles = StyleSheet.create({
   },
   cardActionTxt: { ...Type.buttonLabel, color: '#5E35B1' },
   deviceCard: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 18,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.12,
+    shadowRadius: 15,
+    elevation: 10,
   },
   deviceCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   devicePill: {
     ...Type.sectionLabel,
-    color: '#007AFF',
+    color: '#5E35B1',
     letterSpacing: 0.4,
     marginBottom: 0,
   },
-  deviceTitle: { ...Type.greetingHello, color: '#1C1C1E' },
-  deviceTime: { marginTop: 6, ...Type.listPrimary, color: '#475569', fontFamily: FontFamily.regular },
-  deviceLoc: { marginTop: 4, ...Type.secondary, color: '#64748B' },
+  deviceTitle: { ...Type.greetingHello, color: '#0D0D0D' },
+  deviceTime: { marginTop: 6, ...Type.listPrimary, color: '#0D0D0D', fontFamily: FontFamily.regular },
+  deviceLoc: { marginTop: 4, ...Type.secondary, color: '#8A8A8E' },
 });

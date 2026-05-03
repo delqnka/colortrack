@@ -1493,7 +1493,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: typeLh(17),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   modalClose: {
     fontSize: 17,
@@ -1520,7 +1520,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
   },
   lowPickRowMain: { flex: 1, paddingRight: 10 },
-  lowPickName: { ...Type.listPrimary, color: '#1C1C1E' },
+  lowPickName: { ...Type.listPrimary, color: '#0D0D0D' },
   lowPickMeta: { marginTop: 4, ...Type.secondary, color: '#8A8A8E' },
   lowPickQty: {
     marginRight: 4,
@@ -1595,7 +1595,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.medium,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   previewCategoryTextOn: { color: '#FFFFFF' },
   previewAddCategory: {
@@ -1637,7 +1637,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
@@ -1652,7 +1652,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   previewCurrency: {
     ...Type.secondary,

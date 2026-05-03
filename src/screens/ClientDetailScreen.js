@@ -321,7 +321,7 @@ export default function ClientDetailScreen({route, navigation}) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  miss: { textAlign: 'center', marginTop: 48, color: '#1C1C1E' },
+  miss: { textAlign: 'center', marginTop: 48, color: '#0D0D0D' },
   top: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   back: {
     ...glassPurpleIconBtn,
   },
-  topTitle: { ...Type.greetingHello, color: '#1C1C1E' },
+  topTitle: { ...Type.greetingHello, color: '#0D0D0D' },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
   hero: {
     width: '100%',
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#0D0D0D',
   },
   patchDate: { marginTop: 4, ...Type.secondary },
   section: { marginTop: 28, marginBottom: 12, ...Type.sectionLabel },
@@ -396,8 +396,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   visitCardMain: { flex: 1 },
-  visitTitle: { ...Type.listPrimary, color: '#1C1C1E' },
-  visitDate: { marginTop: 6, ...Type.secondary, color: '#1C1C1E' },
+  visitTitle: { ...Type.listPrimary, color: '#0D0D0D' },
+  visitDate: { marginTop: 6, ...Type.secondary, color: '#0D0D0D' },
   visitPaid: {
     marginTop: 6,
     fontSize: 13,
@@ -406,9 +406,9 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
   },
   visitSource: { marginTop: 4, ...Type.tabBarLabel, color: '#007AFF' },
-  visitSub: { marginTop: 4, ...Type.secondary, color: '#1C1C1E' },
+  visitSub: { marginTop: 4, ...Type.secondary, color: '#0D0D0D' },
   formulaBox: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E5EA' },
-  formulaLine: { ...Type.secondary, color: '#1C1C1E', marginBottom: 6 },
+  formulaLine: { ...Type.secondary, color: '#0D0D0D', marginBottom: 6 },
   formulaSec: { fontFamily: FontFamily.medium, fontSize: 13, lineHeight: typeLh(13), color: '#5E35B1' },
   photoGrid: {
     flexDirection: 'row',

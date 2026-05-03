@@ -672,8 +672,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#0D0D0D',
   },
-  chipTxt: { fontSize: 14, lineHeight: typeLh(14), fontFamily: FontFamily.regular, color: '#1C1C1E' },
-  chipTxtOn: { fontFamily: FontFamily.semibold, color: '#1C1C1E' },
+  chipTxt: { fontSize: 14, lineHeight: typeLh(14), fontFamily: FontFamily.regular, color: '#0D0D0D' },
+  chipTxtOn: { fontFamily: FontFamily.semibold, color: '#0D0D0D' },
   sectionLabel: {
     ...Type.sectionLabel,
     marginBottom: 10,
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     letterSpacing: -0.41,
   },
-  visitProc: { ...Type.listPrimary, color: '#1C1C1E', marginTop: 4 },
+  visitProc: { ...Type.listPrimary, color: '#0D0D0D', marginTop: 4 },
   visitDate: { ...Type.secondary, marginTop: 4, color: '#8A8A8E' },
   visitPreview: { ...Type.secondary, marginTop: 8, color: '#8A8A8E' },
   visitMeta: {

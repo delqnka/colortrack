@@ -704,7 +704,9 @@ export default function InventoryScreen({ navigation }) {
             if (!list?.length) return null;
             return (
               <View key={cat} style={styles.section}>
-                <Text style={styles.sectionTitle}>{sectionTitle(cat)}</Text>
+                {inventoryFilter !== 'stock' ? (
+                  <Text style={styles.sectionTitle}>{sectionTitle(cat)}</Text>
+                ) : null}
                 {list.map((item) => {
                   const detailParts = [item.brand, item.shade_code, item.package_size].filter(Boolean);
                   const qtyLabel = `${item.quantity} ${item.unit}`;
@@ -1265,7 +1267,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.04)',
     marginTop: 12,
   },
-  scroll: { paddingHorizontal: 24, paddingBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 24, backgroundColor: '#FFFFFF' },
   lowBanner: {
     height: 48,
     borderRadius: 12,

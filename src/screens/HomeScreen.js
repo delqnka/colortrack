@@ -598,6 +598,16 @@ export default function HomeScreen() {
                     <Ionicons name="calendar-outline" size={26} color={MY_LAB_VIOLET} />
                   </View>
                 </View>
+                {sameCalendarLocal(selectedDate, new Date()) ? (
+                  <TouchableOpacity
+                    style={styles.bannerSalesLink}
+                    onPress={(e) => { e.stopPropagation?.(); hapticImpactLight(); navigation.navigate('TodaySales'); }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 4, bottom: 8 }}
+                  >
+                    <Text style={styles.bannerSalesLinkTxt}>Log a sale →</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
               </View>
             </TouchableOpacity>
@@ -963,6 +973,17 @@ const styles = StyleSheet.create({
     lineHeight: typeLh(13),
     color: '#8A8A8E',
     marginBottom: 10,
+  },
+  bannerSalesLink: {
+    alignSelf: 'flex-start',
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  bannerSalesLinkTxt: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    color: MY_LAB_VIOLET,
+    letterSpacing: -0.1,
   },
   bannerCalendarCue: {
     width: 72,

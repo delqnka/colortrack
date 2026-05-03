@@ -265,6 +265,8 @@ async function ensureSchema(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_salon_product_sales_salon_date ON salon_product_sales (salon_id, sale_date DESC)`;
+  await sql`ALTER TABLE salon_product_sales ADD COLUMN IF NOT EXISTS client_id INT REFERENCES clients (id) ON DELETE SET NULL`;
+  await sql`ALTER TABLE salon_product_sales ADD COLUMN IF NOT EXISTS client_name_snapshot TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS lab_formula_templates (

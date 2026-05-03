@@ -29,6 +29,7 @@ import OnboardingAuthScreen from './src/onboarding/screens/OnboardingAuthScreen'
 import OnboardingEmailScreen from './src/onboarding/screens/OnboardingEmailScreen';
 import { isOnboardingComplete } from './src/onboarding/storage';
 import ProfileScreen from './src/screens/ProfileScreen';
+import TodaySalesScreen from './src/screens/TodaySalesScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import { CurrencyProvider } from './src/context/CurrencyContext';
 import { loadStoredToken, flushOutbox } from './src/api/client';
@@ -375,6 +376,7 @@ export default function App() {
               />
               <AppStack.Screen name="VisitDetail" component={VisitDetailScreen} />
               <AppStack.Screen name="Finance" component={FinanceScreen} />
+              <AppStack.Screen name="TodaySales" component={TodaySalesScreen} />
               <AppStack.Screen name="Lab" component={LabScreen} />
               <AppStack.Screen name="Profile" component={ProfileScreen} />
               <AppStack.Screen name="Services" component={ServicesScreen} />

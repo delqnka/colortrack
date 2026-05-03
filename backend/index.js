@@ -3263,10 +3263,16 @@ app.get('/api/finance/lines', async (req, res, next) => {
         ORDER BY id DESC
       `,
       sql`
-        SELECT id, description, quantity, amount_cents, inventory_item_id, created_at
-        FROM salon_product_sales
-        WHERE salon_id = ${sid} AND sale_date = ${dateYmd}::date
-        ORDER BY id DESC
+        SELECT
+          ps.id, ps.description, ps.quantity, ps.amount_cents,
+          ps.inventory_item_id, ps.client_id, ps.client_name_snapshot, ps.created_at,
+          c.full_name AS client_full_name,
+          ii.name AS item_name
+        FROM salon_product_sales ps
+        LEFT JOIN clients c ON c.id = ps.client_id
+        LEFT JOIN inventory_items ii ON ii.id = ps.inventory_item_id
+        WHERE ps.salon_id = ${sid} AND ps.sale_date = ${dateYmd}::date
+        ORDER BY ps.id DESC
       `,
     ]);
     res.json({ expenses, product_sales });
@@ -3343,9 +3349,18 @@ app.post('/api/finance/product-sales', async (req, res, next) => {
       }
       invId = iid;
     }
+    let clientId = null;
+    let clientNameSnapshot = null;
+    if (b.client_id != null && b.client_id !== '') {
+      const cid = Math.round(Number(b.client_id));
+      if (Number.isFinite(cid) && cid > 0) {
+        const cl = await sql`SELECT id, full_name FROM clients WHERE id = ${cid} AND salon_id = ${sid} LIMIT 1`;
+        if (cl.length) { clientId = cid; clientNameSnapshot = cl[0].full_name; }
+      }
+    }
     const rows = await sql`
-      INSERT INTO salon_product_sales (salon_id, sale_date, inventory_item_id, description, quantity, amount_cents)
-      VALUES (${sid}, ${dateYmd}::date, ${invId}, ${description}, ${qty}, ${amount_cents})
+      INSERT INTO salon_product_sales (salon_id, sale_date, inventory_item_id, description, quantity, amount_cents, client_id, client_name_snapshot)
+      VALUES (${sid}, ${dateYmd}::date, ${invId}, ${description}, ${qty}, ${amount_cents}, ${clientId}, ${clientNameSnapshot})
       RETURNING id
     `;
     res.status(201).json({ id: rows[0].id });

@@ -110,6 +110,8 @@ export default function InventoryItemScreen({ route, navigation }) {
   const [addingCategory, setAddingCategory] = useState(false);
   const [unit, setUnit] = useState('g');
   const [supplierStr, setSupplierStr] = useState('');
+  const [subcategoryStr, setSubcategoryStr] = useState('');
+  const [subcategorySuggestions, setSubcategorySuggestions] = useState([]);
   const [qtyStr, setQtyStr] = useState('');
   const [threshStr, setThreshStr] = useState('');
   const [reasonStr, setReasonStr] = useState('');
@@ -144,6 +146,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       setAddingCategory(false);
       setUnit(row.unit || 'g');
       setSupplierStr(row.supplier_hint || '');
+      setSubcategoryStr(row.custom_subcategory || '');
       setQtyStr(numToStr(row.quantity));
       setThreshStr(numToStr(row.low_stock_threshold));
       setReasonStr('');
@@ -175,6 +178,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       setAddingCategory(false);
       setUnit('pcs');
       setSupplierStr('');
+      setSubcategoryStr('');
       setQtyStr('0');
       setThreshStr('0');
       setReasonStr('');
@@ -187,6 +191,9 @@ export default function InventoryItemScreen({ route, navigation }) {
         .catch(() => {
           if (!cancelled) setCustomCategoryOptions([]);
         });
+      apiGet('/api/inventory/subcategories')
+        .then((subs) => { if (!cancelled) setSubcategorySuggestions(Array.isArray(subs) ? subs : []); })
+        .catch(() => {});
       return () => {
         cancelled = true;
       };
@@ -227,6 +234,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           package_size: packageSizeStr.trim() || null,
           price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
+          custom_subcategory: subcategoryStr.trim() || null,
         });
         navigation.replace('InventoryItem', { itemId: row.id });
       } else {
@@ -242,6 +250,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           package_size: packageSizeStr.trim() || null,
           price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
+          custom_subcategory: subcategoryStr.trim() || null,
         };
         const note = reasonStr.trim();
         if (note) body.reason = note;
@@ -256,6 +265,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         setPackageSizeStr(row.package_size || '');
         setPriceStr(priceTextFromCents(row.price_per_unit_cents));
         setSupplierStr(row.supplier_hint || '');
+        setSubcategoryStr(row.custom_subcategory || '');
         setReasonStr('');
         const hist = await apiGet(`/api/inventory/${itemId}/movements`);
         setMovements(Array.isArray(hist) ? hist : []);
@@ -419,11 +429,34 @@ export default function InventoryItemScreen({ route, navigation }) {
                 onChangeText={setPriceStr}
                 keyboardType="decimal-pad"
               />
+              <Text style={styles.label}>Subcategory</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Shampoos, Styling, Thermal protection"
+                placeholderTextColor="#AEAEB2"
+                value={subcategoryStr}
+                onChangeText={setSubcategoryStr}
+                autoCapitalize="words"
+              />
+              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
+                <View style={styles.subSuggestions}>
+                  {subcategorySuggestions.slice(0, 6).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={styles.subSuggestionChip}
+                      onPress={() => setSubcategoryStr(s)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.subSuggestionTxt}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
               <Text style={styles.label}>Supplier</Text>
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#1C1C1E"
+                placeholderTextColor="#0D0D0D"
                 value={supplierStr}
                 onChangeText={setSupplierStr}
               />
@@ -544,11 +577,34 @@ export default function InventoryItemScreen({ route, navigation }) {
                 onChangeText={setPriceStr}
                 keyboardType="decimal-pad"
               />
+              <Text style={styles.label}>Subcategory</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Shampoos, Styling, Thermal protection"
+                placeholderTextColor="#AEAEB2"
+                value={subcategoryStr}
+                onChangeText={setSubcategoryStr}
+                autoCapitalize="words"
+              />
+              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
+                <View style={styles.subSuggestions}>
+                  {subcategorySuggestions.slice(0, 6).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={styles.subSuggestionChip}
+                      onPress={() => setSubcategoryStr(s)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.subSuggestionTxt}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
               <Text style={styles.label}>Supplier</Text>
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#1C1C1E"
+                placeholderTextColor="#0D0D0D"
                 value={supplierStr}
                 onChangeText={setSupplierStr}
               />
@@ -669,6 +725,26 @@ const styles = StyleSheet.create({
     ...Type.secondary,
     color: '#5E35B1',
     marginBottom: 16,
+  },
+  subSuggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  subSuggestionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+  },
+  subSuggestionTxt: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#0D0D0D',
   },
   label: {
     fontSize: 13,

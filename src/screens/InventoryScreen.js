@@ -262,22 +262,36 @@ export default function InventoryScreen({ navigation }) {
     return rows.filter((item) => itemMatchesInventorySearch(item, inventorySearchNorm));
   }, [rows, filteredRows, inventorySearchNorm]);
 
+  // In Colors view: group by category (dye/oxidant/etc.)
+  // In Stock/Retail view: group by custom_subcategory when set, else flat ('_all')
+  const useSubcategoryGrouping = inventoryFilter === 'stock' || inventoryFilter === 'retail';
+
   const grouped = useMemo(() => {
     const m = {};
     for (const item of searchFilteredRows) {
-      const key = inventoryCategoryKey(item.category);
+      const key = useSubcategoryGrouping
+        ? (item.custom_subcategory?.trim() || '_all')
+        : inventoryCategoryKey(item.category);
       if (!m[key]) m[key] = [];
       m[key].push(item);
     }
     return m;
-  }, [searchFilteredRows]);
+  }, [searchFilteredRows, useSubcategoryGrouping]);
 
   const sectionKeys = useMemo(() => {
+    if (useSubcategoryGrouping) {
+      // Named subcategories first (alphabetical), then uncategorised ('_all') last
+      const keys = Object.keys(grouped);
+      return [
+        ...keys.filter((k) => k !== '_all').sort((a, b) => a.localeCompare(b)),
+        ...keys.filter((k) => k === '_all'),
+      ];
+    }
     const keys = Object.keys(grouped);
     const preset = ORDER.filter((k) => grouped[k]?.length);
     const rest = keys.filter((k) => !ORDER.includes(k)).sort((a, b) => a.localeCompare(b));
     return [...preset, ...rest];
-  }, [grouped]);
+  }, [grouped, useSubcategoryGrouping]);
 
   const lowCount = rows.filter((r) => r.is_low_stock).length;
 
@@ -704,8 +718,10 @@ export default function InventoryScreen({ navigation }) {
             if (!list?.length) return null;
             return (
               <View key={cat} style={styles.section}>
-                {inventoryFilter !== 'stock' ? (
-                  <Text style={styles.sectionTitle}>{sectionTitle(cat)}</Text>
+                {cat !== '_all' ? (
+                  <Text style={styles.sectionTitle}>
+                    {useSubcategoryGrouping ? cat : sectionTitle(cat)}
+                  </Text>
                 ) : null}
                 {list.map((item) => {
                   const detailParts = [item.brand, item.shade_code, item.package_size].filter(Boolean);

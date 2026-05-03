@@ -1001,6 +1001,7 @@ app.get('/api/inventory', async (req, res, next) => {
         id,
         name,
         category,
+        custom_subcategory,
         brand,
         shade_code,
         package_size,
@@ -1012,7 +1013,7 @@ app.get('/api/inventory', async (req, res, next) => {
         (quantity <= low_stock_threshold) AS is_low_stock
       FROM inventory_items
       WHERE salon_id = ${req.auth.salonId}
-      ORDER BY category, brand NULLS LAST, name
+      ORDER BY category, custom_subcategory NULLS LAST, brand NULLS LAST, name
     `;
     res.json(rows);
   } catch (e) {
@@ -1192,6 +1193,10 @@ app.post('/api/inventory', async (req, res, next) => {
       typeof b.supplier_hint === 'string' && b.supplier_hint.trim()
         ? String(b.supplier_hint).trim().slice(0, 200)
         : null;
+    const custom_subcategory =
+      typeof b.custom_subcategory === 'string' && b.custom_subcategory.trim()
+        ? String(b.custom_subcategory).trim().slice(0, 100)
+        : null;
     let price_per_unit_cents = null;
     if (b.price_per_unit_cents !== undefined && b.price_per_unit_cents !== null && b.price_per_unit_cents !== '') {
       const cents = Math.round(Number(b.price_per_unit_cents));
@@ -1205,6 +1210,7 @@ app.post('/api/inventory', async (req, res, next) => {
         salon_id,
         name,
         category,
+        custom_subcategory,
         brand,
         shade_code,
         package_size,
@@ -1218,6 +1224,7 @@ app.post('/api/inventory', async (req, res, next) => {
         ${req.auth.salonId},
         ${name},
         ${category},
+        ${custom_subcategory},
         ${brand},
         ${shade_code},
         ${package_size},
@@ -1231,6 +1238,7 @@ app.post('/api/inventory', async (req, res, next) => {
         id,
         name,
         category,
+        custom_subcategory,
         brand,
         shade_code,
         package_size,
@@ -1242,6 +1250,33 @@ app.post('/api/inventory', async (req, res, next) => {
         (quantity <= low_stock_threshold) AS is_low_stock
     `;
     res.status(201).json(rows[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Must be before /:id to avoid 'subcategories' being matched as an id
+app.get('/api/inventory/subcategories', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const category = typeof req.query.category === 'string' ? req.query.category.trim() : null;
+    const rows = category
+      ? await sql`
+          SELECT DISTINCT custom_subcategory
+          FROM inventory_items
+          WHERE salon_id = ${req.auth.salonId}
+            AND custom_subcategory IS NOT NULL
+            AND custom_subcategory <> ''
+            AND category = ${category}
+          ORDER BY custom_subcategory`
+      : await sql`
+          SELECT DISTINCT custom_subcategory
+          FROM inventory_items
+          WHERE salon_id = ${req.auth.salonId}
+            AND custom_subcategory IS NOT NULL
+            AND custom_subcategory <> ''
+          ORDER BY custom_subcategory`;
+    res.json(rows.map((r) => r.custom_subcategory));
   } catch (e) {
     next(e);
   }
@@ -1285,6 +1320,7 @@ app.get('/api/inventory/:id', async (req, res, next) => {
         id,
         name,
         category,
+        custom_subcategory,
         brand,
         shade_code,
         package_size,
@@ -1315,7 +1351,7 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
     }
     const sql = getSql();
     const existing = await sql`
-      SELECT id, name, brand, shade_code, package_size, supplier_hint, price_per_unit_cents, quantity, low_stock_threshold, unit, category
+      SELECT id, name, brand, shade_code, package_size, supplier_hint, price_per_unit_cents, quantity, low_stock_threshold, unit, category, custom_subcategory
       FROM inventory_items
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       LIMIT 1
@@ -1385,6 +1421,12 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
           ? String(b.supplier_hint).trim().slice(0, 200)
           : null
         : cur.supplier_hint;
+    const newSubcategory =
+      b.custom_subcategory !== undefined
+        ? typeof b.custom_subcategory === 'string' && b.custom_subcategory.trim()
+          ? String(b.custom_subcategory).trim().slice(0, 100)
+          : null
+        : cur.custom_subcategory;
     let newPrice = cur.price_per_unit_cents;
     if (b.price_per_unit_cents !== undefined) {
       if (b.price_per_unit_cents === null || b.price_per_unit_cents === '') {
@@ -1416,6 +1458,7 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         shade_code = ${newShade},
         package_size = ${newPackageSize},
         supplier_hint = ${newSupplier},
+        custom_subcategory = ${newSubcategory},
         price_per_unit_cents = ${newPrice},
         quantity = ${newQty},
         low_stock_threshold = ${newThresh},
@@ -1426,6 +1469,7 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         id,
         name,
         category,
+        custom_subcategory,
         brand,
         shade_code,
         package_size,

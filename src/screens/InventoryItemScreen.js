@@ -92,7 +92,7 @@ export default function InventoryItemScreen({ route, navigation }) {
   const itemId = route.params?.itemId;
   const isEdit = Number.isFinite(Number(itemId)) && Number(itemId) > 0;
   const initialCategory = typeof route.params?.initialCategory === 'string' ? route.params.initialCategory : '';
-  const initialPresetCategory = PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : 'dye';
+  const initialPresetCategory = PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : 'consumable';
   const initialCategoryMode =
     route.params?.categoryMode === 'colors' || COLOR_CATEGORY_KEYS.has(initialPresetCategory) ? 'colors' : 'general';
 
@@ -103,7 +103,7 @@ export default function InventoryItemScreen({ route, navigation }) {
   const [shadeStr, setShadeStr] = useState('');
   const [packageSizeStr, setPackageSizeStr] = useState('');
   const [priceStr, setPriceStr] = useState('');
-  const [categoryPreset, setCategoryPreset] = useState('dye');
+  const [categoryPreset, setCategoryPreset] = useState('consumable');
   const [categoryCustom, setCategoryCustom] = useState('');
   const [categoryDraft, setCategoryDraft] = useState('');
   const [customCategoryOptions, setCustomCategoryOptions] = useState([]);
@@ -132,7 +132,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       setShadeStr(row.shade_code || '');
       setPackageSizeStr(row.package_size || '');
       setPriceStr(priceTextFromCents(row.price_per_unit_cents));
-      const rc = row.category || 'dye';
+      const rc = row.category || 'consumable';
       if (PRESET_CATEGORY_KEYS.has(rc)) {
         setCategoryPreset(rc);
         setCategoryCustom('');
@@ -221,7 +221,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           setSaving(false);
           return;
         }
-        const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || 'dye';
+        const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || 'consumable';
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, resolvedCategory));
         await apiPost('/api/inventory', {
           name,

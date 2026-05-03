@@ -771,8 +771,7 @@ export default function InventoryScreen({ navigation }) {
                 ) : null}
                 {list.map((item) => {
                   const detailParts = [item.brand, item.shade_code, item.package_size].filter(Boolean);
-                  const qtyLabel = `${item.quantity} ${item.unit}`;
-                  const metaText = detailParts.length ? [...detailParts, qtyLabel].join(' · ') : qtyLabel;
+                  const metaText = detailParts.join(' · ');
                   const priceLine =
                     item.price_per_unit_cents != null
                       ? formatMinorFromStoredCents(item.price_per_unit_cents, currency)
@@ -787,35 +786,29 @@ export default function InventoryScreen({ navigation }) {
                         navigation.navigate('InventoryItem', { itemId: item.id });
                       }}
                     >
-                      <View style={[styles.rowAccent, { backgroundColor: inventoryAccentForItem(item) }]} />
                       <View style={styles.rowMain}>
-                        <Text style={styles.rowName} numberOfLines={2}>
+                        <Text style={styles.rowName} numberOfLines={1}>
                           {item.name}
                         </Text>
-                        <Text style={styles.rowMeta} numberOfLines={1}>
-                          {metaText}
-                        </Text>
+                        {metaText ? (
+                          <Text style={styles.rowMeta} numberOfLines={1}>{metaText}</Text>
+                        ) : null}
                       </View>
                       <View style={styles.rowRight}>
-                        {priceLine != null ? (
-                          <View style={styles.rowPriceBlock}>
-                            <Text style={styles.rowPrice} numberOfLines={1}>
-                              {priceLine}
-                            </Text>
-                            <Text style={styles.rowPriceUnit} numberOfLines={1}>
-                              / {item.unit}
-                            </Text>
+                        <View style={styles.rowPriceBlock}>
+                          <View style={styles.rowQtyRow}>
+                            <Text style={styles.rowQty}>{item.quantity}</Text>
+                            <Text style={styles.rowQtyUnit}>{item.unit}</Text>
                           </View>
-                        ) : (
-                          <Text style={styles.rowPricePlaceholder} numberOfLines={1}>
-                            —
-                          </Text>
-                        )}
+                          {priceLine ? (
+                            <Text style={styles.rowPrice} numberOfLines={1}>{priceLine}</Text>
+                          ) : null}
+                        </View>
                         <SFIcon
                           name="chevron-forward"
                           iosName="chevron.right"
                           size={11}
-                          color="rgba(13,13,13,0.28)"
+                          color="rgba(13,13,13,0.22)"
                           weight="regular"
                         />
                       </View>
@@ -1441,28 +1434,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 7,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
+    paddingVertical: 8,
+    marginBottom: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 10,
+    elevation: 4,
   },
   rowAccent: { display: 'none' },
-  rowMain: { flex: 1, paddingRight: 8 },
+  rowMain: { flex: 1, paddingRight: 10 },
   rowName: {
     ...Type.listPrimary,
     letterSpacing: -0.18,
+    color: '#0D0D0D',
   },
   rowMeta: {
     marginTop: 2,
@@ -1475,26 +1461,27 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rowPriceBlock: { alignItems: 'flex-end' },
+  rowQtyRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+  rowQty: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: '#0D0D0D',
+    letterSpacing: -0.3,
+  },
+  rowQtyUnit: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: '#8A8A8E',
+  },
   rowPrice: {
-    ...Type.price,
-    letterSpacing: -0.15,
-    color: BRAND_ACCENT,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: MY_LAB_VIOLET,
+    letterSpacing: -0.1,
+    marginTop: 1,
   },
-  rowPriceUnit: {
-    marginTop: 0,
-    fontSize: 9,
-    lineHeight: typeLh(9),
-    fontFamily: FontFamily.regular,
-    color: '#AEAEB2',
-    letterSpacing: 0,
-  },
-  rowPricePlaceholder: {
-    fontSize: 13,
-    lineHeight: typeLh(13),
-    fontFamily: FontFamily.regular,
-    color: '#C7C7CC',
-    marginRight: 2,
-  },
+  rowPriceUnit: { display: 'none' },
+  rowPricePlaceholder: { display: 'none' },
   chevronText: {
     fontSize: 20,
     lineHeight: typeLh(20),

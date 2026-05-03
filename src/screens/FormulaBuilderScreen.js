@@ -255,6 +255,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const [photosBefore, setPhotosBefore] = useState([]); // { uri, mimeType }
   const [photosAfter, setPhotosAfter] = useState([]);
+  const [retailPurchase, setRetailPurchase] = useState(null); // null | 'yes' | 'no'
   const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
   // ── wizard draft ──
@@ -398,6 +399,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     setDraftSection(null);
     setDraftColourRows([]);
     setDraftDeveloper({ brand: '', amount: '', unit: 'g' });
+    setRetailPurchase(null);
     setWizardStep(1);
   }, []);
 
@@ -598,7 +600,11 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           uploadVisitPhotos(visitId, photosAfter, 'after'),
         ]);
       }
-      navigation.goBack();
+      if (retailPurchase === 'yes') {
+        navigation.replace('TodaySales', { clientId, clientName: pickedClientLabel });
+      } else {
+        navigation.goBack();
+      }
     } catch (e) {
       Alert.alert('', e.message || '');
     } finally {
@@ -1169,6 +1175,27 @@ export default function FormulaBuilderScreen({ route, navigation }) {
           )}
         </View>
       ))}
+
+      {/* ── Retail purchase question ── */}
+      <View style={styles.retailQuestion}>
+        <Text style={styles.retailQuestionTxt}>
+          Did the client take home any retail products today?
+        </Text>
+        <View style={styles.retailToggle}>
+          {[['yes','Yes'], ['no','No, thanks']].map(([val, label]) => (
+            <TouchableOpacity
+              key={val}
+              style={[styles.retailBtn, retailPurchase === val && styles.retailBtnOn]}
+              onPress={() => setRetailPurchase(val)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.retailBtnTxt, retailPurchase === val && styles.retailBtnTxtOn]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
 
       <View style={{ height: 28 }} />
 
@@ -1777,6 +1804,36 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 12,
   },
+  retailQuestion: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  retailQuestionTxt: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: '#0D0D0D',
+    letterSpacing: -0.2,
+    marginBottom: 14,
+  },
+  retailToggle: { flexDirection: 'row', gap: 10 },
+  retailBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    alignItems: 'center',
+  },
+  retailBtnOn: { backgroundColor: '#0D0D0D', borderColor: '#0D0D0D' },
+  retailBtnTxt: { fontFamily: FontFamily.semibold, fontSize: 14, color: '#0D0D0D' },
+  retailBtnTxtOn: { color: '#FFFFFF' },
   photoSection: { marginBottom: 16 },
   photoSectionHeader: {
     flexDirection: 'row',

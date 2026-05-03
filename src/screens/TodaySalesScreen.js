@@ -48,20 +48,26 @@ function formatMajorFromCents(cents) {
   return v % 1 === 0 ? String(v) : v.toFixed(2);
 }
 
-export default function TodaySalesScreen({ navigation }) {
+export default function TodaySalesScreen({ navigation, route }) {
   const { currency } = useCurrency();
   const today = toYMD(new Date());
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalCents, setTotalCents] = useState(0);
 
+  // Pre-fill client from route params (coming from FormulaBuilderScreen)
+  const routeClientId = route?.params?.clientId ?? null;
+  const routeClientName = route?.params?.clientName ?? null;
+
   // add-sale form state
-  const [showForm, setShowForm] = useState(false);
-  const [clientMode, setClientMode] = useState('walkin'); // 'walkin' | 'client'
+  const [showForm, setShowForm] = useState(Boolean(routeClientId));
+  const [clientMode, setClientMode] = useState(routeClientId ? 'client' : 'walkin');
   const [clientQuery, setClientQuery] = useState('');
   const [clientHits, setClientHits] = useState([]);
   const [clientLoading, setClientLoading] = useState(false);
-  const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(
+    routeClientId ? { id: routeClientId, full_name: routeClientName || 'Client' } : null
+  );
   const [productQuery, setProductQuery] = useState('');
   const [productHits, setProductHits] = useState([]);
   const [allRetailItems, setAllRetailItems] = useState([]);

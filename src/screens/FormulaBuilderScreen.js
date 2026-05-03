@@ -1204,16 +1204,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       <View style={{ height: 28 }} />
 
       <TouchableOpacity
-        style={styles.addAnotherBtn}
-        onPress={() => { Keyboard.dismiss(); resetDraft(); }}
-        activeOpacity={0.85}
-      >
-        <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={MY_LAB_VIOLET} />
-        <Text style={styles.addAnotherBtnTxt}>+ Add another mix</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
+        style={styles.saveBtn}
         onPress={submit}
         disabled={submitting}
         activeOpacity={0.9}
@@ -1225,6 +1216,15 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             {retailPurchase === 'yes' ? 'Save & log sale →' : 'Save visit ✓'}
           </Text>
         )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.addAnotherBtn}
+        onPress={() => { Keyboard.dismiss(); resetDraft(); }}
+        activeOpacity={0.7}
+        hitSlop={{ top: 10, bottom: 10 }}
+      >
+        <Text style={styles.addAnotherBtnTxt}>+ Add another mix</Text>
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />
@@ -1864,16 +1864,10 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 4, right: 4,
   },
   photoEmpty: {
-    height: 80,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
-    borderStyle: 'dashed',
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#FAFAFA',
   },
   photoEmptyTxt: {
     fontFamily: FontFamily.medium,
@@ -1883,14 +1877,9 @@ const styles = StyleSheet.create({
   photoAddMore: {
     width: 80,
     height: 80,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
-    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
-    backgroundColor: '#FAFAFA',
   },
 
   // inputs
@@ -1959,32 +1948,27 @@ const styles = StyleSheet.create({
 
   // step 4 action buttons
   addAnotherBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderWidth: 2,
-    borderColor: SCHEDULE_BANNER_LEAD_PINK,
-    borderRadius: 16,
-    paddingVertical: 18,
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    marginTop: 4,
   },
   addAnotherBtnTxt: {
-    fontSize: 17,
-    fontFamily: FontFamily.semibold,
-    color: '#0D0D0D',
+    fontSize: 14,
+    fontFamily: FontFamily.medium,
+    color: '#8A8A8E',
   },
   saveBtn: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: MY_LAB_VIOLET,
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: MY_LAB_VIOLET,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+    marginBottom: 4,
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnTxt: {

@@ -287,13 +287,9 @@ export default function InventoryItemScreen({ route, navigation }) {
     );
   }
 
-  const metaLine = [brandStr, shadeStr].filter(Boolean).join(' · ') || '—';
   const detailLabel = labelForDetailField(categoryPreset, categoryCustom);
   const customCategoryPills = addUniqueCategory(customCategoryOptions, categoryCustom);
-  const categoryOptions =
-    initialCategoryMode === 'colors' || COLOR_CATEGORY_KEYS.has(categoryPreset)
-      ? COLOR_CATEGORY_OPTIONS
-      : GENERAL_CATEGORY_OPTIONS;
+  const isColorProduct = COLOR_CATEGORY_KEYS.has(categoryPreset) && !categoryCustom.trim();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -317,346 +313,165 @@ export default function InventoryItemScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {!isEdit ? (
-            <>
-              <Text style={styles.label}>Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={nameStr}
-                onChangeText={setNameStr}
-              />
-              <View style={styles.labelRow}>
-                <Text style={styles.labelInRow}>Category</Text>
-                <TouchableOpacity
-                  style={styles.addCategoryBtn}
-                  onPress={() => {
-                    if (addingCategory) {
-                      const nextCategory = categoryDraft.trim();
-                      setAddingCategory(false);
-                      if (nextCategory) {
-                        setCategoryCustom(nextCategory);
-                        setCategoryPreset(null);
-                        setCustomCategoryOptions((prev) => addUniqueCategory(prev, nextCategory));
-                      }
-                      setCategoryDraft('');
-                    } else {
-                      setAddingCategory(true);
-                      setCategoryDraft('');
-                    }
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.addCategoryTxt}>{addingCategory ? 'Done' : 'Add new'}</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.chips}>
-                {categoryOptions.map((c) => {
-                  const chipOn = !categoryCustom.trim() && categoryPreset === c.key;
-                  return (
-                    <TouchableOpacity
-                      key={c.key}
-                      style={[styles.chip, chipOn && styles.chipOn]}
-                      onPress={() => {
-                        setCategoryPreset(c.key);
-                        setCategoryCustom('');
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.chipTxt, chipOn && styles.chipTxtOn]}>{c.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                {customCategoryPills.map((category) => (
-                  <TouchableOpacity
-                    key={category}
-                    style={styles.chip}
-                    onPress={() => {
-                      setCategoryCustom(category);
-                      setCategoryPreset(null);
-                      setAddingCategory(false);
-                      setCategoryDraft('');
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.chipTxt}>{category}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {addingCategory ? (
-                <TextInput
-                  style={styles.input}
-                  placeholder=""
-                  placeholderTextColor="#1C1C1E"
-                  value={categoryDraft}
-                  onChangeText={(text) => {
-                    setCategoryDraft(text);
-                  }}
-                  autoCapitalize="sentences"
-                />
-              ) : null}
-              <Text style={styles.label}>Brand</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={brandStr}
-                onChangeText={setBrandStr}
-              />
-              <Text style={styles.label}>{detailLabel}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={shadeStr}
-                onChangeText={setShadeStr}
-              />
-              <Text style={styles.label}>Product size</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={packageSizeStr}
-                onChangeText={setPackageSizeStr}
-              />
-              <Text style={styles.label}>Price ({currency})</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={priceStr}
-                onChangeText={setPriceStr}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.label}>Subcategory</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Shampoos, Styling, Thermal protection"
-                placeholderTextColor="#AEAEB2"
-                value={subcategoryStr}
-                onChangeText={setSubcategoryStr}
-                autoCapitalize="words"
-              />
-              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
-                <View style={styles.subSuggestions}>
-                  {subcategorySuggestions.slice(0, 6).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={styles.subSuggestionChip}
-                      onPress={() => setSubcategoryStr(s)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.subSuggestionTxt}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
-              <Text style={styles.label}>Supplier</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#0D0D0D"
-                value={supplierStr}
-                onChangeText={setSupplierStr}
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.subMeta}>{metaLine}</Text>
-              {item.supplier_hint ? (
-                <Text style={styles.supplier}>{item.supplier_hint}</Text>
-              ) : null}
-              <View style={styles.labelRow}>
-                <Text style={styles.labelInRow}>Category</Text>
-                <TouchableOpacity
-                  style={styles.addCategoryBtn}
-                  onPress={() => {
-                    if (addingCategory) {
-                      const nextCategory = categoryDraft.trim();
-                      setAddingCategory(false);
-                      if (nextCategory) {
-                        setCategoryCustom(nextCategory);
-                        setCategoryPreset(null);
-                        setCustomCategoryOptions((prev) => addUniqueCategory(prev, nextCategory));
-                      }
-                      setCategoryDraft('');
-                    } else {
-                      setAddingCategory(true);
-                      setCategoryDraft('');
-                    }
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.addCategoryTxt}>{addingCategory ? 'Done' : 'Add new'}</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.chips}>
-                {categoryOptions.map((c) => {
-                  const chipOn = !categoryCustom.trim() && categoryPreset === c.key;
-                  return (
-                    <TouchableOpacity
-                      key={c.key}
-                      style={[styles.chip, chipOn && styles.chipOn]}
-                      onPress={() => {
-                        setCategoryPreset(c.key);
-                        setCategoryCustom('');
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.chipTxt, chipOn && styles.chipTxtOn]}>{c.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                {customCategoryPills.map((category) => (
-                  <TouchableOpacity
-                    key={category}
-                    style={styles.chip}
-                    onPress={() => {
-                      setCategoryCustom(category);
-                      setCategoryPreset(null);
-                      setAddingCategory(false);
-                      setCategoryDraft('');
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.chipTxt}>{category}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {addingCategory ? (
-                <TextInput
-                  style={styles.input}
-                  placeholder=""
-                  placeholderTextColor="#1C1C1E"
-                  value={categoryDraft}
-                  onChangeText={(text) => {
-                    setCategoryDraft(text);
-                  }}
-                  autoCapitalize="sentences"
-                />
-              ) : null}
-              <Text style={styles.label}>Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={nameStr}
-                onChangeText={setNameStr}
-              />
-              <Text style={styles.label}>Brand</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={brandStr}
-                onChangeText={setBrandStr}
-              />
-              <Text style={styles.label}>{detailLabel}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={shadeStr}
-                onChangeText={setShadeStr}
-              />
-              <Text style={styles.label}>Product size</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={packageSizeStr}
-                onChangeText={setPackageSizeStr}
-              />
-              <Text style={styles.label}>Price ({currency})</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#1C1C1E"
-                value={priceStr}
-                onChangeText={setPriceStr}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.label}>Subcategory</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Shampoos, Styling, Thermal protection"
-                placeholderTextColor="#AEAEB2"
-                value={subcategoryStr}
-                onChangeText={setSubcategoryStr}
-                autoCapitalize="words"
-              />
-              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
-                <View style={styles.subSuggestions}>
-                  {subcategorySuggestions.slice(0, 6).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={styles.subSuggestionChip}
-                      onPress={() => setSubcategoryStr(s)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.subSuggestionTxt}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
-              <Text style={styles.label}>Supplier</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#0D0D0D"
-                value={supplierStr}
-                onChangeText={setSupplierStr}
-              />
-            </>
-          )}
-
-          <Text style={styles.label}>Inventory unit</Text>
-          <View style={styles.chips}>
-            {UNIT_OPTIONS.map((u) => (
-              <TouchableOpacity
-                key={u}
-                style={[styles.chip, unit === u && styles.chipOn]}
-                onPress={() => setUnit(u)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.label}>Quantity</Text>
+          {/* ── Name ── */}
+          <Text style={styles.label}>Name</Text>
           <TextInput
             style={styles.input}
             placeholder=""
-            placeholderTextColor="#1C1C1E"
-            value={qtyStr}
-            onChangeText={setQtyStr}
+            placeholderTextColor="#AEAEB2"
+            value={nameStr}
+            onChangeText={setNameStr}
+          />
+
+          {/* ── Brand ── */}
+          <Text style={styles.label}>Brand</Text>
+          <TextInput
+            style={styles.input}
+            placeholder=""
+            placeholderTextColor="#AEAEB2"
+            value={brandStr}
+            onChangeText={setBrandStr}
+          />
+
+          {/* ── Subcategory — only for non-color products ── */}
+          {!isColorProduct ? (
+            <>
+              <Text style={styles.label}>Subcategory</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Shampoos, Styling, Thermal protection"
+                placeholderTextColor="#AEAEB2"
+                value={subcategoryStr}
+                onChangeText={setSubcategoryStr}
+                autoCapitalize="words"
+              />
+              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
+                <View style={styles.subSuggestions}>
+                  {subcategorySuggestions.slice(0, 6).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={styles.subSuggestionChip}
+                      onPress={() => setSubcategoryStr(s)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.subSuggestionTxt}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {/* ── Color-specific: category chips + shade + size ── */}
+          {isColorProduct ? (
+            <>
+              <View style={styles.labelRow}>
+                <Text style={styles.labelInRow}>Type</Text>
+              </View>
+              <View style={styles.chips}>
+                {COLOR_CATEGORY_OPTIONS.map((c) => {
+                  const chipOn = categoryPreset === c.key;
+                  return (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[styles.chip, chipOn && styles.chipOn]}
+                      onPress={() => { setCategoryPreset(c.key); setCategoryCustom(''); }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.chipTxt, chipOn && styles.chipTxtOn]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.label}>{detailLabel}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#AEAEB2"
+                value={shadeStr}
+                onChangeText={setShadeStr}
+              />
+              <Text style={styles.label}>Volume / size  <Text style={styles.labelHint}>(e.g. 60 ml, 500 g)</Text></Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#AEAEB2"
+                value={packageSizeStr}
+                onChangeText={setPackageSizeStr}
+              />
+            </>
+          ) : null}
+
+          {/* ── Price ── */}
+          <Text style={styles.label}>Price ({currency})</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="0.00"
+            placeholderTextColor="#AEAEB2"
+            value={priceStr}
+            onChangeText={setPriceStr}
             keyboardType="decimal-pad"
           />
 
-          <Text style={styles.label}>Low stock at</Text>
+          {/* ── Unit + Quantity inline ── */}
+          <Text style={styles.label}>Stock</Text>
+          <View style={styles.stockRow}>
+            <TextInput
+              style={[styles.input, styles.stockQtyInput]}
+              placeholder="0"
+              placeholderTextColor="#AEAEB2"
+              value={qtyStr}
+              onChangeText={setQtyStr}
+              keyboardType="decimal-pad"
+            />
+            <View style={styles.unitChips}>
+              {UNIT_OPTIONS.map((u) => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.chip, unit === u && styles.chipOn]}
+                  onPress={() => setUnit(u)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* ── Low stock ── */}
+          <Text style={styles.label}>Low stock alert at  <Text style={styles.labelHint}>(notify when below)</Text></Text>
           <TextInput
             style={styles.input}
-            placeholder=""
-            placeholderTextColor="#1C1C1E"
+            placeholder="0"
+            placeholderTextColor="#AEAEB2"
             value={threshStr}
             onChangeText={setThreshStr}
             keyboardType="decimal-pad"
           />
 
+          {/* ── Note (edit only) ── */}
           {isEdit ? (
             <>
-              <Text style={styles.label}>Note</Text>
+              <Text style={styles.label}>Note  <Text style={styles.labelHint}>(reason for quantity change)</Text></Text>
               <TextInput
                 style={styles.input}
                 placeholder=""
-                placeholderTextColor="#1C1C1E"
+                placeholderTextColor="#AEAEB2"
                 value={reasonStr}
                 onChangeText={setReasonStr}
               />
             </>
           ) : null}
+
+          {/* ── Supplier (optional, at bottom) ── */}
+          <Text style={styles.label}>Supplier  <Text style={styles.labelHint}>(optional)</Text></Text>
+          <TextInput
+            style={styles.input}
+            placeholder=""
+            placeholderTextColor="#AEAEB2"
+            value={supplierStr}
+            onChangeText={setSupplierStr}
+          />
 
           <TouchableOpacity
             style={[styles.saveBtn, saving && styles.saveDisabled]}
@@ -725,6 +540,26 @@ const styles = StyleSheet.create({
     ...Type.secondary,
     color: '#5E35B1',
     marginBottom: 16,
+  },
+  labelHint: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: '#AEAEB2',
+    fontWeight: undefined,
+  },
+  stockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  stockQtyInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  unitChips: {
+    flexDirection: 'row',
+    gap: 6,
   },
   subSuggestions: {
     flexDirection: 'row',

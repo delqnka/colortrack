@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   miss: { textAlign: 'center', marginTop: 48, ...Type.secondary, color: '#8A8A8E' },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
+  scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24, backgroundColor: '#FFFFFF' },
 
   // client chip
   clientChip: {
@@ -324,6 +324,7 @@ const styles = StyleSheet.create({
   },
   notesLabel: {
     ...Type.sectionLabel,
+    color: '#0D0D0D',
     marginBottom: 6,
   },
   notesBody: {
@@ -338,7 +339,7 @@ const styles = StyleSheet.create({
   photoGroupLabel: {
     fontFamily: FontFamily.semibold,
     fontSize: 11,
-    color: '#AEAEB2',
+    color: '#0D0D0D',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -367,10 +368,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
-    shadowRadius: 15,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 12,
   },
   mixCardHeader: {
     flexDirection: 'row',

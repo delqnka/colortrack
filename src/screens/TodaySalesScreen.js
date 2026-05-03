@@ -13,6 +13,7 @@ import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
+import { inventoryCategoryKey } from '../inventory/inventoryCategories';
 
 function toYMD(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -23,6 +24,28 @@ function centsFromText(t) {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null;
+}
+
+/**
+ * Unit price to pre-fill the sale line: prefer sell_price_cents, else price_per_unit_cents
+ * (many retail rows only have the latter filled as “price”).
+ * DB may return cents as string or bigint-serialized string.
+ */
+function retailUnitSellCents(item) {
+  if (!item) return null;
+  const sell = Number(item.sell_price_cents);
+  if (Number.isFinite(sell) && sell > 0) return Math.round(sell);
+  const unit = Number(item.price_per_unit_cents);
+  if (Number.isFinite(unit) && unit > 0) return Math.round(unit);
+  return null;
+}
+
+/** Major units string for amount field (line total = unit × qty is applied in effects). */
+function formatMajorFromCents(cents) {
+  const n = Math.round(Number(cents));
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const v = n / 100;
+  return v % 1 === 0 ? String(v) : v.toFixed(2);
 }
 
 export default function TodaySalesScreen({ navigation }) {
@@ -46,8 +69,15 @@ export default function TodaySalesScreen({ navigation }) {
   const [descStr, setDescStr] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [qty, setQty] = useState('1');
+  /** When set, Amount field tracks unit sell price × qty (backend stores line total in amount_cents). */
+  const [unitSellCents, setUnitSellCents] = useState(null);
   const [saving, setSaving] = useState(false);
   const clientTimer = useRef(null);
+  const productPickSeq = useRef(0);
+  const qtyRef = useRef(qty);
+  useEffect(() => {
+    qtyRef.current = qty;
+  }, [qty]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,12 +92,22 @@ export default function TodaySalesScreen({ navigation }) {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // Load retail inventory once for product picker
-  useEffect(() => {
-    apiGet('/api/inventory').then(rows => {
-      setAllRetailItems(Array.isArray(rows) ? rows.filter(r => r.category === 'retail') : []);
-    }).catch(() => {});
+  const loadRetailInventory = useCallback(() => {
+    apiGet('/api/inventory', { allowStaleCache: false })
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        setAllRetailItems(list.filter((r) => inventoryCategoryKey(r.category) === 'retail'));
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadRetailInventory();
+  }, [loadRetailInventory]);
+
+  useEffect(() => {
+    if (showForm) loadRetailInventory();
+  }, [showForm, loadRetailInventory]);
 
   // Client search
   const searchClients = useCallback(async (q) => {
@@ -107,18 +147,36 @@ export default function TodaySalesScreen({ navigation }) {
     setDescStr('');
     setAmountStr('');
     setQty('1');
+    setUnitSellCents(null);
   };
 
   const onPickProduct = (item) => {
+    const seq = ++productPickSeq.current;
+    const id = item.id;
     setSelectedProduct(item);
     setProductQuery('');
-    setDescStr(item.name);
-    if (item.sell_price_cents != null && item.sell_price_cents > 0) {
-      setAmountStr(String(item.sell_price_cents / 100).replace(/\.00$/, ''));
-    } else {
-      setAmountStr('');
-    }
+    setDescStr(item.name || '');
+    const applyRow = (row) => {
+      const unit = retailUnitSellCents(row);
+      setUnitSellCents(unit);
+      const qn = Math.max(1, Math.floor(Number(qtyRef.current)) || 1);
+      setAmountStr(unit != null ? formatMajorFromCents(unit * qn) : '');
+    };
+    applyRow(item);
+    apiGet(`/api/inventory/${id}`, { allowStaleCache: false })
+      .then((row) => {
+        if (seq !== productPickSeq.current || !row || Number(row.id) !== Number(id)) return;
+        setSelectedProduct(row);
+        applyRow(row);
+      })
+      .catch(() => {});
   };
+
+  useEffect(() => {
+    if (unitSellCents == null || !selectedProduct) return;
+    const q = Math.max(1, Math.floor(Number(qty)) || 1);
+    setAmountStr(formatMajorFromCents(unitSellCents * q));
+  }, [qty, unitSellCents, selectedProduct]);
 
   const submit = async () => {
     const cents = centsFromText(amountStr);
@@ -234,17 +292,29 @@ export default function TodaySalesScreen({ navigation }) {
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
-                  {filteredProducts.slice(0, 5).map(p => (
-                    <TouchableOpacity key={p.id} style={s.pickRow} onPress={() => onPickProduct(p)} activeOpacity={0.8}>
-                      <Text style={s.pickRowName}>{p.name}</Text>
-                      {p.sell_price_cents ? (
-                        <Text style={s.pickRowPrice}>{formatMinorFromStoredCents(p.sell_price_cents, currency)}</Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
+                  {filteredProducts.slice(0, 5).map((p) => {
+                    const hintCents = retailUnitSellCents(p);
+                    return (
+                      <TouchableOpacity key={p.id} style={s.pickRow} onPress={() => onPickProduct(p)} activeOpacity={0.8}>
+                        <Text style={s.pickRowName}>{p.name}</Text>
+                        {hintCents != null ? (
+                          <Text style={s.pickRowPrice}>{formatMinorFromStoredCents(hintCents, currency)}</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               ) : (
-                <TouchableOpacity style={s.selectedChip} onPress={() => { setSelectedProduct(null); setDescStr(''); setAmountStr(''); }} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={s.selectedChip}
+                  onPress={() => {
+                    setSelectedProduct(null);
+                    setDescStr('');
+                    setAmountStr('');
+                    setUnitSellCents(null);
+                  }}
+                  activeOpacity={0.8}
+                >
                   <Text style={s.selectedChipTxt}>{selectedProduct.name}</Text>
                   <Ionicons name="close-circle" size={16} color={BRAND_PURPLE} />
                 </TouchableOpacity>
@@ -274,7 +344,10 @@ export default function TodaySalesScreen({ navigation }) {
                     placeholder="0.00"
                     placeholderTextColor="#AEAEB2"
                     value={amountStr}
-                    onChangeText={setAmountStr}
+                    onChangeText={(t) => {
+                      setAmountStr(t);
+                      setUnitSellCents(null);
+                    }}
                     keyboardType="decimal-pad"
                     selectTextOnFocus
                   />

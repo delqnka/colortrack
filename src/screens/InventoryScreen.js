@@ -780,12 +780,7 @@ export default function InventoryScreen({ navigation }) {
                     ? Math.round((item.sell_price_cents - item.price_per_unit_cents) / item.sell_price_cents * 100)
                     : null;
                   const truncName = item.name.length > 20 ? item.name.slice(0, 20) + '…' : item.name;
-                  const mainLine = [
-                    truncName,
-                    `${item.quantity} ${item.unit}`,
-                    priceLine,
-                    marginPct != null ? `${marginPct}%` : null,
-                  ].filter(Boolean).join('  ·  ');
+                  const mainLine = [truncName, `${item.quantity} ${item.unit}`].join('  ·  ');
                   return (
                     <TouchableOpacity
                       key={item.id}
@@ -797,18 +792,34 @@ export default function InventoryScreen({ navigation }) {
                       }}
                     >
                       <View style={styles.rowMain}>
-                        <Text style={styles.rowLine} numberOfLines={1}>{mainLine}</Text>
+                        <Text style={styles.rowLine} numberOfLines={1}>
+                          {mainLine}
+                        </Text>
                         {item.brand ? (
                           <Text style={styles.rowMeta} numberOfLines={1}>{item.brand}</Text>
                         ) : null}
                       </View>
-                      <SFIcon
-                        name="chevron-forward"
-                        iosName="chevron.right"
-                        size={11}
-                        color="rgba(13,13,13,0.22)"
-                        weight="regular"
-                      />
+                      {priceLine != null || marginPct != null ? (
+                        <View style={styles.rowTail}>
+                          {priceLine != null ? (
+                            <Text style={styles.rowPriceTail} numberOfLines={1}>
+                              {'\u00B7 '}
+                              {priceLine}
+                            </Text>
+                          ) : null}
+                          {marginPct != null ? (
+                            <Text
+                              style={[
+                                styles.rowMarginPct,
+                                marginPct >= 0 ? styles.rowMarginPctPositive : styles.rowMarginPctNegative,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {marginPct}%
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -1441,7 +1452,22 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   rowAccent: { display: 'none' },
-  rowMain: { flex: 1, paddingRight: 8 },
+  rowMain: { flex: 1, minWidth: 0, paddingRight: 10 },
+  rowTail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 0,
+    gap: 14,
+  },
+  rowPriceTail: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    color: '#0D0D0D',
+    letterSpacing: -0.2,
+    flexShrink: 0,
+    textAlign: 'right',
+  },
   rowLine: {
     fontFamily: FontFamily.medium,
     fontSize: 14,
@@ -1463,6 +1489,18 @@ const styles = StyleSheet.create({
   rowPriceUnit: { display: 'none' },
   rowPricePlaceholder: { display: 'none' },
   rowMargin: { display: 'none' },
+  rowMarginPct: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    letterSpacing: -0.2,
+    flexShrink: 0,
+  },
+  rowMarginPctPositive: {
+    color: '#2E7D32',
+  },
+  rowMarginPctNegative: {
+    color: '#C62828',
+  },
   chevronText: {
     fontSize: 20,
     lineHeight: typeLh(20),

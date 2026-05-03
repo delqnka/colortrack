@@ -253,6 +253,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           shade_code: shadeStr.trim() || null,
           package_size: packageSizeStr.trim() || null,
           price_per_unit_cents: centsFromPriceText(priceStr),
+          sell_price_cents: centsFromPriceText(sellPriceStr),
           supplier_hint: supplierStr.trim() || null,
           custom_subcategory: subcategoryStr.trim() || null,
         };

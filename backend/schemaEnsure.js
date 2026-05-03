@@ -246,11 +246,21 @@ async function ensureSchema(sql) {
       category TEXT NOT NULL CHECK (category IN ('rent', 'utilities', 'salary', 'supplies', 'inventory', 'equipment', 'marketing', 'taxes', 'other')),
       title TEXT NOT NULL DEFAULT '',
       amount_cents INT NOT NULL CHECK (amount_cents >= 0 AND amount_cents <= 1000000000),
+      allocation TEXT NOT NULL DEFAULT 'one_time',
       notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_salon_expenses_salon_date ON salon_expenses (salon_id, expense_date DESC)`;
+  await sql`ALTER TABLE salon_expenses ADD COLUMN IF NOT EXISTS allocation TEXT NOT NULL DEFAULT 'one_time'`;
+  await sql`
+    DO $$ BEGIN
+      ALTER TABLE salon_expenses ADD CONSTRAINT salon_expenses_allocation_check
+        CHECK (allocation IN ('one_time', 'fixed_monthly'));
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS salon_product_sales (

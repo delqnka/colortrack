@@ -41,6 +41,12 @@ function shiftYMD(ymd, deltaDays) {
   return toYMDLocal(t);
 }
 
+function daysInCalendarMonthYmd(ymd) {
+  const [y, m] = ymd.split('-').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return 30;
+  return new Date(y, m, 0).getDate();
+}
+
 function parseAmountToCents(text) {
   const s = String(text || '').trim().replace(',', '.');
   if (!s) return null;
@@ -49,6 +55,28 @@ function parseAmountToCents(text) {
   const c = Math.round(x * 100);
   if (c > 1_000_000_000) return null;
   return c;
+}
+
+function serviceIncomeSourceLabel(bookingCount, walkinCount) {
+  const b = Math.max(0, Number(bookingCount) || 0);
+  const w = Math.max(0, Number(walkinCount) || 0);
+  if (!b && !w) return null;
+  const parts = [];
+  if (b) parts.push(`${b} ${b === 1 ? 'booking' : 'bookings'}`);
+  if (w) parts.push(`${w} ${w === 1 ? 'visit' : 'visits'}`);
+  return parts.join(' · ');
+}
+
+function retailSalesCountLabel(lineCount) {
+  const c = Math.max(0, Number(lineCount) || 0);
+  if (!c) return null;
+  return `${c} ${c === 1 ? 'sale' : 'sales'}`;
+}
+
+function expenseLinesLabel(lineCount) {
+  const c = Math.max(0, Number(lineCount) || 0);
+  if (!c) return null;
+  return `${c} ${c === 1 ? 'entry' : 'entries'}`;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -118,7 +146,7 @@ export default function FinanceScreen() {
 
   const openExpense = () => {
     hapticImpactLight();
-    setModal({ type: 'expense', category: 'utilities', title: '', amount: '' });
+    setModal({ type: 'expense', category: 'utilities', allocation: 'one_time', title: '', amount: '' });
   };
 
   const openRetail = () => {
@@ -138,6 +166,7 @@ export default function FinanceScreen() {
         const out = await apiPost('/api/finance/expenses', {
           expense_date: dateYmd,
           category: modal.category,
+          allocation: modal.allocation === 'fixed_monthly' ? 'fixed_monthly' : 'one_time',
           title: modal.title?.trim() || '',
           amount_cents: cents,
         });
@@ -219,6 +248,14 @@ export default function FinanceScreen() {
 
   const catLabel = (code) => EXPENSE_CATEGORIES.find((c) => c.code === code)?.label || code;
 
+  const servicesSub = useMemo(
+    () =>
+      serviceIncomeSourceLabel(summary?.service_income_booking_count, summary?.service_income_walkin_count),
+    [summary?.service_income_booking_count, summary?.service_income_walkin_count],
+  );
+  const retailSub = useMemo(() => retailSalesCountLabel(summary?.product_sales_line_count), [summary?.product_sales_line_count]);
+  const costsSub = useMemo(() => expenseLinesLabel(summary?.expense_line_count), [summary?.expense_line_count]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.head}>
@@ -260,14 +297,29 @@ export default function FinanceScreen() {
             <View style={styles.statCell}>
               <Text style={styles.statLbl}>Services</Text>
               <Text style={styles.statVal}>{formatMinorFromStoredCentsOrDash(summary?.service_income_cents, currency)}</Text>
+              {servicesSub ? (
+                <Text style={styles.statSub} numberOfLines={2}>
+                  {servicesSub}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.statCell}>
               <Text style={styles.statLbl}>Retail</Text>
               <Text style={styles.statVal}>{formatMinorFromStoredCentsOrDash(summary?.product_sales_cents, currency)}</Text>
+              {retailSub ? (
+                <Text style={styles.statSub} numberOfLines={2}>
+                  {retailSub}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.statCell}>
               <Text style={styles.statLbl}>Costs</Text>
               <Text style={[styles.statVal, styles.statOut]}>{formatMinorFromStoredCentsOrDash(summary?.expenses_cents, currency)}</Text>
+              {costsSub ? (
+                <Text style={styles.statSub} numberOfLines={2}>
+                  {costsSub}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.statCell}>
               <Text style={styles.statLbl}>Net</Text>
@@ -295,7 +347,11 @@ export default function FinanceScreen() {
           {lines.expenses.length ? (
             <>
               <Text style={styles.sec}>Costs</Text>
-              {lines.expenses.map((row) => (
+              {lines.expenses.map((row) => {
+                const isFixed = row.allocation === 'fixed_monthly';
+                const dim = daysInCalendarMonthYmd(dateYmd);
+                const dailyCents = isFixed && dim > 0 ? Math.round(Number(row.amount_cents) / dim) : null;
+                return (
                 <View key={row.id} style={styles.lineCard}>
                   <View style={styles.lineMain}>
                     <Text style={styles.lineTitle} numberOfLines={1}>
@@ -304,6 +360,16 @@ export default function FinanceScreen() {
                     {row.title?.trim() ? (
                       <Text style={styles.lineSub} numberOfLines={1}>
                         {catLabel(row.category)}
+                        {isFixed ? ' · month' : ''}
+                      </Text>
+                    ) : isFixed ? (
+                      <Text style={styles.lineSub} numberOfLines={1}>
+                        Monthly
+                      </Text>
+                    ) : null}
+                    {dailyCents != null ? (
+                      <Text style={styles.lineSub} numberOfLines={1}>
+                        {formatMinorFromStoredCentsOrDash(dailyCents, currency)} / day
                       </Text>
                     ) : null}
                   </View>
@@ -312,7 +378,8 @@ export default function FinanceScreen() {
                     <Ionicons name="trash-outline" size={20} color="#C62828" />
                   </TouchableOpacity>
                 </View>
-              ))}
+              );
+              })}
             </>
           ) : null}
 
@@ -378,6 +445,24 @@ export default function FinanceScreen() {
                       );
                     })}
                   </ScrollView>
+
+                  <View style={styles.allocRow}>
+                    {[
+                      { code: 'one_time', label: 'Day' },
+                      { code: 'fixed_monthly', label: 'Month' },
+                    ].map(({ code, label }) => {
+                      const on = (modal.allocation || 'one_time') === code;
+                      return (
+                        <TouchableOpacity
+                          key={code}
+                          style={[styles.chip, styles.allocChip, on && styles.chipOn]}
+                          onPress={() => setModal({ ...modal, allocation: code })}
+                        >
+                          <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
                   <Text style={styles.fieldLbl}>Amount</Text>
                   <View style={styles.amountBox}>
@@ -508,6 +593,14 @@ const styles = StyleSheet.create({
   statOut: { color: '#B71C1C' },
   statNet: { color: '#1565C0' },
   statLbl: { ...Type.tabBarLabel, color: '#AEAEB2' },
+  statSub: {
+    fontSize: 12,
+    lineHeight: typeLh(12),
+    fontFamily: FontFamily.regular,
+    color: '#8A8A8E',
+    marginTop: 6,
+    textAlign: 'center',
+  },
   addCardsCol: { gap: 10, marginBottom: 22 },
   addCard: {
     flexDirection: 'row',
@@ -585,6 +678,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   chipsScroll: { marginBottom: 16, maxHeight: 44 },
+  allocRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  allocChip: { marginRight: 0 },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,

@@ -1361,7 +1361,20 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
     }
     const sql = getSql();
     const existing = await sql`
-      SELECT id, name, brand, shade_code, package_size, supplier_hint, price_per_unit_cents, quantity, low_stock_threshold, unit, category, custom_subcategory
+      SELECT
+        id,
+        name,
+        brand,
+        shade_code,
+        package_size,
+        supplier_hint,
+        price_per_unit_cents,
+        sell_price_cents,
+        quantity,
+        low_stock_threshold,
+        unit,
+        category,
+        custom_subcategory
       FROM inventory_items
       WHERE id = ${id} AND salon_id = ${req.auth.salonId}
       LIMIT 1
@@ -3193,6 +3206,8 @@ const FINANCE_EXPENSE_CATEGORIES = new Set([
   'other',
 ]);
 
+const FINANCE_EXPENSE_ALLOCATIONS = new Set(['one_time', 'fixed_monthly']);
+
 function parseFinanceDate(q) {
   const raw = typeof q === 'string' ? q.trim() : '';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
@@ -3206,6 +3221,18 @@ function parsePositiveCents(v) {
   return n;
 }
 
+function daysInCalendarMonthYmd(dateYmd) {
+  const [y, m] = dateYmd.split('-').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return 30;
+  return new Date(y, m, 0).getDate();
+}
+
+function parseExpenseAllocation(raw) {
+  if (raw == null || raw === '') return 'one_time';
+  const s = String(raw).trim();
+  return FINANCE_EXPENSE_ALLOCATIONS.has(s) ? s : null;
+}
+
 app.get('/api/finance/summary', async (req, res, next) => {
   try {
     const dateYmd = parseFinanceDate(req.query.date);
@@ -3214,7 +3241,9 @@ app.get('/api/finance/summary', async (req, res, next) => {
     }
     const sql = getSql();
     const sid = req.auth.salonId;
-    const [svc, retail, exp] = await Promise.all([
+    const dim = daysInCalendarMonthYmd(dateYmd);
+    const [svc, retail, oneTimeExp, fixedMonth, svcSplit, retailCount, expCountOne, expCountFixed] =
+      await Promise.all([
       sql`
         SELECT COALESCE(SUM(amount_paid_cents), 0)::bigint AS s
         FROM visits
@@ -3228,19 +3257,69 @@ app.get('/api/finance/summary', async (req, res, next) => {
       sql`
         SELECT COALESCE(SUM(amount_cents), 0)::bigint AS s
         FROM salon_expenses
-        WHERE salon_id = ${sid} AND expense_date = ${dateYmd}::date
+        WHERE salon_id = ${sid}
+          AND expense_date = ${dateYmd}::date
+          AND COALESCE(allocation, 'one_time') = 'one_time'
+      `,
+      sql`
+        SELECT COALESCE(SUM(amount_cents), 0)::bigint AS s
+        FROM salon_expenses
+        WHERE salon_id = ${sid}
+          AND COALESCE(allocation, 'one_time') = 'fixed_monthly'
+          AND date_trunc('month', expense_date) = date_trunc('month', ${dateYmd}::date)
+      `,
+      sql`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE COALESCE(amount_paid_cents, 0) > 0 AND appointment_id IS NOT NULL
+          )::int AS from_bookings,
+          COUNT(*) FILTER (
+            WHERE COALESCE(amount_paid_cents, 0) > 0 AND appointment_id IS NULL
+          )::int AS from_walkins
+        FROM visits
+        WHERE salon_id = ${sid} AND visit_date = ${dateYmd}::date
+      `,
+      sql`
+        SELECT COUNT(*)::int AS c
+        FROM salon_product_sales
+        WHERE salon_id = ${sid} AND sale_date = ${dateYmd}::date
+      `,
+      sql`
+        SELECT COUNT(*)::int AS c
+        FROM salon_expenses
+        WHERE salon_id = ${sid}
+          AND expense_date = ${dateYmd}::date
+          AND COALESCE(allocation, 'one_time') = 'one_time'
+      `,
+      sql`
+        SELECT COUNT(*)::int AS c
+        FROM salon_expenses
+        WHERE salon_id = ${sid}
+          AND COALESCE(allocation, 'one_time') = 'fixed_monthly'
+          AND date_trunc('month', expense_date) = date_trunc('month', ${dateYmd}::date)
       `,
     ]);
     const service_income_cents = Number(svc[0]?.s || 0);
     const product_sales_cents = Number(retail[0]?.s || 0);
-    const expenses_cents = Number(exp[0]?.s || 0);
+    const oneTimeCents = Number(oneTimeExp[0]?.s || 0);
+    const fixedMonthCents = Number(fixedMonth[0]?.s || 0);
+    const fixedDailyCents = dim > 0 ? Math.round(fixedMonthCents / dim) : 0;
+    const expenses_cents = oneTimeCents + fixedDailyCents;
     const net_cents = service_income_cents + product_sales_cents - expenses_cents;
+    const service_income_booking_count = Number(svcSplit[0]?.from_bookings ?? 0);
+    const service_income_walkin_count = Number(svcSplit[0]?.from_walkins ?? 0);
+    const product_sales_line_count = Number(retailCount[0]?.c ?? 0);
+    const expense_line_count = Number(expCountOne[0]?.c ?? 0) + Number(expCountFixed[0]?.c ?? 0);
     res.json({
       date: dateYmd,
       service_income_cents,
       product_sales_cents,
       expenses_cents,
       net_cents,
+      service_income_booking_count,
+      service_income_walkin_count,
+      product_sales_line_count,
+      expense_line_count,
     });
   } catch (e) {
     next(e);
@@ -3257,9 +3336,16 @@ app.get('/api/finance/lines', async (req, res, next) => {
     const sid = req.auth.salonId;
     const [expenses, product_sales] = await Promise.all([
       sql`
-        SELECT id, category, title, amount_cents, notes, created_at
+        SELECT id, category, title, amount_cents, notes, created_at, COALESCE(allocation, 'one_time') AS allocation
         FROM salon_expenses
-        WHERE salon_id = ${sid} AND expense_date = ${dateYmd}::date
+        WHERE salon_id = ${sid}
+          AND (
+            (expense_date = ${dateYmd}::date AND COALESCE(allocation, 'one_time') = 'one_time')
+            OR (
+              COALESCE(allocation, 'one_time') = 'fixed_monthly'
+              AND date_trunc('month', expense_date) = date_trunc('month', ${dateYmd}::date)
+            )
+          )
         ORDER BY id DESC
       `,
       sql`
@@ -3300,9 +3386,13 @@ app.post('/api/finance/expenses', async (req, res, next) => {
     }
     const title = typeof b.title === 'string' ? b.title.trim().slice(0, 240) : '';
     const notes = typeof b.notes === 'string' ? b.notes.trim().slice(0, 500) || null : null;
+    const allocation = parseExpenseAllocation(b.allocation);
+    if (allocation == null) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
     const rows = await sql`
-      INSERT INTO salon_expenses (salon_id, expense_date, category, title, amount_cents, notes)
-      VALUES (${sid}, ${dateYmd}::date, ${category}, ${title}, ${amount_cents}, ${notes})
+      INSERT INTO salon_expenses (salon_id, expense_date, category, title, amount_cents, allocation, notes)
+      VALUES (${sid}, ${dateYmd}::date, ${category}, ${title}, ${amount_cents}, ${allocation}, ${notes})
       RETURNING id
     `;
     res.status(201).json({ id: rows[0].id });

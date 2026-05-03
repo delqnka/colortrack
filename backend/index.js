@@ -1471,7 +1471,7 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
       INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
       VALUES (${match[0].id}, ${item.quantity}, ${'invoice'}, NULL)
     `;
-    upsertGlobalProduct(sql, item.brand, item.name, item.unit).catch(() => {});
+    await upsertGlobalProduct(sql, item.brand, item.name, item.unit);
     return { ...rows[0], import_action: 'updated' };
   }
 
@@ -1491,7 +1491,7 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
     INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
     VALUES (${rows[0].id}, ${item.quantity}, ${'invoice'}, NULL)
   `;
-  upsertGlobalProduct(sql, item.brand, item.name, item.unit).catch(() => {});
+  await upsertGlobalProduct(sql, item.brand, item.name, item.unit);
   return { ...rows[0], import_action: 'created' };
 }
 

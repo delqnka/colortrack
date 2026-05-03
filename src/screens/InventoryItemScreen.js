@@ -223,7 +223,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         }
         const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || 'dye';
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, resolvedCategory));
-        const row = await apiPost('/api/inventory', {
+        await apiPost('/api/inventory', {
           name,
           category: resolvedCategory,
           unit,
@@ -236,9 +236,9 @@ export default function InventoryItemScreen({ route, navigation }) {
           supplier_hint: supplierStr.trim() || null,
           custom_subcategory: subcategoryStr.trim() || null,
         });
-        navigation.replace('InventoryItem', { itemId: row.id });
+        navigation.goBack();
       } else {
-        const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || item.category || 'dye';
+        const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || item.category || 'consumable';
         const body = {
           quantity: q,
           low_stock_threshold: t,
@@ -254,21 +254,8 @@ export default function InventoryItemScreen({ route, navigation }) {
         };
         const note = reasonStr.trim();
         if (note) body.reason = note;
-        const row = await apiPatch(`/api/inventory/${itemId}`, body);
-        setItem(row);
-        setQtyStr(numToStr(row.quantity));
-        setThreshStr(numToStr(row.low_stock_threshold));
-        setUnit(row.unit || unit);
-        setNameStr(row.name || '');
-        setBrandStr(row.brand || '');
-        setShadeStr(row.shade_code || '');
-        setPackageSizeStr(row.package_size || '');
-        setPriceStr(priceTextFromCents(row.price_per_unit_cents));
-        setSupplierStr(row.supplier_hint || '');
-        setSubcategoryStr(row.custom_subcategory || '');
-        setReasonStr('');
-        const hist = await apiGet(`/api/inventory/${itemId}/movements`);
-        setMovements(Array.isArray(hist) ? hist : []);
+        await apiPatch(`/api/inventory/${itemId}`, body);
+        navigation.goBack();
       }
     } catch (e) {
       Alert.alert('', e.message || '');

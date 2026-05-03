@@ -2810,6 +2810,20 @@ app.get('/api/visits/:id', async (req, res, next) => {
       WHERE fl.visit_id = ${id}
       ORDER BY fl.id
     `;
+    const photoRows = await sql`
+      SELECT id, object_key, content_type, photo_type
+      FROM visit_photos
+      WHERE visit_id = ${id} AND salon_id = ${req.auth.salonId}
+      ORDER BY photo_type, id
+    `;
+    const photos = r2.r2Configured()
+      ? await Promise.all(photoRows.map(async (p) => ({
+          id: p.id,
+          photo_type: p.photo_type,
+          url: await r2.presignGet(p.object_key).catch(() => null),
+        })))
+      : [];
+
     res.json({
       id: v.id,
       client_id: v.client_id,
@@ -2824,10 +2838,53 @@ app.get('/api/visits/:id', async (req, res, next) => {
       created_at: v.created_at,
       client: { id: v.client_id, full_name: v.client_full_name },
       formula_lines,
+      photos,
     });
   } catch (e) {
     next(e);
   }
+});
+
+app.post('/api/visits/:id/photos/presign', async (req, res, next) => {
+  try {
+    if (!r2.r2Configured()) return res.status(503).json({ error: 'unavailable' });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: 'bad_request' });
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const exists = await sql`SELECT id FROM visits v JOIN clients c ON c.id = v.client_id WHERE v.id = ${id} AND c.salon_id = ${sid} LIMIT 1`;
+    if (!exists.length) return res.status(404).json({ error: 'not_found' });
+    const b = req.body || {};
+    const ct = r2.normalizeContentType(b.contentType ?? b.content_type);
+    if (!ct) return res.status(400).json({ error: 'bad_request' });
+    const photoType = b.photo_type === 'before' ? 'before' : 'after';
+    const key = r2.buildVisitPhotoKey(id, photoType, ct);
+    if (!key) return res.status(400).json({ error: 'bad_request' });
+    const uploadUrl = await r2.presignPut(key, ct);
+    res.json({ uploadUrl, key, contentType: ct });
+  } catch (e) { next(e); }
+});
+
+app.post('/api/visits/:id/photos/commit', async (req, res, next) => {
+  try {
+    if (!r2.r2Configured()) return res.status(503).json({ error: 'unavailable' });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: 'bad_request' });
+    const b = req.body || {};
+    const key = typeof b.key === 'string' ? b.key.trim() : '';
+    if (!key || !r2.keyBelongsToVisit(id, key)) return res.status(400).json({ error: 'bad_request' });
+    const ct = r2.normalizeContentType(b.contentType ?? b.content_type);
+    if (!ct) return res.status(400).json({ error: 'bad_request' });
+    const photoType = b.photo_type === 'before' ? 'before' : 'after';
+    const sql = getSql();
+    const sid = req.auth.salonId;
+    const rows = await sql`
+      INSERT INTO visit_photos (visit_id, salon_id, object_key, content_type, photo_type)
+      VALUES (${id}, ${sid}, ${key}, ${ct}, ${photoType})
+      RETURNING id
+    `;
+    res.status(201).json({ id: rows[0].id });
+  } catch (e) { next(e); }
 });
 
 function initialsFromFullName(name) {

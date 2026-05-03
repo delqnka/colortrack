@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import SFIcon from '../components/SFIcon';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -252,6 +253,9 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   // ── committed formula lines ──
   const [lines, setLines] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [photosBefore, setPhotosBefore] = useState([]); // { uri, mimeType }
+  const [photosAfter, setPhotosAfter] = useState([]);
+  const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 
   // ── wizard draft ──
   const [wizardStep, setWizardStep] = useState(1);
@@ -507,6 +511,42 @@ export default function FormulaBuilderScreen({ route, navigation }) {
     setWizardStep(4);
   };
 
+  const pickPhoto = async (photoType) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('', 'Camera roll permission required.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: IMAGE_MEDIA_TYPES,
+      allowsMultipleSelection: true,
+      quality: 0.75,
+      selectionLimit: 6,
+    });
+    if (result.canceled) return;
+    const picked = result.assets.map(a => ({ uri: a.uri, mimeType: a.mimeType || 'image/jpeg' }));
+    if (photoType === 'before') setPhotosBefore(prev => [...prev, ...picked].slice(0, 6));
+    else setPhotosAfter(prev => [...prev, ...picked].slice(0, 6));
+  };
+
+  const uploadVisitPhotos = async (visitId, photos, photoType) => {
+    for (const photo of photos) {
+      try {
+        const { uploadUrl, key, contentType } = await apiPost(`/api/visits/${visitId}/photos/presign`, {
+          contentType: photo.mimeType,
+          photo_type: photoType,
+        });
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': contentType },
+          body: await (await fetch(photo.uri)).blob(),
+        });
+        await apiPost(`/api/visits/${visitId}/photos/commit`, {
+          key,
+          contentType,
+          photo_type: photoType,
+        });
+      } catch { /* best-effort photo upload */ }
+    }
+  };
+
   const submit = async () => {
     if (!clientId) return;
     const proc = procedureName.trim();
@@ -550,7 +590,14 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       const evId = route.params?.deviceCalendarEventId;
       if (evId != null && String(evId).trim())
         body.device_calendar_event_id = String(evId).trim().slice(0, 256);
-      await apiPost('/api/visits', body);
+      const saved = await apiPost('/api/visits', body);
+      const visitId = saved?.id;
+      if (visitId && (photosBefore.length || photosAfter.length)) {
+        await Promise.all([
+          uploadVisitPhotos(visitId, photosBefore, 'before'),
+          uploadVisitPhotos(visitId, photosAfter, 'after'),
+        ]);
+      }
       navigation.goBack();
     } catch (e) {
       Alert.alert('', e.message || '');
@@ -1084,6 +1131,44 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         keyboardType="decimal-pad"
         inputAccessoryViewID={iosAccessoryId}
       />
+
+      {/* ── Photos ── */}
+      <Text style={styles.sectionDivider}>Photos</Text>
+      {[
+        { label: 'Before', photos: photosBefore, setter: setPhotosBefore, type: 'before' },
+        { label: 'After',  photos: photosAfter,  setter: setPhotosAfter,  type: 'after'  },
+      ].map(({ label, photos, setter, type }) => (
+        <View key={type} style={styles.photoSection}>
+          <View style={styles.photoSectionHeader}>
+            <Text style={styles.photoSectionLabel}>{label}</Text>
+            <TouchableOpacity onPress={() => pickPhoto(type)} hitSlop={10} activeOpacity={0.8}>
+              <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_PURPLE} />
+            </TouchableOpacity>
+          </View>
+          {photos.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
+              {photos.map((p, i) => (
+                <TouchableOpacity
+                  key={`${p.uri}-${i}`}
+                  style={styles.photoThumb}
+                  onPress={() => setter(prev => prev.filter((_, idx) => idx !== i))}
+                  activeOpacity={0.8}
+                >
+                  <Image source={{ uri: p.uri }} style={styles.photoThumbImg} />
+                  <View style={styles.photoRemove}>
+                    <SFIcon name="close-circle" iosName="xmark.circle.fill" size={18} color="#FFFFFF" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <TouchableOpacity style={styles.photoEmpty} onPress={() => pickPhoto(type)} activeOpacity={0.8}>
+              <SFIcon name="camera-outline" iosName="camera" size={22} color="#AEAEB2" />
+              <Text style={styles.photoEmptyTxt}>Add {label.toLowerCase()} photos</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
 
       <View style={{ height: 28 }} />
 
@@ -1691,6 +1776,45 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 20,
     marginBottom: 12,
+  },
+  photoSection: { marginBottom: 16 },
+  photoSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  photoSectionLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    color: '#0D0D0D',
+  },
+  photoRow: { flexDirection: 'row' },
+  photoThumb: {
+    width: 80, height: 80,
+    borderRadius: 10,
+    marginRight: 8,
+    overflow: 'hidden',
+  },
+  photoThumbImg: { width: '100%', height: '100%' },
+  photoRemove: {
+    position: 'absolute', top: 4, right: 4,
+  },
+  photoEmpty: {
+    height: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderStyle: 'dashed',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  photoEmptyTxt: {
+    fontFamily: FontFamily.regular,
+    fontSize: 14,
+    color: '#AEAEB2',
   },
 
   // inputs

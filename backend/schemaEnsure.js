@@ -315,6 +315,18 @@ async function ensureSchema(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_auth_rate_limit_key ON auth_rate_limit(key)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS visit_photos (
+      id SERIAL PRIMARY KEY,
+      visit_id INT NOT NULL REFERENCES visits (id) ON DELETE CASCADE,
+      salon_id INT NOT NULL REFERENCES salons (id) ON DELETE CASCADE,
+      object_key TEXT NOT NULL UNIQUE,
+      content_type TEXT NOT NULL,
+      photo_type TEXT NOT NULL DEFAULT 'after' CHECK (photo_type IN ('before', 'after')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_visit_photos_visit ON visit_photos (visit_id)`;
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS custom_subcategory TEXT`;
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sell_price_cents BIGINT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_global_products_brand ON global_products(brand)`;

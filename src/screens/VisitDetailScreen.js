@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -164,6 +165,22 @@ export default function VisitDetailScreen({ route, navigation }) {
           </View>
         ) : null}
 
+        {/* ── photos ── */}
+        {['before','after'].map(photoType => {
+          const group = (visit.photos || []).filter(p => p.photo_type === photoType && p.url);
+          if (!group.length) return null;
+          return (
+            <View key={photoType} style={styles.photoGroup}>
+              <Text style={styles.photoGroupLabel}>{photoType === 'before' ? 'Before' : 'After'}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {group.map(p => (
+                  <Image key={p.id} source={{ uri: p.url }} style={styles.photoImg} />
+                ))}
+              </ScrollView>
+            </View>
+          );
+        })}
+
         {/* ── formula ── */}
         {mixGroups.length ? (
           <>
@@ -314,6 +331,22 @@ const styles = StyleSheet.create({
     color: '#0D0D0D',
     fontFamily: FontFamily.regular,
     lineHeight: typeLh(15),
+  },
+
+  // photos
+  photoGroup: { marginTop: 20, marginBottom: 4 },
+  photoGroupLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    color: '#AEAEB2',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  photoImg: {
+    width: 120, height: 120,
+    borderRadius: 12,
+    marginRight: 8,
   },
 
   // formula heading

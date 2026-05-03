@@ -209,6 +209,18 @@ async function deleteObject(key) {
   );
 }
 
+function buildVisitPhotoKey(visitId, photoType, contentType) {
+  const ext = extForType(contentType);
+  if (!ext) return null;
+  return `visits/${visitId}/${photoType}_${randomUUID()}.${ext}`;
+}
+
+function keyBelongsToVisit(visitId, key) {
+  if (typeof key !== 'string' || key.includes('..')) return false;
+  return key.startsWith(`visits/${visitId}/`) &&
+    /\.(jpg|png|webp)$/i.test(key);
+}
+
 module.exports = {
   r2Configured,
   normalizeContentType,
@@ -221,6 +233,8 @@ module.exports = {
   keyBelongsToClient,
   keyBelongsToClientAvatar,
   keyBelongsToStaffAvatar,
+  buildVisitPhotoKey,
+  keyBelongsToVisit,
   keyBelongsToSalonInvoiceImport,
   keyBelongsToSalonServiceImport,
   presignPut,

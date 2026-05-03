@@ -616,7 +616,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   // ── client picker screen ──
   if (!clientId) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1297,7 +1297,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {Platform.OS === 'ios' ? (
         <InputAccessoryView nativeID={IOS_KB_ACCESSORY_ID}>
           <View style={styles.kbAccessory}>
@@ -1437,6 +1437,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 24,
+    backgroundColor: '#FFFFFF',
   },
   stepQuestion: {
     fontFamily: FontFamily.semibold,

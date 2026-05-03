@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiGet, apiReadStaleCache, resolveImagePublicUri } from '../api/client';
 import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
 import { hapticImpactLight } from '../theme/haptics';
@@ -223,31 +224,32 @@ export default function HomeScreen() {
 
   const [profileMe, setProfileMe] = useState(null);
   const [headerAvatarLoadFailed, setHeaderAvatarLoadFailed] = useState(false);
+
+  const PROFILE_CACHE_KEY = 'colortrack_profile_me_v1';
+
+  // Load from AsyncStorage immediately on mount so avatar survives hot reloads
+  useEffect(() => {
+    AsyncStorage.getItem(PROFILE_CACHE_KEY).then(raw => {
+      if (!raw) return;
+      try {
+        const row = JSON.parse(raw);
+        if (row && typeof row === 'object') setProfileMe(row);
+      } catch {}
+    }).catch(() => {});
+  }, []);
+
   const loadProfileMe = useCallback((opts) => {
     const forceFresh = opts && opts.force === true;
     apiGet('/api/me', { allowStaleCache: !forceFresh })
       .then((row) => {
-        if (row && typeof row === 'object') setProfileMe(row);
+        if (row && typeof row === 'object') {
+          setProfileMe(row);
+          AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(row)).catch(() => {});
+        }
       })
       .catch(() => {
-        /* Keep last good name/avatar on transient errors; never blank to Unsplash mock. */
+        /* Keep last good name/avatar on transient errors */
       });
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const row = await apiReadStaleCache('/api/me');
-        if (cancelled || !row || typeof row !== 'object') return;
-        setProfileMe((prev) => prev ?? row);
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const headerAvatarUri = useMemo(

@@ -770,17 +770,22 @@ export default function InventoryScreen({ navigation }) {
                   </Text>
                 ) : null}
                 {list.map((item) => {
-                  const detailParts = [item.brand, item.shade_code, item.package_size].filter(Boolean);
-                  const metaText = detailParts.join(' · ');
                   const isRetail = item.category === 'retail';
-                  const costLine = item.price_per_unit_cents != null
-                    ? formatMinorFromStoredCents(item.price_per_unit_cents, currency) : null;
-                  const sellLine = item.sell_price_cents != null
-                    ? formatMinorFromStoredCents(item.sell_price_cents, currency) : null;
-                  const priceLine = isRetail ? sellLine : costLine;
+                  const priceLine = isRetail && item.sell_price_cents != null
+                    ? formatMinorFromStoredCents(item.sell_price_cents, currency)
+                    : item.price_per_unit_cents != null
+                      ? formatMinorFromStoredCents(item.price_per_unit_cents, currency)
+                      : null;
                   const marginPct = isRetail && item.sell_price_cents > 0 && item.price_per_unit_cents > 0
                     ? Math.round((item.sell_price_cents - item.price_per_unit_cents) / item.sell_price_cents * 100)
                     : null;
+                  const truncName = item.name.length > 20 ? item.name.slice(0, 20) + '…' : item.name;
+                  const mainLine = [
+                    truncName,
+                    `${item.quantity} ${item.unit}`,
+                    priceLine,
+                    marginPct != null ? `${marginPct}%` : null,
+                  ].filter(Boolean).join('  ·  ');
                   return (
                     <TouchableOpacity
                       key={item.id}
@@ -792,34 +797,18 @@ export default function InventoryScreen({ navigation }) {
                       }}
                     >
                       <View style={styles.rowMain}>
-                        <Text style={styles.rowName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        {metaText ? (
-                          <Text style={styles.rowMeta} numberOfLines={1}>{metaText}</Text>
+                        <Text style={styles.rowLine} numberOfLines={1}>{mainLine}</Text>
+                        {item.brand ? (
+                          <Text style={styles.rowMeta} numberOfLines={1}>{item.brand}</Text>
                         ) : null}
                       </View>
-                      <View style={styles.rowRight}>
-                        <View style={styles.rowPriceBlock}>
-                          <View style={styles.rowQtyRow}>
-                            <Text style={styles.rowQty}>{item.quantity}</Text>
-                            <Text style={styles.rowQtyUnit}>{item.unit}</Text>
-                          </View>
-                          {priceLine ? (
-                            <Text style={styles.rowPrice} numberOfLines={1}>{priceLine}</Text>
-                          ) : null}
-                          {marginPct != null ? (
-                            <Text style={styles.rowMargin}>{marginPct}%</Text>
-                          ) : null}
-                        </View>
-                        <SFIcon
-                          name="chevron-forward"
-                          iosName="chevron.right"
-                          size={11}
-                          color="rgba(13,13,13,0.22)"
-                          weight="regular"
-                        />
-                      </View>
+                      <SFIcon
+                        name="chevron-forward"
+                        iosName="chevron.right"
+                        size={11}
+                        color="rgba(13,13,13,0.22)"
+                        weight="regular"
+                      />
                     </TouchableOpacity>
                   );
                 })}
@@ -1452,51 +1441,28 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   rowAccent: { display: 'none' },
-  rowMain: { flex: 1, paddingRight: 10 },
-  rowName: {
-    ...Type.listPrimary,
-    letterSpacing: -0.18,
+  rowMain: { flex: 1, paddingRight: 8 },
+  rowLine: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
     color: '#0D0D0D',
+    letterSpacing: -0.2,
   },
+  rowName: { display: 'none' },
   rowMeta: {
     marginTop: 2,
     ...Type.secondary,
-    letterSpacing: -0.05,
-  },
-  rowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  rowPriceBlock: { alignItems: 'flex-end' },
-  rowQtyRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  rowQty: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 15,
-    color: '#0D0D0D',
-    letterSpacing: -0.3,
-  },
-  rowQtyUnit: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: '#8A8A8E',
-  },
-  rowPrice: {
-    fontFamily: FontFamily.medium,
     fontSize: 12,
-    color: MY_LAB_VIOLET,
-    letterSpacing: -0.1,
-    marginTop: 1,
   },
+  rowRight: { display: 'none' },
+  rowPriceBlock: { display: 'none' },
+  rowQtyRow: { display: 'none' },
+  rowQty: { display: 'none' },
+  rowQtyUnit: { display: 'none' },
+  rowPrice: { display: 'none' },
   rowPriceUnit: { display: 'none' },
   rowPricePlaceholder: { display: 'none' },
-  rowMargin: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 11,
-    color: '#00A86B',
-    letterSpacing: -0.1,
-    marginTop: 1,
-  },
+  rowMargin: { display: 'none' },
   chevronText: {
     fontSize: 20,
     lineHeight: typeLh(20),

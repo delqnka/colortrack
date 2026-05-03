@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { apiGet } from '../api/client';
-import { BRAND_PURPLE, glassPurpleFabBar } from '../theme/glassUi';
+import { glassPurpleFabBar, MY_LAB_VIOLET } from '../theme/glassUi';
 import {
   fetchDeviceEventDatesInRange,
   fetchDeviceEventsForDay,
@@ -435,7 +435,7 @@ export default function CalendarScreen() {
             <RefreshControl
               refreshing={pullRefreshing}
               onRefresh={onPullRefresh}
-              tintColor={BRAND_PURPLE}
+              tintColor={MY_LAB_VIOLET}
             />
           }
         >
@@ -472,7 +472,7 @@ export default function CalendarScreen() {
                         activeOpacity={0.85}
                       >
                         <Text style={styles.cardActionTxt}>Visit record</Text>
-                        <Ionicons name="open-outline" size={18} color="#5E35B1" />
+                        <Ionicons name="open-outline" size={18} color={MY_LAB_VIOLET} />
                       </TouchableOpacity>
                     ) : (
                       <TouchableOpacity
@@ -491,7 +491,7 @@ export default function CalendarScreen() {
                         activeOpacity={0.85}
                       >
                         <Text style={styles.cardActionTxt}>Add color formula</Text>
-                        <Ionicons name="flask-outline" size={18} color="#5E35B1" />
+                        <Ionicons name="flask-outline" size={18} color={MY_LAB_VIOLET} />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -505,7 +505,7 @@ export default function CalendarScreen() {
                 onPress={() => openDeviceEventActions(row.ev)}
               >
                 <View style={styles.deviceCardTop}>
-                  <Ionicons name="phone-portrait-outline" size={20} color="#5E35B1" />
+                  <Ionicons name="phone-portrait-outline" size={20} color={MY_LAB_VIOLET} />
                   <Text style={styles.devicePill}>On this device</Text>
                 </View>
                 <Text style={styles.deviceTitle}>{row.ev.title || '(No title)'}</Text>
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.semibold,
-    color: '#5E35B1',
+    color: MY_LAB_VIOLET,
   },
   calCard: {
     marginHorizontal: 24,
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 2,
   },
-  cellSel: { backgroundColor: BRAND_PURPLE },
+  cellSel: { backgroundColor: MY_LAB_VIOLET },
   /** Days with bookings: hollow circle framing the digit (no filled dot). */
   dayOutline: {
     minWidth: 36,
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: BRAND_PURPLE,
+    borderColor: MY_LAB_VIOLET,
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
   client: {
     marginTop: 6,
     ...Type.listPrimary,
-    color: '#5E35B1',
+    color: MY_LAB_VIOLET,
   },
   time: {
     marginTop: 8,
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 8,
   },
-  cardActionTxt: { ...Type.buttonLabel, color: '#5E35B1' },
+  cardActionTxt: { ...Type.buttonLabel, color: MY_LAB_VIOLET },
   deviceCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -681,7 +681,7 @@ const styles = StyleSheet.create({
   deviceCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   devicePill: {
     ...Type.sectionLabel,
-    color: '#5E35B1',
+    color: MY_LAB_VIOLET,
     letterSpacing: 0.4,
     marginBottom: 0,
   },

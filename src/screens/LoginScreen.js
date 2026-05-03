@@ -26,6 +26,7 @@ import { BRAND_PURPLE } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
 import { typeLh } from '../theme/typography';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { setOnboardingComplete } from '../onboarding/storage';
 
 const LAVENDER_BG = '#F5F2FF';
 const CARD_FILL = '#EDE8FF';
@@ -94,6 +95,7 @@ export default function LoginScreen({ onLoggedIn }) {
       await saveSessionToken(data.token);
       await flushOutbox();
       await registerExpoPushIfPossible();
+      await setOnboardingComplete();
       onLoggedIn?.();
     } catch (e) {
       setErr(mapErr(e.message));
@@ -123,6 +125,7 @@ export default function LoginScreen({ onLoggedIn }) {
       await saveSessionToken(data.token);
       await flushOutbox();
       await registerExpoPushIfPossible();
+      await setOnboardingComplete();
       onLoggedIn?.();
     } catch (e) {
       const code = e && e.code;

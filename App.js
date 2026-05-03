@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { View, Pressable, Text, TextInput, StyleSheet, DeviceEventEmitter, Platform } from 'react-native';
-import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
+import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import * as SplashScreen from 'expo-splash-screen';
 import { BlurView } from 'expo-blur';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
@@ -23,6 +23,10 @@ import VisitDetailScreen from './src/screens/VisitDetailScreen';
 import LabScreen from './src/screens/LabScreen';
 import FinanceScreen from './src/screens/FinanceScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import WelcomeScreen from './src/onboarding/screens/WelcomeScreen';
+import OnboardingCarouselScreen from './src/onboarding/screens/OnboardingCarouselScreen';
+import OnboardingAuthScreen from './src/onboarding/screens/OnboardingAuthScreen';
+import { isOnboardingComplete } from './src/onboarding/storage';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import { CurrencyProvider } from './src/context/CurrencyContext';
@@ -35,7 +39,8 @@ import SFIcon from './src/components/SFIcon';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+const GuestStack = createNativeStackNavigator();
+const AppStack = createNativeStackNavigator();
 const DashboardStack = createNativeStackNavigator();
 
 const NAV_BG_WHITE = {
@@ -236,10 +241,13 @@ export default function App() {
     Manrope_400Regular,
     Manrope_500Medium,
     Manrope_600SemiBold,
+    Manrope_700Bold,
   });
 
   const [authReady, setAuthReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const textFontDefaultsApplied = useRef(false);
 
   const refreshAuth = useCallback(async () => {
@@ -259,6 +267,25 @@ export default function App() {
     });
     return () => sub();
   }, [refreshAuth]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!fontsLoaded || !authReady) return undefined;
+
+    if (signedIn) {
+      setOnboardingChecked(true);
+      return undefined;
+    }
+
+    isOnboardingComplete().then((done) => {
+      if (!cancelled) setOnboardingDone(Boolean(done));
+      setOnboardingChecked(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fontsLoaded, authReady, signedIn]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('colortrack:session-cleared', () => {
@@ -287,7 +314,7 @@ export default function App() {
     SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
-  if (!fontsLoaded || !authReady) {
+  if (!fontsLoaded || !authReady || !onboardingChecked) {
     return (
       <SafeAreaProvider>
         <View style={{ flex: 1, backgroundColor: '#fff' }} />
@@ -299,37 +326,56 @@ export default function App() {
     <SafeAreaProvider>
       <CurrencyProvider>
         <NavigationContainer theme={NAV_BG_WHITE}>
-          <Stack.Navigator
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: '#FFFFFF' },
-            }}
-          >
-            {!signedIn ? (
-              <Stack.Screen name="Login">
-                {() => <LoginScreen onLoggedIn={() => setSignedIn(true)} />}
-              </Stack.Screen>
-            ) : (
-              <>
-                <Stack.Screen name="Main" component={MainTabs} />
-                <Stack.Screen name="ClientDetail" component={ClientDetailScreen} />
-                <Stack.Screen name="ClientForm" component={ClientFormScreen} />
-                <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-                <Stack.Screen name="InventoryStack" component={InventoryScreen} />
-                <Stack.Screen name="InventoryItem" component={InventoryItemScreen} />
-                <Stack.Screen
-                  name="FormulaBuilder"
-                  component={FormulaBuilderScreen}
-                  options={{ headerShown: false, headerBackButtonMenuEnabled: false }}
-                />
-                <Stack.Screen name="VisitDetail" component={VisitDetailScreen} />
-                <Stack.Screen name="Finance" component={FinanceScreen} />
-                <Stack.Screen name="Lab" component={LabScreen} />
-                <Stack.Screen name="Profile" component={ProfileScreen} />
-                <Stack.Screen name="Services" component={ServicesScreen} />
-              </>
-            )}
-          </Stack.Navigator>
+          {!signedIn ? (
+            <GuestStack.Navigator
+              key={`guest-${String(onboardingDone)}`}
+              initialRouteName={onboardingDone ? 'Login' : 'OnboardingWelcome'}
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: '#FFFFFF' },
+              }}
+            >
+              <GuestStack.Screen
+                name="OnboardingWelcome"
+                component={WelcomeScreen}
+                options={{
+                  animation: 'fade',
+                  contentStyle: { backgroundColor: '#1A1A2E' },
+                }}
+              />
+              <GuestStack.Screen name="OnboardingCarousel" component={OnboardingCarouselScreen} />
+              <GuestStack.Screen name="OnboardingAuth">
+                {(props) => <OnboardingAuthScreen {...props} onLoggedIn={() => setSignedIn(true)} />}
+              </GuestStack.Screen>
+              <GuestStack.Screen name="Login">
+                {(props) => <LoginScreen {...props} onLoggedIn={() => setSignedIn(true)} />}
+              </GuestStack.Screen>
+            </GuestStack.Navigator>
+          ) : (
+            <AppStack.Navigator
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: '#FFFFFF' },
+              }}
+            >
+              <AppStack.Screen name="Main" component={MainTabs} />
+              <AppStack.Screen name="ClientDetail" component={ClientDetailScreen} />
+              <AppStack.Screen name="ClientForm" component={ClientFormScreen} />
+              <AppStack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+              <AppStack.Screen name="InventoryStack" component={InventoryScreen} />
+              <AppStack.Screen name="InventoryItem" component={InventoryItemScreen} />
+              <AppStack.Screen
+                name="FormulaBuilder"
+                component={FormulaBuilderScreen}
+                options={{ headerShown: false, headerBackButtonMenuEnabled: false }}
+              />
+              <AppStack.Screen name="VisitDetail" component={VisitDetailScreen} />
+              <AppStack.Screen name="Finance" component={FinanceScreen} />
+              <AppStack.Screen name="Lab" component={LabScreen} />
+              <AppStack.Screen name="Profile" component={ProfileScreen} />
+              <AppStack.Screen name="Services" component={ServicesScreen} />
+            </AppStack.Navigator>
+          )}
         </NavigationContainer>
       </CurrencyProvider>
     </SafeAreaProvider>

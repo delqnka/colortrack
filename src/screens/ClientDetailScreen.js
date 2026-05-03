@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { apiGet, apiPost, apiDelete, resolveImagePublicUri } from '../api/client';
-import { BRAND_PURPLE, glassPurpleIconBtn } from '../theme/glassUi';
+import { MY_LAB_VIOLET } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
@@ -161,17 +161,38 @@ export default function ClientDetailScreen({route, navigation}) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.top}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back} hitSlop={12}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.topTitle}>Dossier</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('ClientForm', { clientId })}
-          style={styles.back}
-          hitSlop={12}
-        >
-          <Ionicons name="pencil" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        <Text style={styles.topTitle} numberOfLines={1}>
+          Dossier
+        </Text>
+        <View style={styles.topRightActions}>
+          <TouchableOpacity
+            onPress={() => {
+              hapticImpactLight();
+              pickAndUpload();
+            }}
+            disabled={uploading}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Upload photo"
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color={MY_LAB_VIOLET} />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={24} color={MY_LAB_VIOLET} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              hapticImpactLight();
+              navigation.navigate('ClientForm', { clientId });
+            }}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Edit client"
+          >
+            <Ionicons name="pencil" size={21} color={MY_LAB_VIOLET} />
+          </TouchableOpacity>
+        </View>
       </View>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Image
@@ -306,9 +327,9 @@ export default function ClientDetailScreen({route, navigation}) {
             activeOpacity={0.85}
           >
             {uploading ? (
-              <ActivityIndicator color="#5E35B1" />
+              <ActivityIndicator color={MY_LAB_VIOLET} />
             ) : (
-              <Ionicons name="add" size={32} color={BRAND_PURPLE} />
+              <Ionicons name="add" size={32} color={MY_LAB_VIOLET} />
             )}
           </TouchableOpacity>
         </View>
@@ -328,11 +349,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
   },
-  back: {
-    ...glassPurpleIconBtn,
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flexShrink: 0,
   },
-  topTitle: { ...Type.greetingHello, color: '#0D0D0D' },
+  topTitle: { flex: 1, minWidth: 0, ...Type.greetingHello, color: '#0D0D0D', marginRight: 8 },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
   hero: {
     width: '100%',

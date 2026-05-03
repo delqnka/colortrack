@@ -30,6 +30,7 @@ import {
   inventoryCategoryKey,
   isColorItem,
 } from '../inventory/inventoryCategories';
+import { MY_LAB_VIOLET } from '../theme/glassUi';
 import { hapticImpactLight } from '../theme/haptics';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
@@ -566,7 +567,7 @@ export default function InventoryScreen({ navigation }) {
             disabled={importBusy}
             activeOpacity={0.6}
           >
-            <Ionicons name="add" size={14} color="#0D0D0D" />
+            <Ionicons name="add" size={14} color={MY_LAB_VIOLET} />
             <Ionicons name="camera-outline" size={14} color="#0D0D0D" />
             <Text style={styles.importBtnLabelSecondary}>Camera</Text>
           </TouchableOpacity>
@@ -580,11 +581,11 @@ export default function InventoryScreen({ navigation }) {
             activeOpacity={0.6}
           >
             {importBusy ? (
-              <ActivityIndicator color={BRAND_ACCENT} size="small" />
+              <ActivityIndicator color={MY_LAB_VIOLET} size="small" />
             ) : (
               <>
-                <Ionicons name="add" size={14} color={BRAND_ACCENT} />
-                <Ionicons name="document-text-outline" size={14} color={BRAND_ACCENT} />
+                <Ionicons name="add" size={14} color={MY_LAB_VIOLET} />
+                <Ionicons name="document-text-outline" size={14} color={MY_LAB_VIOLET} />
                 <Text style={styles.importBtnLabelPrimary}>Import invoice</Text>
               </>
             )}
@@ -925,7 +926,7 @@ export default function InventoryScreen({ navigation }) {
                             onPress={() => updatePreviewRow(item.key, { addingCategory: true })}
                             activeOpacity={0.85}
                           >
-                            <Ionicons name="add" size={16} color="#5E35B1" />
+                            <Ionicons name="add" size={16} color={MY_LAB_VIOLET} />
                             <Text style={styles.previewAddCategoryText}>Add new</Text>
                           </TouchableOpacity>
                         </View>
@@ -1141,7 +1142,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.15,
   },
   importBtnLabelPrimary: {
-    color: BRAND_ACCENT,
+    color: MY_LAB_VIOLET,
     fontFamily: FontFamily.semibold,
     fontSize: 13,
     letterSpacing: -0.15,
@@ -1190,11 +1191,11 @@ const styles = StyleSheet.create({
     width: 29,
     height: 29,
     borderRadius: 14.5,
-    backgroundColor: '#007AFF',
+    backgroundColor: MY_LAB_VIOLET,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
-    shadowColor: '#007AFF',
+    shadowColor: MY_LAB_VIOLET,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.28,
     shadowRadius: 6,
@@ -1613,7 +1614,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.medium,
-    color: '#5E35B1',
+    color: MY_LAB_VIOLET,
   },
   previewNewCategoryRow: {
     flexDirection: 'row',

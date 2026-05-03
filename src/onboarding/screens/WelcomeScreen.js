@@ -35,7 +35,7 @@ export default function WelcomeScreen({ navigation }) {
       </View>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 28) }]}>
-        <Pressable style={styles.primaryBtn} onPress={() => navigation.navigate('OnboardingRole')}>
+        <Pressable style={styles.primaryBtn} onPress={() => navigation.navigate('OnboardingCarousel')}>
           <Text style={[OnboardingFonts.button, styles.primaryBtnTxt]}>Get started</Text>
         </Pressable>
         <Pressable

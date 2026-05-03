@@ -221,8 +221,10 @@ export default function HomeScreen() {
   const searchTimer = useRef(null);
 
   const [profileMe, setProfileMe] = useState(null);
-  const loadProfileMe = useCallback(() => {
-    apiGet('/api/me', { allowStaleCache: true })
+  const [headerAvatarLoadFailed, setHeaderAvatarLoadFailed] = useState(false);
+  const loadProfileMe = useCallback((opts) => {
+    const forceFresh = opts && opts.force === true;
+    apiGet('/api/me', { allowStaleCache: !forceFresh })
       .then((row) => {
         if (row && typeof row === 'object') setProfileMe(row);
       })
@@ -355,7 +357,9 @@ export default function HomeScreen() {
   }, [refreshHomeDataSilent]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('colortrack:profile-changed', loadProfileMe);
+    const sub = DeviceEventEmitter.addListener('colortrack:profile-changed', () => {
+      loadProfileMe({ force: true });
+    });
     return () => sub.remove();
   }, [loadProfileMe]);
 
@@ -363,7 +367,7 @@ export default function HomeScreen() {
     setPullRefreshing(true);
     try {
       await refreshHomeDataSilent();
-      loadProfileMe();
+      loadProfileMe({ force: true });
     } finally {
       setPullRefreshing(false);
     }
@@ -526,8 +530,12 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Profile"
             >
-              {headerAvatarUri ? (
-                <Image source={{ uri: headerAvatarUri }} style={styles.avatar} />
+              {headerAvatarUri && !headerAvatarLoadFailed ? (
+                <Image
+                  source={{ uri: headerAvatarUri }}
+                  style={styles.avatar}
+                  onError={() => setHeaderAvatarLoadFailed(true)}
+                />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Ionicons name="person" size={22} color="#AEAEB2" />

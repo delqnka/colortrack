@@ -51,7 +51,7 @@ export const glassPurpleFabBar = {
   width: 44,
   height: 44,
   borderRadius: 22,
-  backgroundColor: BRAND_PURPLE,
+  backgroundColor: MY_LAB_VIOLET,
   alignItems: 'center',
   justifyContent: 'center',
   shadowColor: '#000000',

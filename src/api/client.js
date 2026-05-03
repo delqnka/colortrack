@@ -110,6 +110,14 @@ export function resolveImagePublicUri(raw) {
       if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
         return getApiResolvedUrl(`${u.pathname}${u.search || ''}`);
       }
+      /** Avatar/media URLs are often stored with an old LAN hostname; always use the app’s current API base. */
+      const pathNorm = (u.pathname || '').replace(/\/+$/, '') || '/';
+      if (pathNorm === '/api/media/r2') {
+        const key = u.searchParams.get('key');
+        if (key) {
+          return getApiResolvedUrl(`/api/media/r2?key=${encodeURIComponent(key)}`);
+        }
+      }
     } catch {
       /* keep original */
     }

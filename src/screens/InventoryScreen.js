@@ -1111,6 +1111,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 28,
+    backgroundColor: '#FFFFFF',
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -1168,6 +1169,7 @@ const styles = StyleSheet.create({
   importSection: {
     paddingHorizontal: 24,
     paddingBottom: 28,
+    backgroundColor: '#FFFFFF',
   },
   importRow: {
     flexDirection: 'row',
@@ -1218,6 +1220,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 24,
     paddingBottom: 20,
+    backgroundColor: '#FFFFFF',
   },
   filterCard: {
     flex: 1,
@@ -1230,10 +1233,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     position: 'relative',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
-    shadowRadius: 15,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
   },
   filterCardOn: {
     backgroundColor: '#FFFFFF',

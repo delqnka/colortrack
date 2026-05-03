@@ -120,6 +120,7 @@ export default function VisitDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
@@ -253,9 +254,10 @@ export default function VisitDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
   miss: { textAlign: 'center', marginTop: 48, ...Type.secondary, color: '#8A8A8E' },
 
+  scrollView: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24, backgroundColor: '#FFFFFF' },
 
   // client chip

@@ -31,6 +31,7 @@ export default function WelcomeScreen({ navigation }) {
         <View style={styles.accentRule} />
         <Text style={styles.tag}>Your color formulas. Always with you.</Text>
         <Text style={styles.tag2}>Your revenue and your expenses daily.</Text>
+        <Text style={styles.tag2}>Your stock, always under control.</Text>
       </View>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 28) }]}>

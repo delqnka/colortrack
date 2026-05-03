@@ -138,6 +138,14 @@ const OUTBOX_KEY = 'api_outbox';
 /** Keys include API host — never reuse JSON from another EXPO_PUBLIC / deployment. */
 const CACHE_PREFIX = 'http_cache:h:';
 
+/** Legacy Home profile cache (unscoped). Migrated to host-scoped key on read; cleared on logout. */
+const PROFILE_ME_LEGACY_KEY = 'colortrack_profile_me_v1';
+
+/** Home header avatar cache: scoped by API host so a dev/prod switch does not reuse the wrong profile blob. */
+export function getProfileMeCacheStorageKey() {
+  return `${PROFILE_ME_LEGACY_KEY}:h:${cacheHostSegment()}`;
+}
+
 let sessionToken = null;
 
 export function getSessionToken() {
@@ -158,7 +166,12 @@ async function clearTokenStorage() {
   const had = Boolean(await AsyncStorage.getItem(TOKEN_KEY));
   sessionToken = null;
   await clearHttpCaches();
-  await AsyncStorage.multiRemove([TOKEN_KEY, API_BASE_KEY]);
+  await AsyncStorage.multiRemove([
+    TOKEN_KEY,
+    API_BASE_KEY,
+    getProfileMeCacheStorageKey(),
+    PROFILE_ME_LEGACY_KEY,
+  ]);
   if (had) {
     DeviceEventEmitter.emit('colortrack:session-cleared');
   }

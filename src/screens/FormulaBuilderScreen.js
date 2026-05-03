@@ -19,14 +19,14 @@ import {
   Image,
   PanResponder,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import SFIcon from '../components/SFIcon';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { apiGet, apiPost } from '../api/client';
-import { BRAND_PURPLE, BRAND_LILAC, glassPurpleIconBtn, MY_LAB_VIOLET } from '../theme/glassUi';
+import { BRAND_PURPLE, BRAND_LILAC, MY_LAB_VIOLET } from '../theme/glassUi';
 import {
   SCHEDULE_BANNER_GRADIENT,
   SCHEDULE_BANNER_GRADIENT_END,
@@ -40,25 +40,51 @@ import IsoDatePickField from '../components/IsoDatePickField';
 import { isColourFormulaPickItem, isDeveloperInventoryPickItem } from '../inventory/inventoryCategories';
 
 const FORMULA_ZONE_ROOTS_ART = require('../../assets/formula-zone-roots.png');
-const FORMULA_ZONE_LENGTHS_ART = require('../../assets/formula-zone-lengths.png');
-const FORMULA_ZONE_TONER_ART = require('../../assets/formula-zone-toner.png');
-const FORMULA_ZONE_OTHER_ART = require('../../assets/formula-zone-other.png');
+const FORMULA_ZONE_LENGTHS_ART = require('../../assets/c.png');
+const FORMULA_ZONE_TONER_ART = require('../../assets/t.png');
+const FORMULA_ZONE_OTHER_ART = require('../../assets/d.png');
 
+/** Vertical nudge (px) + optional scale so PNGs with different padding/coverage match in ZONE_ART_SLOT. */
 const COLOUR_SECTIONS = [
-  { key: 'roots', label: 'Roots', image: FORMULA_ZONE_ROOTS_ART },
-  { key: 'lengths', label: 'Lengths', image: FORMULA_ZONE_LENGTHS_ART },
-  { key: 'toner', label: 'Toner', image: FORMULA_ZONE_TONER_ART },
-  { key: 'other', label: 'Other', image: FORMULA_ZONE_OTHER_ART },
+  { key: 'roots', label: 'Roots', image: FORMULA_ZONE_ROOTS_ART, artNudgeY: -1 },
+  { key: 'lengths', label: 'Lengths', image: FORMULA_ZONE_LENGTHS_ART, artNudgeY: 4 },
+  { key: 'toner', label: 'Toner', image: FORMULA_ZONE_TONER_ART, artNudgeY: 0 },
+  {
+    key: 'other',
+    label: 'Other',
+    image: FORMULA_ZONE_OTHER_ART,
+    artNudgeY: 2,
+    /** ~match t.png bbox fill (d.png graphic is tighter in frame) */
+    artScale: 1.36,
+  },
 ];
+
+function zoneImageTransforms(section) {
+  const tf = [];
+  if (section.artScale != null && section.artScale !== 1) {
+    tf.push({ scale: section.artScale });
+  }
+  if (section.artNudgeY) {
+    tf.push({ translateY: section.artNudgeY });
+  }
+  return tf.length ? { transform: tf } : null;
+}
 
 const ZONE_CARD_INNER_COLORS = [
-  'rgba(255,255,255,0.98)',
-  'rgba(255,255,255,0.94)',
-  'rgba(255,255,255,0.9)',
+  '#FEFEFE',
+  '#FCFCFD',
+  '#F8F7FA',
 ];
-const ZONE_CARD_INNER_LOCATIONS = [0, 0.58, 1];
-const COUNT_CIRCLE_COLORS = ['rgba(255,255,255,0.98)', 'rgba(250,247,255,0.94)'];
-const COUNT_CIRCLE_LOCATIONS = [0, 1];
+const ZONE_CARD_INNER_LOCATIONS = [0, 0.5, 1];
+/** SF Symbol / Ionicons size inside the same square as PNG artwork */
+const ZONE_CARD_ICON_PX = 30;
+/** Fixed artwork slot — all zone cards share this footprint */
+const ZONE_ART_SLOT = 56;
+/** Header + steps strip — black → deep violet (same family as Home „My lab“ card). */
+const FORMULA_TOP_BAR_GRADIENT_COLORS = ['#000000', '#160B28', MY_LAB_VIOLET];
+const FORMULA_TOP_BAR_GRADIENT_LOCATIONS = [0, 0.42, 1];
+const COUNT_CIRCLE_COLORS = ['#FFFFFF', '#FBFAFD', '#F3F0F7'];
+const COUNT_CIRCLE_LOCATIONS = [0, 0.38, 1];
 
 const IOS_KB_ACCESSORY_ID = 'formula_input_accessory_done';
 const MAX_FORMULA_LINES = 24;
@@ -100,9 +126,9 @@ function FormulaColourCountBubble({ value, onPick }) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
     Animated.spring(scale, {
-      toValue: 0.9,
-      friction: 6,
-      tension: 260,
+      toValue: 0.96,
+      friction: 8,
+      tension: 280,
       useNativeDriver: true,
     }).start();
   }, [scale]);
@@ -110,8 +136,8 @@ function FormulaColourCountBubble({ value, onPick }) {
   const pressOut = useCallback(() => {
     Animated.spring(scale, {
       toValue: 1,
-      friction: 5,
-      tension: 200,
+      friction: 7,
+      tension: 220,
       useNativeDriver: true,
     }).start();
   }, [scale]);
@@ -125,17 +151,19 @@ function FormulaColourCountBubble({ value, onPick }) {
         onPressIn={pressIn}
         onPressOut={pressOut}
         onPress={() => onPick(value)}
-        android_ripple={{ color: 'rgba(184,74,224,0.22)', borderless: true, radius: 24 }}
+        android_ripple={{ color: 'rgba(69,34,119,0.08)', borderless: true, radius: 32 }}
         style={styles.countCirclePressable}
       >
         <Animated.View style={[styles.countCircleElevate, { transform: [{ scale }] }]}>
           <LinearGradient
             colors={COUNT_CIRCLE_COLORS}
             locations={COUNT_CIRCLE_LOCATIONS}
-            start={{ x: 0.2, y: 0 }}
-            end={{ x: 0.8, y: 1 }}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
             style={styles.countCircle}
           >
+            <View style={styles.countCircleGloss} pointerEvents="none" />
+            <View style={styles.countCircleInnerRing} pointerEvents="none" />
             <Text style={styles.countCircleTxt}>{value}</Text>
           </LinearGradient>
         </Animated.View>
@@ -145,6 +173,7 @@ function FormulaColourCountBubble({ value, onPick }) {
 }
 
 export default function FormulaBuilderScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   // ── client ──
   const [clientId, setClientId] = useState(() => parseRouteClientId(route.params?.clientId));
   const [pickedClientLabel, setPickedClientLabel] = useState('');
@@ -616,22 +645,34 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   // ── client picker screen ──
   if (!clientId) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={8}
         >
-          <View style={styles.header}>
-            <View style={styles.headerSide} />
-            <Text style={styles.navHeadline}>New Formula</Text>
-            <TouchableOpacity
-              onPress={() => { Keyboard.dismiss(); navigation.goBack(); }}
-              style={styles.iconBtn}
-              hitSlop={12}
-            >
-              <SFIcon name="close" iosName="xmark" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
+          <View style={[styles.formulaTopBarWrap, { paddingTop: Math.max(insets.top, 8) }]}>
+            <LinearGradient
+              colors={FORMULA_TOP_BAR_GRADIENT_COLORS}
+              locations={FORMULA_TOP_BAR_GRADIENT_LOCATIONS}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+            <View style={styles.formulaTopBarContent}>
+              <View style={styles.header}>
+                <View style={styles.headerSide} />
+                <Text style={[styles.navHeadline, styles.navHeadlineOnBar]}>New Formula</Text>
+                <TouchableOpacity
+                  onPress={() => { Keyboard.dismiss(); navigation.goBack(); }}
+                  style={styles.formulaBarIconHit}
+                  hitSlop={12}
+                >
+                  <SFIcon name="close" iosName="xmark" size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
           <Text style={styles.pickPurpose}>Who is this formula for?</Text>
           <View style={styles.pickSearchRow}>
@@ -707,7 +748,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             key={s.key}
             style={styles.zoneCard}
             onPress={() => onPickZone(s.key)}
-            activeOpacity={0.82}
+            activeOpacity={0.92}
           >
             <LinearGradient
               colors={ZONE_CARD_INNER_COLORS}
@@ -721,19 +762,20 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 <View style={styles.zoneArtworkWrap}>
                   <Image
                     source={s.image}
-                    style={styles.zoneCardRootsImage}
+                    style={[styles.zoneCardRootsImage, zoneImageTransforms(s)]}
                     resizeMode="contain"
                     accessibilityIgnoresInvertColors
                   />
                 </View>
               ) : (
-                <SFIcon
-                  name={s.icon}
-                  iosName={s.iosIcon}
-                  size={36}
-                  color={SCHEDULE_BANNER_LEAD_PINK}
-                  style={{ marginBottom: 10 }}
-                />
+                <View style={[styles.zoneArtworkWrap, zoneImageTransforms(s)]}>
+                  <SFIcon
+                    name={s.icon}
+                    iosName={s.iosName}
+                    size={ZONE_CARD_ICON_PX}
+                    color={SCHEDULE_BANNER_LEAD_PINK}
+                  />
+                </View>
               )}
               <Text style={styles.zoneCardLabel}>{s.label}</Text>
             </LinearGradient>
@@ -811,54 +853,46 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   // ── Step 3 — Add your colours ──
   const renderColourRow = (row, idx) => (
     <View key={row.key} style={styles.colourCard}>
-      {/* title + remove */}
       <View style={styles.colourCardHeader}>
         <Text style={styles.colourCardTitle}>Colour {idx + 1}</Text>
+        <View style={styles.colourHeaderPickCluster}>
+          <TouchableOpacity
+            style={styles.stockPickerBtnInline}
+            onPress={() => openInvPicker(row.key)}
+            activeOpacity={0.82}
+          >
+            <SFIcon name="cube-outline" iosName="cabinet.fill" size={14} color={MY_LAB_VIOLET} style={{ marginRight: 6 }} />
+            <Text style={styles.stockPickerBtnTxtInline} numberOfLines={1}>
+              {row.stockLabel
+                ? row.shade_code
+                  ? `${row.shade_code} · ${row.stockLabel}`
+                  : row.stockLabel
+                : 'Choose from colors'}
+            </Text>
+          </TouchableOpacity>
+          {row.stockLabel ? (
+            <TouchableOpacity
+              onPress={() => updateDraftRow(row.key, { brand: '', shade_code: '', inventory_item_id: null, stockLabel: null })}
+              hitSlop={10}
+              activeOpacity={0.7}
+            >
+              <SFIcon name="close-circle" iosName="xmark.circle.fill" size={15} color="#8A8A8E" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
         {draftColourRows.length > 1 ? (
           <TouchableOpacity onPress={() => removeDraftRow(row.key)} hitSlop={10} activeOpacity={0.7}>
-            <SFIcon name="trash-outline" iosName="trash" size={18} color="#C62828" />
+            <SFIcon name="trash-outline" iosName="trash" size={17} color="#C62828" />
           </TouchableOpacity>
         ) : null}
       </View>
-
-      {/* Stock picker button — primary way to pick */}
-      <TouchableOpacity
-        style={styles.stockPickerBtn}
-        onPress={() => openInvPicker(row.key)}
-        activeOpacity={0.82}
-      >
-        <SFIcon name="cube-outline" iosName="cabinet.fill" size={18} color={BRAND_PURPLE} style={{ marginRight: 8 }} />
-        {row.stockLabel ? (
-          <View style={{ flex: 1 }}>
-            <Text style={styles.stockPickerShade}>
-              {row.shade_code || row.stockLabel}
-            </Text>
-            {row.shade_code ? (
-              <Text style={styles.stockPickerName} numberOfLines={1}>{row.stockLabel}</Text>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.stockPickerBtnTxt}>Choose from colors</Text>
-        )}
-        {row.stockLabel ? (
-          <TouchableOpacity
-            onPress={() => updateDraftRow(row.key, { brand: '', shade_code: '', inventory_item_id: null, stockLabel: null })}
-            hitSlop={10}
-            style={{ marginLeft: 'auto' }}
-          >
-            <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8A8A8E" />
-          </TouchableOpacity>
-        ) : (
-          <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#AEAEB2" style={{ marginLeft: 'auto' }} />
-        )}
-      </TouchableOpacity>
 
       {/* Manual brand/name with global product autocomplete */}
       {!row.stockLabel ? (
         <>
           <Text style={styles.fieldLabelOr}>— or type manually —</Text>
           <TextInput
-            style={styles.input}
+            style={styles.inputManualLikePicker}
             placeholder="Brand / name  e.g. Wella Koleston 8/0"
             placeholderTextColor="#8A8A8E"
             value={row.brand}
@@ -873,6 +907,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             returnKeyType="done"
             blurOnSubmit={false}
             onSubmitEditing={dismissSuggestions}
+            underlineColorAndroid="transparent"
           />
           {/* Autocomplete dropdown */}
           {suggestionTargetKey === row.key && (
@@ -918,29 +953,32 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         </>
       ) : null}
 
-      {/* Amount + unit */}
-      <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Amount</Text>
-      <View style={styles.amountRow}>
-        <TextInput
-          style={[styles.input, styles.amountInput]}
-          placeholder="0"
-          placeholderTextColor="#8A8A8E"
-          value={row.amount}
-          onChangeText={(t) => updateDraftRow(row.key, { amount: t })}
-          keyboardType="decimal-pad"
-          inputAccessoryViewID={iosAccessoryId}
-        />
-        <View style={styles.unitToggle}>
-          {['g', 'oz'].map((u) => (
-            <TouchableOpacity
-              key={u}
-              style={[styles.unitBtn, row.unit === u && styles.unitBtnActive]}
-              onPress={() => updateDraftRow(row.key, { unit: u })}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.unitBtnTxt, row.unit === u && styles.unitBtnTxtActive]}>{u}</Text>
-            </TouchableOpacity>
-          ))}
+      {/* Amount + unit (label + controls, one row) */}
+      <View style={styles.amountFieldRow}>
+        <Text style={[styles.fieldLabel, styles.amountLabelInline]}>Amount</Text>
+        <View style={styles.amountRow}>
+          <TextInput
+            style={[styles.input, styles.amountInput]}
+            placeholder="0"
+            placeholderTextColor="#8A8A8E"
+            value={row.amount}
+            onChangeText={(t) => updateDraftRow(row.key, { amount: t })}
+            keyboardType="decimal-pad"
+            inputAccessoryViewID={iosAccessoryId}
+            underlineColorAndroid="transparent"
+          />
+          <View style={styles.unitToggle}>
+            {['g', 'oz'].map((u) => (
+              <TouchableOpacity
+                key={u}
+                style={[styles.unitBtn, styles.unitBtnCompact, row.unit === u && styles.unitBtnActive]}
+                onPress={() => updateDraftRow(row.key, { unit: u })}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.unitBtnTxt, styles.unitBtnTxtCompact, row.unit === u && styles.unitBtnTxtActive]}>{u}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </View>
     </View>
@@ -954,97 +992,115 @@ export default function FormulaBuilderScreen({ route, navigation }) {
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.stepQuestion}>Add your colours</Text>
-      {draftSection ? (
-        <Text style={styles.stepSubtitle}>
-          {COLOUR_SECTIONS.find((s) => s.key === draftSection)?.label}
-        </Text>
-      ) : null}
+      <View style={styles.step3TitleRow}>
+        <Text style={[styles.stepQuestion, styles.step3TitleRowQuestion]}>Add your colours</Text>
+        {draftSection ? (
+          <Text style={styles.step3TitleRowZone}>
+            {COLOUR_SECTIONS.find((s) => s.key === draftSection)?.label}
+          </Text>
+        ) : null}
+      </View>
 
-      {draftColourRows.map((row, idx) => renderColourRow(row, idx))}
-
-      {/* Add another colour row inline */}
-      <TouchableOpacity style={styles.addColourRowBtn} onPress={addDraftRow} activeOpacity={0.82}>
-        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={MY_LAB_VIOLET} />
-        <Text style={styles.addColourRowBtnTxt}>+ Add another colour</Text>
-      </TouchableOpacity>
+      {draftColourRows.map((row, idx) => (
+        <React.Fragment key={row.key}>
+          {renderColourRow(row, idx)}
+          <View style={styles.step3BetweenCardsRow}>
+            <Pressable
+              onPress={addDraftRow}
+              style={({ pressed }) => [styles.step3AddColourOrbWrap, pressed && styles.step3AddColourOrbPressed]}
+              hitSlop={10}
+            >
+              <LinearGradient
+                colors={['#6B4A9E', MY_LAB_VIOLET]}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.85, y: 1 }}
+                style={styles.step3AddColourOrb}
+              >
+                <SFIcon name="add" iosName="plus" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={addDraftRow}
+              style={({ pressed }) => [styles.addColourRowLink, pressed && styles.addColourRowLinkPressed]}
+            >
+              <Text style={styles.addColourRowLinkTxt}>Add another colour</Text>
+            </Pressable>
+          </View>
+        </React.Fragment>
+      ))}
 
       {/* Developer */}
       <View style={[styles.colourCard, styles.devCard]}>
-        <Text style={[styles.colourCardTitle, styles.devCardTitle]}>Developer</Text>
-
-        {/* Stock picker */}
-        <TouchableOpacity
-          style={[styles.stockPickerBtn, styles.stockPickerBtnDev]}
-          onPress={() => openInvPicker('developer')}
-          activeOpacity={0.82}
-        >
-          <SFIcon name="cube-outline" iosName="cabinet.fill" size={18} color="#0D74FF" style={{ marginRight: 8 }} />
-          {draftDeveloper.stockLabel ? (
-            <View style={{ flex: 1 }}>
-              <Text style={styles.stockPickerShade}>
-                {draftDeveloper.shade_code || draftDeveloper.stockLabel}
-              </Text>
-              {draftDeveloper.shade_code ? (
-                <Text style={styles.stockPickerName} numberOfLines={1}>{draftDeveloper.stockLabel}</Text>
-              ) : null}
-            </View>
-          ) : (
-            <Text style={styles.stockPickerBtnTxt}>Choose developer</Text>
-          )}
-          {draftDeveloper.stockLabel ? (
+        <View style={styles.colourCardHeader}>
+          <Text style={[styles.colourCardTitle, styles.devCardTitle]}>Developer</Text>
+          <View style={styles.colourHeaderPickCluster}>
             <TouchableOpacity
-              onPress={() => setDraftDeveloper((d) => ({ ...d, brand: '', shade_code: '', inventory_item_id: null, stockLabel: null }))}
-              hitSlop={10}
-              style={{ marginLeft: 'auto' }}
+              style={[styles.stockPickerBtnInline, styles.stockPickerBtnInlineDev]}
+              onPress={() => openInvPicker('developer')}
+              activeOpacity={0.82}
             >
-              <SFIcon name="close-circle" iosName="xmark.circle.fill" size={17} color="#8A8A8E" />
+              <SFIcon name="cube-outline" iosName="cabinet.fill" size={14} color="#2563EB" style={{ marginRight: 6 }} />
+              <Text style={styles.stockPickerBtnTxtInline} numberOfLines={1}>
+                {draftDeveloper.stockLabel
+                  ? draftDeveloper.shade_code
+                    ? `${draftDeveloper.shade_code} · ${draftDeveloper.stockLabel}`
+                    : draftDeveloper.stockLabel
+                  : 'Choose developer'}
+              </Text>
             </TouchableOpacity>
-          ) : (
-            <SFIcon name="chevron-forward" iosName="chevron.right" size={16} color="#AEAEB2" style={{ marginLeft: 'auto' }} />
-          )}
-        </TouchableOpacity>
+            {draftDeveloper.stockLabel ? (
+              <TouchableOpacity
+                onPress={() => setDraftDeveloper((d) => ({ ...d, brand: '', shade_code: '', inventory_item_id: null, stockLabel: null }))}
+                hitSlop={10}
+                activeOpacity={0.7}
+              >
+                <SFIcon name="close-circle" iosName="xmark.circle.fill" size={15} color="#8A8A8E" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
 
         {!draftDeveloper.stockLabel ? (
-          <>
-            <Text style={styles.fieldLabelOr}>— or type manually —</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Wella Welloxon 6%"
-              placeholderTextColor="#8A8A8E"
-              value={draftDeveloper.brand}
-              onChangeText={(t) => setDraftDeveloper((d) => ({ ...d, brand: t }))}
-              inputAccessoryViewID={iosAccessoryId}
-              returnKeyType="done"
-              blurOnSubmit
-            />
-          </>
+          <TextInput
+            style={[styles.inputManualLikePicker, styles.inputManualLikePickerDev]}
+            placeholder="e.g. Wella Welloxon 6%"
+            placeholderTextColor="#8A8A8E"
+            value={draftDeveloper.brand}
+            onChangeText={(t) => setDraftDeveloper((d) => ({ ...d, brand: t }))}
+            inputAccessoryViewID={iosAccessoryId}
+            returnKeyType="done"
+            blurOnSubmit
+            underlineColorAndroid="transparent"
+          />
         ) : null}
 
-        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Amount</Text>
-        <View style={styles.amountRow}>
-          <TextInput
-            style={[styles.input, styles.amountInput]}
-            placeholder="0"
-            placeholderTextColor="#8A8A8E"
-            value={draftDeveloper.amount}
-            onChangeText={(t) => setDraftDeveloper((d) => ({ ...d, amount: t }))}
-            keyboardType="decimal-pad"
-            inputAccessoryViewID={iosAccessoryId}
-          />
-          <View style={styles.unitToggle}>
-            {['g', 'ml', 'oz'].map((u) => (
-              <TouchableOpacity
-                key={u}
-                style={[styles.unitBtn, draftDeveloper.unit === u && styles.unitBtnActive]}
-                onPress={() => setDraftDeveloper((d) => ({ ...d, unit: u }))}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.unitBtnTxt, draftDeveloper.unit === u && styles.unitBtnTxtActive]}>
-                  {u}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.amountFieldRow}>
+          <Text style={[styles.fieldLabel, styles.amountLabelInline]}>Amount</Text>
+          <View style={styles.amountRow}>
+            <TextInput
+              style={[styles.input, styles.amountInput]}
+              placeholder="0"
+              placeholderTextColor="#8A8A8E"
+              value={draftDeveloper.amount}
+              onChangeText={(t) => setDraftDeveloper((d) => ({ ...d, amount: t }))}
+              keyboardType="decimal-pad"
+              inputAccessoryViewID={iosAccessoryId}
+              underlineColorAndroid="transparent"
+            />
+            <View style={styles.unitToggle}>
+              {['g', 'ml', 'oz'].map((u) => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.unitBtn, styles.unitBtnCompact, draftDeveloper.unit === u && styles.unitBtnActive]}
+                  onPress={() => setDraftDeveloper((d) => ({ ...d, unit: u }))}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.unitBtnTxt, styles.unitBtnTxtCompact, draftDeveloper.unit === u && styles.unitBtnTxtActive]}>
+                    {u}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
       </View>
@@ -1297,7 +1353,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       {Platform.OS === 'ios' ? (
         <InputAccessoryView nativeID={IOS_KB_ACCESSORY_ID}>
           <View style={styles.kbAccessory}>
@@ -1320,39 +1376,49 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerSide}>
-            {wizardStep > 1 && wizardStep < 4 ? (
-              <TouchableOpacity onPress={wizardBack} style={styles.iconBtn} hitSlop={12}>
-                <SFIcon name="chevron-back" iosName="chevron.left" size={22} color="#FFFFFF" />
+        <View style={[styles.formulaTopBarWrap, { paddingTop: Math.max(insets.top, 8) }]}>
+          <LinearGradient
+            colors={FORMULA_TOP_BAR_GRADIENT_COLORS}
+            locations={FORMULA_TOP_BAR_GRADIENT_LOCATIONS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+          <View style={styles.formulaTopBarContent}>
+            <View style={styles.header}>
+              <View style={styles.headerSide}>
+                {wizardStep > 1 && wizardStep < 4 ? (
+                  <TouchableOpacity onPress={wizardBack} style={styles.formulaBarIconHit} hitSlop={12}>
+                    <SFIcon name="chevron-back" iosName="chevron.left" size={22} color="#FFFFFF" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              <Text style={[styles.navHeadline, styles.navHeadlineOnBar]}>New Formula</Text>
+              <TouchableOpacity
+                onPress={() => { Keyboard.dismiss(); navigation.goBack(); }}
+                style={styles.formulaBarIconHit}
+                hitSlop={12}
+              >
+                <SFIcon name="close" iosName="xmark" size={22} color="#FFFFFF" />
               </TouchableOpacity>
-            ) : null}
-          </View>
-          <Text style={styles.navHeadline}>New Formula</Text>
-          <TouchableOpacity
-            onPress={() => { Keyboard.dismiss(); navigation.goBack(); }}
-            style={styles.iconBtn}
-            hitSlop={12}
-          >
-            <SFIcon name="close" iosName="xmark" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+            </View>
 
-        {/* Progress */}
-        <View style={styles.progressRow}>
-          {[1, 2, 3, 4].map((s) => (
-            <View
-              key={s}
-              style={[
-                styles.progressSegment,
-                s < wizardStep && styles.progressSegmentDone,
-                s === wizardStep && styles.progressSegmentActive,
-              ]}
-            />
-          ))}
+            <View style={styles.progressRow}>
+              {[1, 2, 3, 4].map((s) => (
+                <View
+                  key={s}
+                  style={[
+                    styles.progressSegment,
+                    s < wizardStep && styles.progressSegmentDone,
+                    s === wizardStep && styles.progressSegmentActive,
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={styles.progressLabel}>Step {wizardStep} of 4</Text>
+          </View>
         </View>
-        <Text style={styles.progressLabel}>Step {wizardStep} of 4</Text>
 
         {wizardStep === 1 && renderStep1()}
         {wizardStep === 2 && renderStep2()}
@@ -1381,6 +1447,21 @@ const styles = StyleSheet.create({
   kbAccessoryDoneBtn: { paddingVertical: 6, paddingHorizontal: 12 },
   kbAccessoryDoneTxt: { ...Type.buttonLabel, color: BRAND_PURPLE },
 
+  formulaTopBarWrap: {
+    position: 'relative',
+    overflow: 'hidden',
+    paddingBottom: 10,
+  },
+  formulaTopBarContent: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  formulaBarIconHit: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // header
   header: {
     flexDirection: 'row',
@@ -1390,7 +1471,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   headerSide: { width: 40, height: 40 },
-  iconBtn: { ...glassPurpleIconBtn },
   navHeadline: {
     flex: 1,
     textAlign: 'center',
@@ -1398,8 +1478,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.41,
     color: '#000000',
   },
+  navHeadlineOnBar: {
+    color: '#FFFFFF',
+  },
 
-  // progress bar
+  // progress bar (on dark lilac bar)
   progressRow: {
     flexDirection: 'row',
     gap: 6,
@@ -1411,21 +1494,21 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   progressSegmentDone: {
-    backgroundColor: BRAND_LILAC,
-    opacity: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    opacity: 1,
   },
   progressSegmentActive: {
-    backgroundColor: BRAND_LILAC,
+    backgroundColor: '#FFFFFF',
     opacity: 1,
   },
   progressLabel: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
     lineHeight: typeLh(12),
-    color: '#8A8A8E',
+    color: 'rgba(255,255,255,0.72)',
     paddingHorizontal: 24,
     marginBottom: 10,
     marginTop: 4,
@@ -1455,6 +1538,26 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     letterSpacing: -0.2,
   },
+  step3TitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 20,
+  },
+  step3TitleRowQuestion: {
+    flex: 1,
+    marginBottom: 0,
+    minWidth: 0,
+  },
+  step3TitleRowZone: {
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    color: BRAND_LILAC,
+    letterSpacing: -0.2,
+    flexShrink: 0,
+  },
   forClient: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
@@ -1464,61 +1567,65 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
-  // step 1 — zone grid
+  // step 1 — zone grid (micro cards, strong floor shadow)
   zoneGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 4,
+    paddingBottom: 6,
+    rowGap: 8,
+    columnGap: 8,
   },
   zoneCard: {
-    width: '48%',
-    marginBottom: 14,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.16,
-    shadowRadius: 20,
-    elevation: 9,
+    width: '47.5%',
+    marginBottom: 0,
+    borderRadius: 14,
+    backgroundColor: '#FEFEFE',
+    // Emphasize shadow below the card (floating shelf)
+    shadowColor: '#0D0D0D',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 8,
   },
   zoneCardInner: {
-    minHeight: 136,
+    height: 102,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 14,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.98)',
-    borderLeftColor: 'rgba(255,255,255,0.9)',
-    borderRightColor: 'rgba(184,74,224,0.26)',
-    borderBottomColor: 'rgba(184,74,224,0.34)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.045)',
   },
   zoneGlassHighlight: {
     position: 'absolute',
-    top: 1,
+    top: 0,
     left: 10,
     right: 10,
-    height: 1,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   zoneArtworkWrap: {
-    width: 104,
-    height: 78,
-    marginBottom: 8,
+    width: ZONE_ART_SLOT,
+    height: ZONE_ART_SLOT,
+    marginBottom: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   zoneCardRootsImage: {
-    width: 88,
-    height: 68,
+    width: ZONE_ART_SLOT,
+    height: ZONE_ART_SLOT,
   },
   zoneCardLabel: {
-    ...Type.listPrimary,
-    color: '#0D0D0D',
-    letterSpacing: -0.3,
+    fontFamily: FontFamily.semibold,
+    fontSize: 10,
+    lineHeight: typeLh(10),
+    color: '#3A3A3C',
+    letterSpacing: 0.65,
+    textTransform: 'uppercase',
   },
   mixesSummaryBox: {
     marginTop: 24,
@@ -1545,15 +1652,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
-  // step 2 — count grid
+  // step 2 — count grid (pearl discs, lilac-tint shadow, inset highlight)
   countGrid: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     alignSelf: 'stretch',
-    marginTop: 14,
-    marginBottom: 12,
+    marginTop: 22,
+    marginBottom: 18,
     paddingHorizontal: 0,
   },
   countCircleWrap: {
@@ -1561,37 +1668,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 0,
-    paddingHorizontal: 1,
+    paddingHorizontal: 0,
+    paddingVertical: 6,
   },
   countCirclePressable: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   countCircleElevate: {
-    borderRadius: 18,
-    backgroundColor: 'transparent',
-    shadowColor: 'rgba(60,24,92,0.28)',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 5,
+    borderRadius: 24,
+    backgroundColor: '#FBFAFD',
+    shadowColor: '#0D0D0D',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    elevation: 14,
   },
   countCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(184,74,224,0.66)',
+    borderColor: 'rgba(0,0,0,0.055)',
     overflow: 'hidden',
   },
+  countCircleGloss: {
+    position: 'absolute',
+    top: 1,
+    left: 14,
+    right: 14,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  countCircleInnerRing: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderRadius: 23,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
   countCircleTxt: {
-    fontSize: 15,
-    lineHeight: typeLh(15),
+    fontSize: 16,
+    lineHeight: typeLh(16),
     fontFamily: FontFamily.semibold,
-    color: BRAND_LILAC,
-    letterSpacing: -0.4,
+    color: '#24122E',
+    letterSpacing: -0.35,
+    fontVariant: ['tabular-nums'],
   },
   moreColoursBtn: {
     flexDirection: 'row',
@@ -1605,136 +1733,269 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   moreColoursBtnTxt: {
-    fontFamily: FontFamily.semibold,
+    fontFamily: FontFamily.regular,
     fontSize: 15,
     lineHeight: typeLh(15),
-    color: BRAND_LILAC,
+    color: MY_LAB_VIOLET,
   },
 
-  // step 3 — colour cards
+  // step 3 — colour cards (premium surfaces)
   colourCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#FEFEFE',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.055)',
+    shadowColor: '#1A0F24',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.09,
+    shadowRadius: 20,
+    elevation: 8,
   },
   devCard: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#FAFBFF',
+    borderColor: 'rgba(37,99,235,0.12)',
+    shadowColor: '#1D4ED8',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 12,
   },
   colourCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 14,
+  },
+  colourHeaderPickCluster: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+    gap: 4,
+  },
+  stockPickerBtnInline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+    backgroundColor: '#F8F8FA',
+    borderWidth: 1,
+    borderColor: '#C6C6CC',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  stockPickerBtnInlineDev: {
+    backgroundColor: '#EEF3FF',
+    borderColor: 'rgba(37,99,235,0.35)',
+    shadowColor: '#1E3A8A',
+    shadowOpacity: 0.08,
+  },
+  stockPickerBtnTxtInline: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    color: '#1C1C1E',
+  },
+  /** Step 3 manual text fields — same footprint + chrome as stockPickerBtnInline */
+  inputManualLikePicker: {
+    backgroundColor: '#F8F8FA',
+    borderWidth: 1,
+    borderColor: '#C6C6CC',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: Platform.OS === 'android' ? 42 : 40,
+    fontSize: 13,
+    fontFamily: FontFamily.medium,
+    color: '#1C1C1E',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  inputManualLikePickerDev: {
+    backgroundColor: '#EEF3FF',
+    borderColor: 'rgba(37,99,235,0.35)',
+    shadowColor: '#1E3A8A',
+    shadowOpacity: 0.08,
   },
   colourCardTitle: {
     fontFamily: FontFamily.semibold,
-    fontSize: 15,
-    color: '#0D0D0D',
+    fontSize: 13,
+    color: MY_LAB_VIOLET,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   devCardTitle: {
-    color: '#0D74FF',
+    color: '#2563EB',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   fieldLabel: {
     fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: '#8A8A8E',
-    marginBottom: 6,
+    fontSize: 11,
+    color: '#6E6E73',
+    marginBottom: 8,
     marginTop: 2,
-    letterSpacing: 0.1,
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
   },
   fieldLabelOr: {
     fontFamily: FontFamily.regular,
     fontSize: 11,
     color: '#AEAEB2',
     textAlign: 'center',
-    marginVertical: 8,
-    letterSpacing: 0.2,
+    marginVertical: 10,
+    letterSpacing: 0.15,
   },
   stockPickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   stockPickerBtnDev: {
     backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(37,99,235,0.14)',
   },
   stockPickerBtnTxt: {
     fontFamily: FontFamily.medium,
     fontSize: 15,
-    color: '#0D0D0D',
+    color: '#1C1C1E',
     flex: 1,
   },
   stockPickerShade: {
     fontFamily: FontFamily.semibold,
     fontSize: 16,
-    color: '#0D0D0D',
-    letterSpacing: -0.2,
+    color: '#1C1C1E',
+    letterSpacing: -0.25,
   },
   stockPickerName: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
     color: '#8A8A8E',
-    marginTop: 1,
+    marginTop: 2,
   },
-  addColourRowBtn: {
+  step3BetweenCardsRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    marginTop: -2,
+    paddingVertical: 4,
+  },
+  step3AddColourOrbWrap: {
+    borderRadius: 22,
+    shadowColor: MY_LAB_VIOLET,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  step3AddColourOrb: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    marginBottom: 14,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: 'rgba(255,255,255,0.32)',
   },
-  addColourRowBtnTxt: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 15,
-    color: BRAND_PURPLE,
+  step3AddColourOrbPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.96 }],
+  },
+  addColourRowLink: {
+    paddingVertical: 6,
+    paddingLeft: 8,
+  },
+  addColourRowLinkTxt: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    color: MY_LAB_VIOLET,
+    letterSpacing: -0.15,
+  },
+  addColourRowLinkPressed: { opacity: 0.55 },
+  amountFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 12,
+    minHeight: 28,
+  },
+  amountLabelInline: {
+    marginBottom: 0,
+    marginTop: 0,
+    flexShrink: 0,
+    alignSelf: 'center',
   },
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexShrink: 0,
   },
   amountInput: {
-    flex: 1,
+    width: 68,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 8,
+    paddingVertical: Platform.OS === 'android' ? 8 : 9,
+    minHeight: Platform.OS === 'android' ? 44 : 40,
+    textAlign: 'right',
+    fontSize: 15,
   },
   unitToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(94,53,177,0.07)',
+    backgroundColor: 'rgba(69,34,119,0.07)',
     borderRadius: 10,
     padding: 3,
     gap: 2,
   },
   unitBtn: {
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  unitBtnCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
     borderRadius: 8,
+  },
+  unitBtnTxtCompact: {
+    fontSize: 12,
   },
   unitBtnActive: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(69,34,119,0.12)',
+    shadowColor: '#1A0F24',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 3,
   },
   unitBtnTxt: {
     fontFamily: FontFamily.medium,
@@ -1742,28 +2003,28 @@ const styles = StyleSheet.create({
     color: '#8A8A8E',
   },
   unitBtnTxtActive: {
-    color: '#0D0D0D',
+    color: MY_LAB_VIOLET,
     fontFamily: FontFamily.semibold,
   },
 
   // next button (step 3)
   nextBtn: {
-    backgroundColor: SCHEDULE_BANNER_LEAD_PINK,
+    backgroundColor: MY_LAB_VIOLET,
     borderRadius: 16,
-    paddingVertical: 17,
+    paddingVertical: 18,
     alignItems: 'center',
-    marginTop: 8,
-    shadowColor: SCHEDULE_BANNER_LEAD_PINK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 5,
+    marginTop: 10,
+    shadowColor: MY_LAB_VIOLET,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 10,
   },
   nextBtnTxt: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 17,
     fontFamily: FontFamily.semibold,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
 
   // step 4 — mix summary
@@ -1885,52 +2146,55 @@ const styles = StyleSheet.create({
 
   // inputs
   input: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    backgroundColor: '#F8F8FA',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'android' ? 12 : 15,
+    minHeight: Platform.OS === 'android' ? 52 : 48,
     fontSize: 16,
     fontFamily: FontFamily.regular,
-    color: '#000000',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
+    color: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: '#C6C6CC',
   },
   inputMulti: { minHeight: 80, textAlignVertical: 'top' },
 
   // global product autocomplete dropdown
   suggestionBox: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginTop: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
-    shadowRadius: 15,
-    elevation: 10,
+    borderRadius: 14,
+    marginTop: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#1A0F24',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 12,
     overflow: 'hidden',
   },
   suggestionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: 8,
   },
   suggestionRowBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   suggestionName: {
     fontFamily: FontFamily.semibold,
     fontSize: 14,
-    color: '#0D0D0D',
+    color: '#1C1C1E',
     lineHeight: 18,
   },
   suggestionBrand: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
     color: '#8A8A8E',
-    marginTop: 1,
+    marginTop: 2,
   },
   suggestionTrust: {
     fontFamily: FontFamily.medium,
@@ -1939,12 +2203,12 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   suggestionManual: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FBFAFD',
   },
   suggestionManualTxt: {
     fontFamily: FontFamily.medium,
     fontSize: 13,
-    color: '#5E35B1',
+    color: MY_LAB_VIOLET,
   },
 
   // step 4 action buttons

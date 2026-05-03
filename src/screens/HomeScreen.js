@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiGet, apiReadStaleCache, resolveImagePublicUri } from '../api/client';
+import { apiGet, apiReadStaleCache, getProfileMeCacheStorageKey, resolveImagePublicUri } from '../api/client';
 import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
 import { hapticImpactLight } from '../theme/haptics';
 import { useCurrency } from '../context/CurrencyContext';
@@ -225,26 +225,36 @@ export default function HomeScreen() {
   const [profileMe, setProfileMe] = useState(null);
   const [headerAvatarLoadFailed, setHeaderAvatarLoadFailed] = useState(false);
 
-  const PROFILE_CACHE_KEY = 'colortrack_profile_me_v1';
-
   // Load from AsyncStorage immediately on mount so avatar survives hot reloads
   useEffect(() => {
-    AsyncStorage.getItem(PROFILE_CACHE_KEY).then(raw => {
-      if (!raw) return;
+    const legacy = 'colortrack_profile_me_v1';
+    const k = getProfileMeCacheStorageKey();
+    (async () => {
       try {
+        let raw = await AsyncStorage.getItem(k);
+        if (!raw) {
+          raw = await AsyncStorage.getItem(legacy);
+          if (raw) {
+            await AsyncStorage.setItem(k, raw);
+            await AsyncStorage.removeItem(legacy);
+          }
+        }
+        if (!raw) return;
         const row = JSON.parse(raw);
         if (row && typeof row === 'object') setProfileMe(row);
       } catch {}
-    }).catch(() => {});
+    })();
   }, []);
 
   const loadProfileMe = useCallback((opts) => {
     const forceFresh = opts && opts.force === true;
+    const cacheKey = getProfileMeCacheStorageKey();
     apiGet('/api/me', { allowStaleCache: !forceFresh })
       .then((row) => {
         if (row && typeof row === 'object') {
           setProfileMe(row);
-          AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(row)).catch(() => {});
+          AsyncStorage.setItem(cacheKey, JSON.stringify(row)).catch(() => {});
+          AsyncStorage.removeItem('colortrack_profile_me_v1').catch(() => {});
         }
       })
       .catch(() => {
@@ -256,6 +266,10 @@ export default function HomeScreen() {
     () => resolveImagePublicUri(profileMe?.avatar_url),
     [profileMe?.avatar_url],
   );
+
+  useEffect(() => {
+    setHeaderAvatarLoadFailed(false);
+  }, [headerAvatarUri]);
 
   const refreshHomeDataSilent = useCallback(async () => {
     const ymd = toYMDLocal(selectedDateRef.current);

@@ -25,7 +25,7 @@ import SFIcon from '../components/SFIcon';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { apiGet, apiPost } from '../api/client';
-import { BRAND_PURPLE, BRAND_LILAC, glassPurpleIconBtn } from '../theme/glassUi';
+import { BRAND_PURPLE, BRAND_LILAC, glassPurpleIconBtn, MY_LAB_VIOLET } from '../theme/glassUi';
 import {
   SCHEDULE_BANNER_GRADIENT,
   SCHEDULE_BANNER_GRADIENT_END,
@@ -263,6 +263,55 @@ export default function FormulaBuilderScreen({ route, navigation }) {
   useEffect(() => {
     wizardStepRef.current = wizardStep;
   }, [wizardStep]);
+
+  // ── global product autocomplete ──
+  const [productSuggestions, setProductSuggestions] = useState([]);
+  const [suggestionTargetKey, setSuggestionTargetKey] = useState(null);
+  const productSearchTimer = useRef(null);
+
+  useEffect(() => () => {
+    if (productSearchTimer.current) clearTimeout(productSearchTimer.current);
+  }, []);
+
+  const dismissSuggestions = useCallback(() => {
+    setProductSuggestions([]);
+    setSuggestionTargetKey(null);
+  }, []);
+
+  const searchGlobalProducts = useCallback(async (q, rowKey) => {
+    try {
+      const results = await apiGet(`/api/products/search?q=${encodeURIComponent(q)}`);
+      setSuggestionTargetKey((prev) => prev === rowKey ? rowKey : prev);
+      setProductSuggestions(Array.isArray(results) ? results : []);
+    } catch {
+      setProductSuggestions([]);
+    }
+  }, []);
+
+  const onColourNameChange = useCallback((rowKey, text) => {
+    updateDraftRow(rowKey, { brand: text, inventory_item_id: null, stockLabel: null });
+    setSuggestionTargetKey(rowKey);
+    if (productSearchTimer.current) clearTimeout(productSearchTimer.current);
+    if (text.length >= 2) {
+      productSearchTimer.current = setTimeout(() => searchGlobalProducts(text, rowKey), 300);
+    } else {
+      setProductSuggestions([]);
+    }
+  }, [updateDraftRow, searchGlobalProducts]);
+
+  const onPickGlobalSuggestion = useCallback((suggestion, rowKey) => {
+    const name = `${suggestion.brand} ${suggestion.product_name}`.trim();
+    updateDraftRow(rowKey, {
+      brand: name,
+      shade_code: '',
+      unit: suggestion.unit || 'g',
+      inventory_item_id: null,
+      stockLabel: null,
+    });
+    setProductSuggestions([]);
+    setSuggestionTargetKey(null);
+    Keyboard.dismiss();
+  }, [updateDraftRow]);
 
   // ── inventory picker ──
   const [invPickerOpen, setInvPickerOpen] = useState(false);
@@ -699,7 +748,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         }}
         activeOpacity={0.82}
       >
-        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_LILAC} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={MY_LAB_VIOLET} />
         <Text style={styles.moreColoursBtnTxt}>More colours</Text>
       </TouchableOpacity>
     </View>
@@ -750,7 +799,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         )}
       </TouchableOpacity>
 
-      {/* Manual brand/name — shown when no stock item picked */}
+      {/* Manual brand/name with global product autocomplete */}
       {!row.stockLabel ? (
         <>
           <Text style={styles.fieldLabelOr}>— or type manually —</Text>
@@ -759,11 +808,59 @@ export default function FormulaBuilderScreen({ route, navigation }) {
             placeholder="Brand / name  e.g. Wella Koleston 8/0"
             placeholderTextColor="#8A8A8E"
             value={row.brand}
-            onChangeText={(t) => updateDraftRow(row.key, { brand: t })}
+            onChangeText={(t) => onColourNameChange(row.key, t)}
+            onFocus={() => {
+              if (row.brand.length >= 2 && suggestionTargetKey !== row.key) {
+                setSuggestionTargetKey(row.key);
+                searchGlobalProducts(row.brand, row.key);
+              }
+            }}
             inputAccessoryViewID={iosAccessoryId}
             returnKeyType="done"
-            blurOnSubmit
+            blurOnSubmit={false}
+            onSubmitEditing={dismissSuggestions}
           />
+          {/* Autocomplete dropdown */}
+          {suggestionTargetKey === row.key && (
+            <View style={styles.suggestionBox}>
+              {productSuggestions.length > 0 ? (
+                <>
+                  {productSuggestions.slice(0, 6).map((s, i) => {
+                    const trust = s.confirmed_count >= 10 ? '✓ 10+' : s.confirmed_count >= 3 ? '✓ 3+' : null;
+                    return (
+                      <TouchableOpacity
+                        key={`${s.brand}-${s.product_name}-${i}`}
+                        style={[styles.suggestionRow, i > 0 && styles.suggestionRowBorder]}
+                        onPress={() => onPickGlobalSuggestion(s, row.key)}
+                        activeOpacity={0.75}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.suggestionName} numberOfLines={1}>{s.product_name}</Text>
+                          <Text style={styles.suggestionBrand} numberOfLines={1}>{s.brand}</Text>
+                        </View>
+                        {trust ? <Text style={styles.suggestionTrust}>{trust}</Text> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
+                    style={[styles.suggestionRow, styles.suggestionRowBorder, styles.suggestionManual]}
+                    onPress={dismissSuggestions}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.suggestionManualTxt}>Add manually →</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.suggestionRow}
+                  onPress={dismissSuggestions}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.suggestionManualTxt}>Add manually →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </>
       ) : null}
 
@@ -814,7 +911,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
 
       {/* Add another colour row inline */}
       <TouchableOpacity style={styles.addColourRowBtn} onPress={addDraftRow} activeOpacity={0.82}>
-        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={BRAND_PURPLE} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={20} color={MY_LAB_VIOLET} />
         <Text style={styles.addColourRowBtnTxt}>+ Add another colour</Text>
       </TouchableOpacity>
 
@@ -995,7 +1092,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         onPress={() => { Keyboard.dismiss(); resetDraft(); }}
         activeOpacity={0.85}
       >
-        <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={SCHEDULE_BANNER_LEAD_PINK} />
+        <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={MY_LAB_VIOLET} />
         <Text style={styles.addAnotherBtnTxt}>+ Add another mix</Text>
       </TouchableOpacity>
 
@@ -1065,7 +1162,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                     {item.quantity != null ? `  ·  In stock: ${item.quantity} ${item.unit || ''}` : ''}
                   </Text>
                 </View>
-                <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={BRAND_PURPLE} />
+                <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={MY_LAB_VIOLET} />
               </TouchableOpacity>
             )}
             ListEmptyComponent={
@@ -1606,9 +1703,59 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     color: '#000000',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#C6C6C8',
+    borderColor: '#E5E5EA',
   },
   inputMulti: { minHeight: 80, textAlignVertical: 'top' },
+
+  // global product autocomplete dropdown
+  suggestionBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginTop: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.12,
+    shadowRadius: 15,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  suggestionRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E5EA',
+  },
+  suggestionName: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    color: '#0D0D0D',
+    lineHeight: 18,
+  },
+  suggestionBrand: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: '#8A8A8E',
+    marginTop: 1,
+  },
+  suggestionTrust: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: '#00A86B',
+    flexShrink: 0,
+  },
+  suggestionManual: {
+    backgroundColor: '#FAFAFA',
+  },
+  suggestionManualTxt: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#5E35B1',
+  },
 
   // step 4 action buttons
   addAnotherBtn: {

@@ -3383,7 +3383,11 @@ function ensureInitialized() {
       }
       await ensureSchema(getSql());
       await ensureBootstrapStaff(getSql());
-    })();
+    })().catch((e) => {
+      // Reset so the next request retries init instead of permanently failing
+      initPromise = null;
+      throw e;
+    });
   }
   return initPromise;
 }

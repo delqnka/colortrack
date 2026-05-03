@@ -278,6 +278,23 @@ async function ensureSchema(sql) {
   `;
 
   await sql`CREATE INDEX IF NOT EXISTS idx_lab_templates_salon ON lab_formula_templates (salon_id)`;
+
+  // Global crowdsourced product database.
+  // Privacy: stores ONLY brand + product_name + unit. No user_id, no price, no location.
+  // Contributions from invoice scans are fully anonymous.
+  await sql`
+    CREATE TABLE IF NOT EXISTS global_products (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      brand VARCHAR(100) NOT NULL,
+      product_name VARCHAR(200) NOT NULL,
+      unit VARCHAR(10) NOT NULL DEFAULT 'g',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      confirmed_count INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(brand, product_name)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_global_products_brand ON global_products(brand)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_global_products_count ON global_products(confirmed_count DESC)`;
 }
 
 module.exports = { ensureSchema };

@@ -932,6 +932,67 @@ app.post('/api/clients/:id/avatar/commit', async (req, res, next) => {
   }
 });
 
+// GET /api/products/search?q=koleston&brand=Wella
+// Returns global crowdsourced products (confirmed_count >= 3) ordered by popularity.
+// No auth required — data is fully anonymous (no user info stored).
+app.get('/api/products/search', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    const brandRaw = String(req.query.brand || '').trim().slice(0, 100);
+    if (!q && !brandRaw) return res.json([]);
+    const sql = getSql();
+    const brand = brandRaw ? normalizeBrand(brandRaw) || brandRaw : null;
+    // Use LIKE for short queries (tsquery needs ≥2 meaningful tokens)
+    const useTsQuery = q.length >= 3;
+    let rows;
+    if (brand && q) {
+      rows = useTsQuery
+        ? await sql`
+            SELECT brand, product_name, unit, confirmed_count
+            FROM global_products
+            WHERE confirmed_count >= 3
+              AND lower(brand) = lower(${brand})
+              AND (lower(product_name) LIKE ${'%' + q.toLowerCase() + '%'}
+                   OR to_tsvector('english', product_name) @@ plainto_tsquery('english', ${q}))
+            ORDER BY confirmed_count DESC LIMIT 25`
+        : await sql`
+            SELECT brand, product_name, unit, confirmed_count
+            FROM global_products
+            WHERE confirmed_count >= 3
+              AND lower(brand) = lower(${brand})
+              AND lower(product_name) LIKE ${'%' + q.toLowerCase() + '%'}
+            ORDER BY confirmed_count DESC LIMIT 25`;
+    } else if (brand) {
+      rows = await sql`
+        SELECT brand, product_name, unit, confirmed_count
+        FROM global_products
+        WHERE confirmed_count >= 3
+          AND lower(brand) = lower(${brand})
+        ORDER BY confirmed_count DESC LIMIT 25`;
+    } else {
+      rows = useTsQuery
+        ? await sql`
+            SELECT brand, product_name, unit, confirmed_count
+            FROM global_products
+            WHERE confirmed_count >= 3
+              AND (lower(product_name) LIKE ${'%' + q.toLowerCase() + '%'}
+                   OR lower(brand) LIKE ${'%' + q.toLowerCase() + '%'}
+                   OR to_tsvector('english', product_name) @@ plainto_tsquery('english', ${q}))
+            ORDER BY confirmed_count DESC LIMIT 25`
+        : await sql`
+            SELECT brand, product_name, unit, confirmed_count
+            FROM global_products
+            WHERE confirmed_count >= 3
+              AND (lower(product_name) LIKE ${'%' + q.toLowerCase() + '%'}
+                   OR lower(brand) LIKE ${'%' + q.toLowerCase() + '%'})
+            ORDER BY confirmed_count DESC LIMIT 25`;
+    }
+    res.json(Array.isArray(rows) ? rows : []);
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.get('/api/inventory', async (req, res, next) => {
   try {
     const sql = getSql();
@@ -967,6 +1028,63 @@ function sanitizeInventoryText(raw, max = 200) {
   if (typeof raw !== 'string') return null;
   const t = raw.trim().replace(/\s+/g, ' ').slice(0, max);
   return t || null;
+}
+
+// ── Global product database helpers ─────────────────────────────────────────
+
+const BRAND_ALIASES = new Map(Object.entries({
+  'alfaparf': 'Alfaparf', 'alfaparf milano': 'Alfaparf',
+  'wella': 'Wella', 'wella professionals': 'Wella', 'wella professional': 'Wella',
+  "l'oreal": "L'Oréal", 'loreal': "L'Oréal", "l'oreal professionnel": "L'Oréal",
+  "l'oréal": "L'Oréal", "l'oréal professionnel": "L'Oréal", "loreal professionnel": "L'Oréal",
+  'schwarzkopf': 'Schwarzkopf', 'schwarzkopf professional': 'Schwarzkopf',
+  'schwarzkopf prof': 'Schwarzkopf', 'schwarzkopf prof.': 'Schwarzkopf',
+  'redken': 'Redken',
+  'matrix': 'Matrix',
+  'kerastase': 'Kérastase', 'kérastase': 'Kérastase',
+  'olaplex': 'Olaplex',
+  'goldwell': 'Goldwell',
+  'joico': 'Joico',
+  'paul mitchell': 'Paul Mitchell',
+  'revlon': 'Revlon', 'revlon professional': 'Revlon Professional',
+  'fanola': 'Fanola',
+  'pravana': 'Pravana',
+  'kenra': 'Kenra',
+  'ion': 'Ion',
+  'igora': 'Igora',
+}));
+
+function normalizeBrand(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const cleaned = raw.trim().replace(/\s+/g, ' ');
+  if (cleaned.length < 2 || cleaned.length > 100) return cleaned.length >= 2 ? cleaned.slice(0, 100) : null;
+  const alias = BRAND_ALIASES.get(cleaned.toLowerCase());
+  if (alias) return alias;
+  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Privacy: stores ONLY brand + product_name + unit. No user_id, no price, no location.
+// Contributions are fully anonymous — never call this with any user-identifying data.
+async function upsertGlobalProduct(sql, brand, productName, unit) {
+  try {
+    const b = normalizeBrand(brand);
+    const p = typeof productName === 'string'
+      ? productName.trim().replace(/\s+/g, ' ').replace(/[<>'";&]/g, '').slice(0, 200)
+      : null;
+    if (!b || !p || p.length < 2) return;
+    const validUnits = new Set(['g', 'ml', 'oz', 'l', 'kg', 'pcs', 'pc', 'pack']);
+    const u = validUnits.has(String(unit || '').trim().toLowerCase())
+      ? String(unit).trim().toLowerCase()
+      : 'g';
+    await sql`
+      INSERT INTO global_products (brand, product_name, unit)
+      VALUES (${b}, ${p}, ${u})
+      ON CONFLICT (brand, product_name)
+      DO UPDATE SET confirmed_count = global_products.confirmed_count + 1
+    `;
+  } catch {
+    // fire-and-forget — never surface global DB errors to the user
+  }
 }
 
 function normalizeInventoryCategory(raw) {
@@ -1353,6 +1471,7 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
       INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
       VALUES (${match[0].id}, ${item.quantity}, ${'invoice'}, NULL)
     `;
+    upsertGlobalProduct(sql, item.brand, item.name, item.unit).catch(() => {});
     return { ...rows[0], import_action: 'updated' };
   }
 
@@ -1372,6 +1491,7 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
     INSERT INTO inventory_movements (inventory_item_id, delta, reason, visit_id)
     VALUES (${rows[0].id}, ${item.quantity}, ${'invoice'}, NULL)
   `;
+  upsertGlobalProduct(sql, item.brand, item.name, item.unit).catch(() => {});
   return { ...rows[0], import_action: 'created' };
 }
 

@@ -601,7 +601,8 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         ]);
       }
       if (retailPurchase === 'yes') {
-        navigation.replace('TodaySales', { clientId, clientName: pickedClientLabel });
+        navigation.goBack();
+        navigation.navigate('TodaySales', { clientId, clientName: pickedClientLabel });
       } else {
         navigation.goBack();
       }
@@ -1217,7 +1218,9 @@ export default function FormulaBuilderScreen({ route, navigation }) {
         {submitting ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.saveBtnTxt}>Save visit ✓</Text>
+          <Text style={styles.saveBtnTxt}>
+            {retailPurchase === 'yes' ? 'Save & log sale →' : 'Save visit ✓'}
+          </Text>
         )}
       </TouchableOpacity>
 

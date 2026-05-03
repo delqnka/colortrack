@@ -6,7 +6,7 @@ const cors = require('cors');
 const { neon } = require('@neondatabase/serverless');
 const { ensureSchema } = require('./schemaEnsure');
 const r2 = require('./r2');
-const pdfParse = require('pdf-parse');
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 const {
   authMiddleware,
   ensureBootstrapStaff,

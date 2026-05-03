@@ -226,6 +226,7 @@ export default function InventoryScreen({ navigation }) {
   const [previewRows, setPreviewRows] = useState([]);
   const [savingImport, setSavingImport] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState('stock');
+  const [activeSubcategory, setActiveSubcategory] = useState(null); // null = All
   const [lowListOpen, setLowListOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [inventorySearchOpen, setInventorySearchOpen] = useState(false);
@@ -262,13 +263,30 @@ export default function InventoryScreen({ navigation }) {
     return rows.filter((item) => itemMatchesInventorySearch(item, inventorySearchNorm));
   }, [rows, filteredRows, inventorySearchNorm]);
 
-  // In Colors view: group by category (dye/oxidant/etc.)
-  // In Stock/Retail view: group by custom_subcategory when set, else flat ('_all')
   const useSubcategoryGrouping = inventoryFilter === 'stock' || inventoryFilter === 'retail';
+
+  // All unique subcategories present in the current filtered set (for pill row)
+  const availableSubcategories = useMemo(() => {
+    if (!useSubcategoryGrouping) return [];
+    const seen = new Set();
+    for (const item of filteredRows) {
+      const s = item.custom_subcategory?.trim();
+      if (s) seen.add(s);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [filteredRows, useSubcategoryGrouping]);
+
+  // Apply subcategory pill filter on top of the tab filter
+  const subcategoryFilteredRows = useMemo(() => {
+    if (!useSubcategoryGrouping || !activeSubcategory) return searchFilteredRows;
+    return searchFilteredRows.filter(
+      (item) => (item.custom_subcategory?.trim() || null) === activeSubcategory,
+    );
+  }, [searchFilteredRows, useSubcategoryGrouping, activeSubcategory]);
 
   const grouped = useMemo(() => {
     const m = {};
-    for (const item of searchFilteredRows) {
+    for (const item of subcategoryFilteredRows) {
       const key = useSubcategoryGrouping
         ? (item.custom_subcategory?.trim() || '_all')
         : inventoryCategoryKey(item.category);
@@ -276,7 +294,7 @@ export default function InventoryScreen({ navigation }) {
       m[key].push(item);
     }
     return m;
-  }, [searchFilteredRows, useSubcategoryGrouping]);
+  }, [subcategoryFilteredRows, useSubcategoryGrouping]);
 
   const sectionKeys = useMemo(() => {
     if (useSubcategoryGrouping) {
@@ -614,7 +632,7 @@ export default function InventoryScreen({ navigation }) {
             <TouchableOpacity
               key={option.key}
               style={[styles.filterCard, selected && styles.filterCardOn]}
-              onPress={() => setInventoryFilter(option.key)}
+              onPress={() => { setInventoryFilter(option.key); setActiveSubcategory(null); }}
               activeOpacity={0.86}
             >
               <TouchableOpacity
@@ -665,6 +683,34 @@ export default function InventoryScreen({ navigation }) {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND_ACCENT} />
           }
         >
+          {/* Subcategory filter pills — Stock and Retail tabs only */}
+          {useSubcategoryGrouping && availableSubcategories.length > 0 && !inventorySearchNorm ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.subcatPillRow}
+              style={styles.subcatPillScroll}
+            >
+              <TouchableOpacity
+                style={[styles.subcatPill, !activeSubcategory && styles.subcatPillOn]}
+                onPress={() => setActiveSubcategory(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.subcatPillTxt, !activeSubcategory && styles.subcatPillTxtOn]}>All</Text>
+              </TouchableOpacity>
+              {availableSubcategories.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.subcatPill, activeSubcategory === s && styles.subcatPillOn]}
+                  onPress={() => setActiveSubcategory(activeSubcategory === s ? null : s)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.subcatPillTxt, activeSubcategory === s && styles.subcatPillTxtOn]}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+
           {primaryLowStockItem && !inventorySearchNorm ? (
             <TouchableOpacity
               style={styles.lowBanner}
@@ -1284,6 +1330,28 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   scroll: { paddingHorizontal: 24, paddingBottom: 24, backgroundColor: '#FFFFFF' },
+  subcatPillScroll: { flexGrow: 0, marginBottom: 12 },
+  subcatPillRow: { paddingHorizontal: 24, gap: 8, flexDirection: 'row', alignItems: 'center' },
+  subcatPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+  },
+  subcatPillOn: {
+    backgroundColor: '#0D0D0D',
+    borderColor: '#0D0D0D',
+  },
+  subcatPillTxt: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#0D0D0D',
+  },
+  subcatPillTxtOn: {
+    color: '#FFFFFF',
+  },
   lowBanner: {
     height: 48,
     borderRadius: 12,

@@ -333,73 +333,29 @@ export default function InventoryItemScreen({ route, navigation }) {
             onChangeText={setBrandStr}
           />
 
-          {/* ── Subcategory — only for non-color products ── */}
-          {!isColorProduct ? (
-            <>
-              <Text style={styles.label}>Subcategory</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Shampoos, Styling, Thermal protection"
-                placeholderTextColor="#AEAEB2"
-                value={subcategoryStr}
-                onChangeText={setSubcategoryStr}
-                autoCapitalize="words"
-              />
-              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
-                <View style={styles.subSuggestions}>
-                  {subcategorySuggestions.slice(0, 6).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={styles.subSuggestionChip}
-                      onPress={() => setSubcategoryStr(s)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.subSuggestionTxt}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
-            </>
-          ) : null}
-
-          {/* ── Color-specific: category chips + shade + size ── */}
-          {isColorProduct ? (
-            <>
-              <View style={styles.labelRow}>
-                <Text style={styles.labelInRow}>Type</Text>
-              </View>
-              <View style={styles.chips}>
-                {COLOR_CATEGORY_OPTIONS.map((c) => {
-                  const chipOn = categoryPreset === c.key;
-                  return (
-                    <TouchableOpacity
-                      key={c.key}
-                      style={[styles.chip, chipOn && styles.chipOn]}
-                      onPress={() => { setCategoryPreset(c.key); setCategoryCustom(''); }}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.chipTxt, chipOn && styles.chipTxtOn]}>{c.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <Text style={styles.label}>{detailLabel}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#AEAEB2"
-                value={shadeStr}
-                onChangeText={setShadeStr}
-              />
-              <Text style={styles.label}>Volume / size  <Text style={styles.labelHint}>(e.g. 60 ml, 500 g)</Text></Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#AEAEB2"
-                value={packageSizeStr}
-                onChangeText={setPackageSizeStr}
-              />
-            </>
+          {/* ── Subcategory ── */}
+          <Text style={styles.label}>Subcategory</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Shampoos, Styling, Thermal protection"
+            placeholderTextColor="#AEAEB2"
+            value={subcategoryStr}
+            onChangeText={setSubcategoryStr}
+            autoCapitalize="words"
+          />
+          {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
+            <View style={styles.subSuggestions}>
+              {subcategorySuggestions.slice(0, 6).map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={styles.subSuggestionChip}
+                  onPress={() => setSubcategoryStr(s)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.subSuggestionTxt}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           ) : null}
 
           {/* ── Price ── */}

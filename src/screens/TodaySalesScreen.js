@@ -112,10 +112,12 @@ export default function TodaySalesScreen({ navigation }) {
   const onPickProduct = (item) => {
     setSelectedProduct(item);
     setProductQuery('');
-    if (item.sell_price_cents != null) {
-      setAmountStr(String(item.sell_price_cents / 100).replace(/\.00$/, ''));
-    }
     setDescStr(item.name);
+    if (item.sell_price_cents != null && item.sell_price_cents > 0) {
+      setAmountStr(String(item.sell_price_cents / 100).replace(/\.00$/, ''));
+    } else {
+      setAmountStr('');
+    }
   };
 
   const submit = async () => {
@@ -274,6 +276,7 @@ export default function TodaySalesScreen({ navigation }) {
                     value={amountStr}
                     onChangeText={setAmountStr}
                     keyboardType="decimal-pad"
+                    selectTextOnFocus
                   />
                 </View>
                 <View style={s.qtyBlock}>

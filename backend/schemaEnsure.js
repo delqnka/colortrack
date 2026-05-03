@@ -305,6 +305,16 @@ async function ensureSchema(sql) {
       UNIQUE(brand, product_name)
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS auth_rate_limit (
+      id SERIAL PRIMARY KEY,
+      key TEXT NOT NULL,
+      attempts INT NOT NULL DEFAULT 1,
+      window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(key)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_auth_rate_limit_key ON auth_rate_limit(key)`;
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS custom_subcategory TEXT`;
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sell_price_cents BIGINT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_global_products_brand ON global_products(brand)`;

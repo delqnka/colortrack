@@ -44,6 +44,7 @@ export default function OnboardingEmailScreen({ navigation, onLoggedIn, route })
   function mapErr(message) {
     const m = String(message || '').toLowerCase();
     if (m.includes('network') || m.includes('failed to fetch')) return 'No internet connection.';
+    if (m === 'too_many_attempts' || m.includes('too many')) return 'Too many attempts. Try again in 15 minutes.';
     if (m === 'conflict' || m.includes('already')) return 'This email is already registered.';
     if (m === 'unauthorized' || m === 'bad_credentials' || m.includes('invalid') || m.includes('bad_request')) return 'Incorrect email or password.';
     return message || 'Something went wrong.';

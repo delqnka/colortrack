@@ -41,7 +41,12 @@ app.use(authGate);
 
 app.post('/api/auth/register', async (req, res, next) => {
   try {
-    await registerHandler(getSql(), req, res);
+    const sql = getSql();
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+    if (await checkRateLimit(sql, `register:${ip}`, 5, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'too_many_attempts', message: 'Too many registration attempts. Try again later.' });
+    }
+    await registerHandler(sql, req, res);
   } catch (e) {
     next(e);
   }
@@ -49,7 +54,21 @@ app.post('/api/auth/register', async (req, res, next) => {
 
 app.post('/api/auth/login', async (req, res, next) => {
   try {
-    await loginHandler(getSql(), req, res);
+    const sql = getSql();
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+    // Rate limit by email (10 attempts / 15 min) and by IP (30 attempts / 15 min)
+    if (
+      (email && await checkRateLimit(sql, `login:email:${email}`, 10, 15 * 60 * 1000)) ||
+      await checkRateLimit(sql, `login:ip:${ip}`, 30, 15 * 60 * 1000)
+    ) {
+      return res.status(429).json({ error: 'too_many_attempts', message: 'Too many login attempts. Try again in 15 minutes.' });
+    }
+    await loginHandler(sql, req, res);
+    // Clear rate limit on successful login (loginHandler sets the response)
+    if (res.headersSent && res.statusCode === 200 && email) {
+      clearRateLimit(sql, `login:email:${email}`).catch(() => {});
+    }
   } catch (e) {
     next(e);
   }
@@ -376,6 +395,42 @@ function getSql() {
     throw err;
   }
   return neon(url);
+}
+
+/**
+ * DB-backed rate limiter — works across all Vercel serverless instances.
+ * key: e.g. 'login:email@example.com' or 'login:ip:1.2.3.4'
+ * maxAttempts: max hits allowed in windowMs
+ * windowMs: sliding window in milliseconds
+ * Returns true if limit exceeded (caller should return 429).
+ */
+async function checkRateLimit(sql, key, maxAttempts = 10, windowMs = 15 * 60 * 1000) {
+  try {
+    const windowStart = new Date(Date.now() - windowMs);
+    const rows = await sql`
+      INSERT INTO auth_rate_limit (key, attempts, window_start)
+      VALUES (${key}, 1, NOW())
+      ON CONFLICT (key) DO UPDATE SET
+        attempts = CASE
+          WHEN auth_rate_limit.window_start < ${windowStart}
+          THEN 1
+          ELSE auth_rate_limit.attempts + 1
+        END,
+        window_start = CASE
+          WHEN auth_rate_limit.window_start < ${windowStart}
+          THEN NOW()
+          ELSE auth_rate_limit.window_start
+        END
+      RETURNING attempts
+    `;
+    return Number(rows[0]?.attempts) > maxAttempts;
+  } catch {
+    return false; // never block on rate-limit errors
+  }
+}
+
+async function clearRateLimit(sql, key) {
+  try { await sql`DELETE FROM auth_rate_limit WHERE key = ${key}`; } catch {}
 }
 
 app.get('/health', async (req, res, next) => {

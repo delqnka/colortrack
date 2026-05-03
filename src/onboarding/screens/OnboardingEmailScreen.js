@@ -45,7 +45,7 @@ export default function OnboardingEmailScreen({ navigation, onLoggedIn, route })
     const m = String(message || '').toLowerCase();
     if (m.includes('network') || m.includes('failed to fetch')) return 'No internet connection.';
     if (m === 'conflict' || m.includes('already')) return 'This email is already registered.';
-    if (m === 'bad_credentials' || m.includes('invalid') || m.includes('bad_request')) return 'Incorrect email or password.';
+    if (m === 'unauthorized' || m === 'bad_credentials' || m.includes('invalid') || m.includes('bad_request')) return 'Incorrect email or password.';
     return message || 'Something went wrong.';
   }
 

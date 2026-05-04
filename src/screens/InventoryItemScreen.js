@@ -510,7 +510,7 @@ export default function InventoryItemScreen({ route, navigation }) {
             {categoryPreset === 'retail' ? `Cost price (${currency})` : `Price (${currency})`}
           </Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputCompact]}
             placeholder="0.00"
             placeholderTextColor="#AEAEB2"
             value={priceStr}
@@ -529,7 +529,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               <>
                 <Text style={styles.label}>Sell price ({currency})</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.inputCompact]}
                   placeholder="0.00"
                   placeholderTextColor="#AEAEB2"
                   value={sellPriceStr}
@@ -550,7 +550,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           <Text style={styles.label}>Stock</Text>
           <View style={styles.stockRow}>
             <TextInput
-              style={[styles.input, styles.stockQtyInput]}
+              style={[styles.input, styles.inputCompact, styles.stockQtyInput]}
               placeholder="0"
               placeholderTextColor="#AEAEB2"
               value={qtyStr}
@@ -574,7 +574,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           {/* ── Low stock ── */}
           <Text style={styles.label}>Low stock alert at  <Text style={styles.labelHint}>(notify when below)</Text></Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputCompact]}
             placeholder="0"
             placeholderTextColor="#AEAEB2"
             value={threshStr}
@@ -810,6 +810,10 @@ const styles = StyleSheet.create({
     color: '#0D0D0D',
     marginBottom: 4,
     ...reliefShadow,
+  },
+  inputCompact: {
+    paddingVertical: 9,
+    fontSize: 15,
   },
   chips: {
     flexDirection: 'row',

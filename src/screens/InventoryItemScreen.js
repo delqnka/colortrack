@@ -506,17 +506,20 @@ export default function InventoryItemScreen({ route, navigation }) {
           ) : null}
 
           {/* ── Price (cost) ── */}
-          <Text style={styles.label}>
-            {categoryPreset === 'retail' ? `Cost price (${currency})` : `Price (${currency})`}
-          </Text>
-          <TextInput
-            style={[styles.input, styles.inputCompact]}
-            placeholder="0.00"
-            placeholderTextColor="#AEAEB2"
-            value={priceStr}
-            onChangeText={setPriceStr}
-            keyboardType="decimal-pad"
-          />
+          <View style={styles.inlineRow}>
+            <Text style={styles.inlineLabel}>
+              {categoryPreset === 'retail' ? `Cost price (${currency})` : `Price (${currency})`}
+            </Text>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              placeholder="0.00"
+              placeholderTextColor="#AEAEB2"
+              value={priceStr}
+              onChangeText={setPriceStr}
+              keyboardType="decimal-pad"
+              textAlign="right"
+            />
+          </View>
 
           {/* ── Sell price + margin — retail only ── */}
           {categoryPreset === 'retail' ? (() => {
@@ -527,15 +530,18 @@ export default function InventoryItemScreen({ route, navigation }) {
               : null;
             return (
               <>
-                <Text style={styles.label}>Sell price ({currency})</Text>
-                <TextInput
-                  style={[styles.input, styles.inputCompact]}
-                  placeholder="0.00"
-                  placeholderTextColor="#AEAEB2"
-                  value={sellPriceStr}
-                  onChangeText={setSellPriceStr}
-                  keyboardType="decimal-pad"
-                />
+                <View style={styles.inlineRow}>
+                  <Text style={styles.inlineLabel}>Sell price ({currency})</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputInline]}
+                    placeholder="0.00"
+                    placeholderTextColor="#AEAEB2"
+                    textAlign="right"
+                    value={sellPriceStr}
+                    onChangeText={setSellPriceStr}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
                 {marginPct != null ? (
                   <View style={styles.marginRow}>
                     <Text style={styles.marginTxt}>Margin  </Text>
@@ -547,40 +553,46 @@ export default function InventoryItemScreen({ route, navigation }) {
           })() : null}
 
           {/* ── Unit + Quantity inline ── */}
-          <Text style={styles.label}>Stock</Text>
-          <View style={styles.stockRow}>
-            <TextInput
-              style={[styles.input, styles.inputCompact, styles.stockQtyInput]}
-              placeholder="0"
-              placeholderTextColor="#AEAEB2"
-              value={qtyStr}
-              onChangeText={setQtyStr}
-              keyboardType="decimal-pad"
-            />
-            <View style={styles.unitChips}>
-              {(isDeveloperItem ? ['ml', 'oz'] : UNIT_OPTIONS).map((u) => (
-                <TouchableOpacity
-                  key={u}
-                  style={[styles.chip, unit === u && styles.chipOn]}
-                  onPress={() => setUnit(u)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
-                </TouchableOpacity>
-              ))}
+          <View style={styles.inlineRow}>
+            <Text style={styles.inlineLabel}>Stock</Text>
+            <View style={styles.stockRowInline}>
+              <TextInput
+                style={[styles.input, styles.inputInline]}
+                placeholder="0"
+                placeholderTextColor="#AEAEB2"
+                value={qtyStr}
+                onChangeText={setQtyStr}
+                keyboardType="decimal-pad"
+                textAlign="right"
+              />
+              <View style={styles.unitChips}>
+                {(isDeveloperItem ? ['ml', 'oz'] : UNIT_OPTIONS).map((u) => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.chip, unit === u && styles.chipOn]}
+                    onPress={() => setUnit(u)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
 
           {/* ── Low stock ── */}
-          <Text style={styles.label}>Low stock alert at  <Text style={styles.labelHint}>(notify when below)</Text></Text>
-          <TextInput
-            style={[styles.input, styles.inputCompact]}
-            placeholder="0"
-            placeholderTextColor="#AEAEB2"
-            value={threshStr}
-            onChangeText={setThreshStr}
-            keyboardType="decimal-pad"
-          />
+          <View style={styles.inlineRow}>
+            <Text style={styles.inlineLabel}>Low stock at</Text>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              placeholder="0"
+              placeholderTextColor="#AEAEB2"
+              value={threshStr}
+              onChangeText={setThreshStr}
+              keyboardType="decimal-pad"
+              textAlign="right"
+            />
+          </View>
 
           {/* ── Note (edit only) ── */}
           {isEdit ? (
@@ -814,6 +826,30 @@ const styles = StyleSheet.create({
   inputCompact: {
     paddingVertical: 9,
     fontSize: 15,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
+  inlineLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    color: '#0D0D0D',
+    flex: 1,
+  },
+  inputInline: {
+    width: 110,
+    marginBottom: 0,
+    paddingVertical: 9,
+    textAlign: 'right',
+  },
+  stockRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   chips: {
     flexDirection: 'row',

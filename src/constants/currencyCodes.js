@@ -37,6 +37,24 @@ export function currencyCodeIsSupported(code) {
   return memoSet.has(up);
 }
 
+/** Narrow symbol for UI (e.g. €, $); falls back to empty if Intl fails. */
+export function getCurrencySymbol(code) {
+  try {
+    const parts = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: String(code || '').toUpperCase(),
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+      currencyDisplay: 'narrowSymbol',
+    }).formatToParts(1);
+    const sym = parts.find((p) => p.type === 'currency')?.value || '';
+    const up = String(code || '').trim().toUpperCase();
+    return sym && sym !== up ? sym : '';
+  } catch {
+    return '';
+  }
+}
+
 export function normalizeCurrencyCode(code, fallback = 'USD') {
   const up = typeof code === 'string' ? code.trim().toUpperCase() : '';
   return currencyCodeIsSupported(up) ? up : fallback;

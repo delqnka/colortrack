@@ -11,7 +11,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { parseISODateToLocal, formatDisplayDate } from '../lib/formatDate';
-import { BRAND_PURPLE } from '../theme/glassUi';
+import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
 import { typeLh } from '../theme/typography';
 
@@ -80,7 +80,7 @@ export default function IsoDatePickField({
             accessibilityRole="button"
             accessibilityLabel="Clear date"
           >
-            <Ionicons name="close-circle" size={22} color="#8E8E93" />
+            <Ionicons name="close-circle-outline" size={22} color={MY_LAB_VIOLET} />
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity

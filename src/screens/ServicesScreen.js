@@ -13,12 +13,12 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
-import { glassPurpleIconBtn } from '../theme/glassUi';
+import { glassPurpleIconBtn, MY_LAB_VIOLET } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import { useCurrency } from '../context/CurrencyContext';
@@ -377,7 +377,7 @@ export default function ServicesScreen({ navigation }) {
                   />
                   <Text style={styles.currencyLabel}>{currency}</Text>
                   <TouchableOpacity onPress={() => removePreviewRow(row.key)} hitSlop={8}>
-                    <Ionicons name="close-circle" size={22} color="#1C1C1E" />
+                    <Ionicons name="close-circle-outline" size={22} color={MY_LAB_VIOLET} />
                   </TouchableOpacity>
                 </View>
               ))}

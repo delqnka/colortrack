@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 function CheckRow({ label, checked, onPress, style }) {
   return (
@@ -72,11 +72,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { apiGet, apiPatch, apiPost } from '../api/client';
+import { apiGet, apiPatch, apiPost, apiDelete } from '../api/client';
+import ProductTypeComboField from '../components/ProductTypeComboField';
 import { glassPurpleIconBtn, MY_LAB_VIOLET } from '../theme/glassUi';
 import { useCurrency } from '../context/CurrencyContext';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
+import { inventoryCategoryKey, isColorItem } from '../inventory/inventoryCategories';
 
 const COLOR_CATEGORY_OPTIONS = [
   { key: 'dye', label: 'Color' },
@@ -94,13 +96,63 @@ const GENERAL_CATEGORY_OPTIONS = [
 const PRESET_CATEGORY_KEYS = new Set(GENERAL_CATEGORY_OPTIONS.map((c) => c.key));
 const COLOR_CATEGORY_KEYS = new Set(COLOR_CATEGORY_OPTIONS.map((c) => c.key));
 
+function normalizeInventoryRowId(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const t = Math.trunc(v);
+    return t > 0 && t <= Number.MAX_SAFE_INTEGER ? t : null;
+  }
+  const s = String(v).trim();
+  if (!/^\d{1,12}$/.test(s)) return null;
+  const n = parseInt(s, 10);
+  return n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
+}
+
+/** Prefer server row id so DELETE/PATCH match the loaded item (avoids stale route params). */
+function inventoryPersistId(row, routeItemId) {
+  const fromRow = normalizeInventoryRowId(row?.id);
+  const fromRoute = normalizeInventoryRowId(routeItemId);
+  if (fromRow != null) return fromRow;
+  if (fromRoute != null) return fromRoute;
+  return null;
+}
+
 const UNIT_OPTIONS = ['g', 'ml', 'pcs', 'oz'];
+const TUBE_UNIT_OPTIONS = ['g', 'ml', 'oz'];
+const STOCK_BOTTLE_UNITS = ['ml', 'oz'];
+
+/** Same rules as Inventory → Stock tab (excludes retail, developer, colour lines). */
+function isStockTabInventoryItem(row) {
+  if (!row) return false;
+  if (inventoryCategoryKey(row.category) === 'retail') return false;
+  if (inventoryCategoryKey(row.category) === 'oxidant') return false;
+  if (isColorItem(row)) return false;
+  return true;
+}
+
+function parseTubePackageSize(packageSize) {
+  const s = String(packageSize || '').trim();
+  const m = s.match(/^([\d.,]+)\s*(g|ml|oz)\s*$/i);
+  if (!m) return { amount: '', unit: 'ml', raw: s };
+  const u = m[2].toLowerCase();
+  return { amount: m[1].replace(',', '.'), unit: u === 'g' || u === 'ml' || u === 'oz' ? u : 'ml', raw: '' };
+}
 
 function numToStr(v) {
   if (v == null || v === '') return '';
   const n = Number(v);
   if (!Number.isFinite(n)) return String(v);
   return String(n);
+}
+
+function applyIntegerDraftChange(setter, text) {
+  const d = String(text ?? '').replace(/[^\d]/g, '');
+  if (d === '') {
+    setter('');
+    return;
+  }
+  const n = parseInt(d, 10);
+  setter(Number.isFinite(n) ? String(n) : '');
 }
 
 function priceTextFromCents(cents) {
@@ -127,6 +179,7 @@ function fmtWhen(iso) {
 function labelForDetailField(categoryPreset, categoryCustom) {
   if (categoryCustom.trim()) return 'Product detail';
   if (categoryPreset === 'oxidant') return 'Volume / %';
+  if (categoryPreset === 'dye') return 'Shade / code';
   if (categoryPreset === 'mixtone' || categoryPreset === 'toner') return 'Shade / code';
   if (categoryPreset === 'retail') return 'SKU / code';
   if (categoryPreset === 'consumable') return 'Size / spec';
@@ -145,10 +198,27 @@ function customCategoriesFromInventory(rows) {
   return rows.reduce((out, row) => addUniqueCategory(out, row?.category), []);
 }
 
+function subcategoriesApiPath(category) {
+  const c = String(category || '').trim();
+  if (c === 'retail' || c === 'consumable') {
+    return `/api/inventory/subcategories?category=${encodeURIComponent(c)}`;
+  }
+  return '/api/inventory/subcategories';
+}
+
+/** Chips for retail/stock/mixtone lines — not developer/dye formula buckets. */
+function subcategorySuggestionsForProductTypeChips(suggestions) {
+  if (!Array.isArray(suggestions)) return [];
+  return suggestions.filter((s) => {
+    const t = String(s).trim().toLowerCase();
+    return t !== 'ammonia' && t !== 'non-ammonia';
+  });
+}
+
 export default function InventoryItemScreen({ route, navigation }) {
   const { currency } = useCurrency();
   const itemId = route.params?.itemId;
-  const isEdit = Number.isFinite(Number(itemId)) && Number(itemId) > 0;
+  const isEdit = normalizeInventoryRowId(itemId) != null;
   const initialCategory = typeof route.params?.initialCategory === 'string' ? route.params.initialCategory : '';
   const initialPresetCategory = PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : 'consumable';
   const initialCategoryMode =
@@ -156,7 +226,6 @@ export default function InventoryItemScreen({ route, navigation }) {
 
   const [item, setItem] = useState(null);
   const [movements, setMovements] = useState([]);
-  const [nameStr, setNameStr] = useState('');
   const [brandStr, setBrandStr] = useState('');
   const [shadeStr, setShadeStr] = useState('');
   const [packageSizeStr, setPackageSizeStr] = useState('');
@@ -170,29 +239,68 @@ export default function InventoryItemScreen({ route, navigation }) {
   const [unit, setUnit] = useState('g');
   const [supplierStr, setSupplierStr] = useState('');
   const [subcategoryStr, setSubcategoryStr] = useState('');
-  // Developer-specific
+  // Developer + dye (color): ammonia / tube size
   const [ammoniaType, setAmmoniaType] = useState(null); // 'ammonia' | 'non-ammonia' | null
   const [strengthMode, setStrengthMode] = useState('percent'); // 'percent' | 'vol'
+  const [tubeAmountStr, setTubeAmountStr] = useState('');
+  const [tubeSizeUnit, setTubeSizeUnit] = useState('ml');
   const [subcategorySuggestions, setSubcategorySuggestions] = useState([]);
   const [qtyStr, setQtyStr] = useState('');
   const [threshStr, setThreshStr] = useState('');
   const [reasonStr, setReasonStr] = useState('');
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const loadedInventoryIdRef = useRef(null);
 
   const load = useCallback(async () => {
     if (!isEdit) return;
+    loadedInventoryIdRef.current = null;
     setLoading(true);
     try {
+      const routePk = normalizeInventoryRowId(itemId);
+      if (routePk == null) {
+        Alert.alert('', 'Load failed');
+        navigation.goBack();
+        return;
+      }
       const [row, hist] = await Promise.all([
-        apiGet(`/api/inventory/${itemId}`),
-        apiGet(`/api/inventory/${itemId}/movements`),
+        apiGet(`/api/inventory/${routePk}`, { allowStaleCache: false }),
+        apiGet(`/api/inventory/${routePk}/movements`, { allowStaleCache: false }),
       ]);
+      const stableId = normalizeInventoryRowId(row?.id);
+      if (!stableId) {
+        Alert.alert('', 'Load failed');
+        navigation.goBack();
+        return;
+      }
+      loadedInventoryIdRef.current = stableId;
       setItem(row);
-      setNameStr(row.name || '');
-      setBrandStr(row.brand || '');
+      setBrandStr(
+        [row.brand, row.name]
+          .map((x) => (x != null ? String(x).trim() : ''))
+          .filter(Boolean)
+          .join(' ')
+          .trim(),
+      );
       setShadeStr(row.shade_code || '');
-      setPackageSizeStr(row.package_size || '');
+      const ps = row.package_size || '';
+      if (row.category === 'dye' || row.category === 'retail') {
+        const parsed = parseTubePackageSize(ps);
+        setTubeAmountStr(parsed.amount);
+        setTubeSizeUnit(parsed.unit);
+        setPackageSizeStr(parsed.raw && !parsed.amount ? parsed.raw : '');
+      } else if (isStockTabInventoryItem(row)) {
+        const parsed = parseTubePackageSize(ps);
+        setTubeAmountStr(parsed.amount);
+        const u = String(parsed.unit || 'ml').toLowerCase();
+        setTubeSizeUnit(u === 'oz' ? 'oz' : 'ml');
+        setPackageSizeStr(parsed.raw && !parsed.amount ? parsed.raw : '');
+      } else {
+        setPackageSizeStr(ps);
+        setTubeAmountStr('');
+        setTubeSizeUnit('ml');
+      }
       setPriceStr(priceTextFromCents(row.price_per_unit_cents));
       setSellPriceStr(priceTextFromCents(row.sell_price_cents));
       const rc = row.category || 'consumable';
@@ -207,7 +315,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, rc));
       }
       setAddingCategory(false);
-      setUnit(row.category === 'oxidant' ? 'pcs' : (row.unit || 'pcs'));
+      setUnit(row.category === 'oxidant' || row.category === 'dye' ? 'pcs' : (row.unit || 'pcs'));
       setSupplierStr(row.supplier_hint || '');
       // Developer fields — ammonia stored in custom_subcategory, bottle size in package_size
       const subcat = String(row.custom_subcategory || '').toLowerCase();
@@ -222,6 +330,9 @@ export default function InventoryItemScreen({ route, navigation }) {
       setThreshStr(numToStr(row.low_stock_threshold));
       setReasonStr('');
       setMovements(Array.isArray(hist) ? hist : []);
+      apiGet(subcategoriesApiPath(row.category))
+        .then((subs) => setSubcategorySuggestions(Array.isArray(subs) ? subs : []))
+        .catch(() => {});
     } catch {
       Alert.alert('', 'Load failed');
       navigation.goBack();
@@ -229,6 +340,18 @@ export default function InventoryItemScreen({ route, navigation }) {
       setLoading(false);
     }
   }, [itemId, isEdit, navigation]);
+
+  const persistInventoryId = useMemo(() => inventoryPersistId(item, itemId), [item, itemId]);
+
+  const prevItemIdRef = useRef(itemId);
+  useEffect(() => {
+    if (!isEdit) return;
+    if (prevItemIdRef.current === itemId) return;
+    prevItemIdRef.current = itemId;
+    setItem(null);
+    setMovements([]);
+    load();
+  }, [isEdit, itemId, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -238,10 +361,11 @@ export default function InventoryItemScreen({ route, navigation }) {
       }
       let cancelled = false;
       setItem(null);
-      setNameStr('');
       setBrandStr('');
       setShadeStr('');
       setPackageSizeStr('');
+      setTubeAmountStr('');
+      setTubeSizeUnit('ml');
       setPriceStr('');
       setSellPriceStr('');
       setCategoryPreset(initialPresetCategory);
@@ -253,8 +377,8 @@ export default function InventoryItemScreen({ route, navigation }) {
       setAmmoniaType(null);
       setStrengthMode('percent');
       setSubcategoryStr('');
-      setQtyStr('0');
-      setThreshStr('0');
+      setQtyStr('');
+      setThreshStr('');
       setReasonStr('');
       setMovements([]);
       setLoading(false);
@@ -265,13 +389,34 @@ export default function InventoryItemScreen({ route, navigation }) {
         .catch(() => {
           if (!cancelled) setCustomCategoryOptions([]);
         });
-      apiGet('/api/inventory/subcategories')
+      apiGet(subcategoriesApiPath(initialPresetCategory))
         .then((subs) => { if (!cancelled) setSubcategorySuggestions(Array.isArray(subs) ? subs : []); })
         .catch(() => {});
       return () => {
         cancelled = true;
       };
     }, [initialCategory, initialPresetCategory, isEdit, load]),
+  );
+
+  useEffect(() => {
+    if (categoryPreset === 'dye' && !categoryCustom.trim()) setUnit('pcs');
+  }, [categoryPreset, categoryCustom]);
+
+  useEffect(() => {
+    const stockProductForm =
+      (categoryPreset === 'consumable' && !categoryCustom.trim()) ||
+      (isEdit &&
+        item &&
+        isStockTabInventoryItem(item) &&
+        categoryPreset !== 'dye');
+    if (stockProductForm && tubeSizeUnit === 'g') {
+      setTubeSizeUnit('ml');
+    }
+  }, [categoryPreset, categoryCustom, tubeSizeUnit, isEdit, item]);
+
+  const subcategoryChipSuggestions = useMemo(
+    () => subcategorySuggestionsForProductTypeChips(subcategorySuggestions),
+    [subcategorySuggestions],
   );
 
   const save = async () => {
@@ -288,59 +433,102 @@ export default function InventoryItemScreen({ route, navigation }) {
 
     setSaving(true);
     try {
-      const persistUnit = categoryPreset === 'oxidant' && !categoryCustom.trim() ? 'pcs' : unit;
+      const isDyeNew = categoryPreset === 'dye' && !categoryCustom.trim();
+      const isRetailNew = categoryPreset === 'retail' && !categoryCustom.trim();
+      const isStockNew = categoryPreset === 'consumable' && !categoryCustom.trim();
+      const persistUnit =
+        (categoryPreset === 'oxidant' && !categoryCustom.trim()) || isDyeNew ? 'pcs' : unit;
+      const isDeveloperSave = categoryPreset === 'oxidant' && !categoryCustom.trim();
+      const isDyeSave = isDyeNew;
+      let packageSizeOut = packageSizeStr.trim() || null;
+      if (isDyeSave || isRetailNew || isStockNew) {
+        const ta = tubeAmountStr.trim().replace(',', '.');
+        const u =
+          isStockNew && !STOCK_BOTTLE_UNITS.includes(tubeSizeUnit) ? 'ml' : tubeSizeUnit;
+        packageSizeOut =
+          ta && Number.isFinite(Number(ta)) && Number(ta) > 0 ? `${ta} ${u}` : null;
+      }
       if (!isEdit) {
-        // For developer items, brand IS the name (e.g. "Wella Welloxon")
+        // Developer: brand line is the product name; others: single "Brand" field → API `name`
         const name = isDeveloperItem
           ? (brandStr.trim() || shadeStr.trim() || 'Developer')
-          : nameStr.trim();
+          : brandStr.trim();
         if (!name) {
-          Alert.alert('', 'Enter a name or brand.');
+          Alert.alert('', isStockNew ? 'Enter a name.' : 'Enter a brand.');
           setSaving(false);
           return;
         }
         const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || 'consumable';
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, resolvedCategory));
+        const ammoniaNew =
+          isDeveloperSave || isDyeSave
+            ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
+            : null;
         await apiPost('/api/inventory', {
           name,
           category: resolvedCategory,
           unit: persistUnit,
           quantity: q,
           low_stock_threshold: t,
-          brand: brandStr.trim() || null,
-          shade_code: shadeStr.trim() || null,
-          package_size: packageSizeStr.trim() || null,
+          brand: isDeveloperItem ? (brandStr.trim() || null) : null,
+          shade_code: isStockNew ? null : shadeStr.trim() || null,
+          package_size: packageSizeOut,
           price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
-          custom_subcategory: isDeveloperItem
-            ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
-            : subcategoryStr.trim() || null,
+          custom_subcategory: ammoniaNew ?? (subcategoryStr.trim() || null),
           sell_price_cents: centsFromPriceText(sellPriceStr),
         });
         navigation.goBack();
       } else {
         const resolvedCategory = categoryCustom.trim() || categoryDraft.trim() || categoryPreset || item.category || 'consumable';
+        const isDyeEdit = resolvedCategory === 'dye' && !categoryCustom.trim();
+        const isRetailEdit = resolvedCategory === 'retail' && !categoryCustom.trim();
+        const isStockEdit =
+          (resolvedCategory === 'consumable' && !categoryCustom.trim()) ||
+          (Boolean(categoryCustom.trim()) &&
+            isStockTabInventoryItem({ category: resolvedCategory }));
+        const isDeveloperEdit = resolvedCategory === 'oxidant' && !categoryCustom.trim();
+        let packageSizeEdit = packageSizeStr.trim() || null;
+        if (isDyeEdit || isRetailEdit || isStockEdit) {
+          const ta = tubeAmountStr.trim().replace(',', '.');
+          const u =
+            isStockEdit && !STOCK_BOTTLE_UNITS.includes(tubeSizeUnit) ? 'ml' : tubeSizeUnit;
+          packageSizeEdit =
+            ta && Number.isFinite(Number(ta)) && Number(ta) > 0 ? `${ta} ${u}` : null;
+        }
+        const ammoniaEdit =
+          isDeveloperEdit || isDyeEdit
+            ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
+            : null;
+        const persistUnitEdit =
+          (resolvedCategory === 'oxidant' || resolvedCategory === 'dye') && !categoryCustom.trim()
+            ? 'pcs'
+            : unit;
         const body = {
           quantity: q,
           low_stock_threshold: t,
-          unit: persistUnit,
+          unit: persistUnitEdit,
           category: resolvedCategory,
           name: isDeveloperItem
             ? (brandStr.trim() || shadeStr.trim() || item.name || 'Developer')
-            : (nameStr.trim() || item.name),
-          brand: brandStr.trim() || null,
-          shade_code: shadeStr.trim() || null,
-          package_size: packageSizeStr.trim() || null,
+            : (brandStr.trim() || item.name),
+          brand: isDeveloperItem ? (brandStr.trim() || null) : null,
+          shade_code: isStockEdit ? null : shadeStr.trim() || null,
+          package_size: packageSizeEdit,
           price_per_unit_cents: centsFromPriceText(priceStr),
           sell_price_cents: centsFromPriceText(sellPriceStr),
           supplier_hint: supplierStr.trim() || null,
-          custom_subcategory: isDeveloperItem
-            ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
-            : subcategoryStr.trim() || null,
+          custom_subcategory: ammoniaEdit ?? (subcategoryStr.trim() || null),
         };
         const note = reasonStr.trim();
         if (note) body.reason = note;
-        await apiPatch(`/api/inventory/${itemId}`, body);
+        const pid = loadedInventoryIdRef.current ?? persistInventoryId;
+        if (!pid) {
+          Alert.alert('', 'Load failed');
+          setSaving(false);
+          return;
+        }
+        await apiPatch(`/api/inventory/${pid}`, body);
         navigation.goBack();
       }
     } catch (e) {
@@ -348,6 +536,29 @@ export default function InventoryItemScreen({ route, navigation }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const deleteProduct = () => {
+    const pid = loadedInventoryIdRef.current ?? persistInventoryId;
+    if (!isEdit || !pid) return;
+    Alert.alert('', 'Delete this product?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeleting(true);
+          try {
+            await apiDelete(`/api/inventory/${pid}`);
+            navigation.goBack();
+          } catch (e) {
+            Alert.alert('', e.message || '');
+          } finally {
+            setDeleting(false);
+          }
+        },
+      },
+    ]);
   };
 
   if (isEdit && (loading || !item)) {
@@ -364,16 +575,35 @@ export default function InventoryItemScreen({ route, navigation }) {
   const customCategoryPills = addUniqueCategory(customCategoryOptions, categoryCustom);
   const isColorProduct = COLOR_CATEGORY_KEYS.has(categoryPreset) && !categoryCustom.trim();
   const isDeveloperItem = categoryPreset === 'oxidant' && !categoryCustom.trim();
+  const isDyeItem = categoryPreset === 'dye' && !categoryCustom.trim();
+  const isRetailItem = categoryPreset === 'retail' && !categoryCustom.trim();
+  const isStockConsumable = categoryPreset === 'consumable' && !categoryCustom.trim();
+  const isStockProductForm =
+    isStockConsumable ||
+    (Boolean(item) && isStockTabInventoryItem(item) && categoryPreset !== 'dye');
+  const showUnitChips =
+    !isDeveloperItem && !isDyeItem && !(isStockProductForm && unit === 'pcs');
+  const hideStockRetailSection =
+    (!isEdit && initialPresetCategory === 'retail') ||
+    (isEdit && item?.category === 'retail' && !categoryCustom.trim());
+  const stockCategoryKey =
+    isDeveloperItem
+      ? 'oxidant'
+      : COLOR_CATEGORY_KEYS.has(categoryPreset) && categoryPreset !== 'oxidant'
+        ? categoryPreset
+        : 'consumable';
 
   const BOTTLE_SIZES = ['250 ml', '500 ml', '1000 ml', '2 L'];
 
   const STRENGTH_PERCENT = ['1.9%', '3%', '6%', '9%', '12%'];
   const STRENGTH_VOL = ['5 vol', '10 vol', '20 vol', '30 vol', '40 vol'];
 
+  const compactColorCodeField = isColorProduct && !isDeveloperItem;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={styles.screenFill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
@@ -398,29 +628,188 @@ export default function InventoryItemScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Name ── */}
-          {!isDeveloperItem ? (
+          {!hideStockRetailSection ? (
             <>
-              <Text style={styles.label}>Name</Text>
+              <Text style={styles.label}>Section</Text>
+              <View style={styles.checkGroup}>
+                {[
+                  { key: stockCategoryKey, label: 'Stock' },
+                  { key: 'retail', label: 'Retail' },
+                ].map(({ key, label }, i, arr) => (
+                  <CheckRow
+                    key={key}
+                    label={label}
+                    checked={categoryPreset === key}
+                    onPress={() => { setCategoryPreset(key); setCategoryCustom(''); }}
+                    style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
+                  />
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {isStockProductForm ? (
+            <>
+              <ProductTypeComboField
+                label="Type of product"
+                value={subcategoryStr}
+                onChangeText={setSubcategoryStr}
+                options={subcategoryChipSuggestions}
+                inputStyle={styles.input}
+              />
+              <Text style={[styles.label, { marginTop: 4 }]}>Name</Text>
               <TextInput
                 style={styles.input}
                 placeholder=""
                 placeholderTextColor="#AEAEB2"
-                value={nameStr}
-                onChangeText={setNameStr}
+                value={brandStr}
+                onChangeText={setBrandStr}
+              />
+              <Text style={[styles.label, { marginTop: 14 }]}>Bottle size</Text>
+              <View style={styles.tubeRow}>
+                <TextInput
+                  style={[styles.input, styles.inputTubeAmount]}
+                  placeholder=""
+                  placeholderTextColor="#AEAEB2"
+                  value={tubeAmountStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
+                  keyboardType="decimal-pad"
+                />
+                <View style={styles.tubeUnitRow}>
+                  {STOCK_BOTTLE_UNITS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.tubeUnitChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                      onPress={() => setTubeSizeUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.tubeUnitTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={[styles.inlineRow, { marginTop: 14 }]}>
+                <Text style={styles.inlineLabel}>
+                  Stock {`(${unit})`}
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.inputInline]}
+                  placeholder=""
+                  placeholderTextColor="#AEAEB2"
+                  value={qtyStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setQtyStr, t)}
+                  keyboardType="decimal-pad"
+                  textAlign="right"
+                />
+              </View>
+              {showUnitChips ? (
+                <View style={[styles.chips, { marginTop: 4, marginBottom: 2 }]}>
+                  {UNIT_OPTIONS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.chip, unit === u && styles.chipOn]}
+                      onPress={() => setUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {!isStockProductForm ? (
+            <>
+              <Text style={styles.label}>Brand</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={isDeveloperItem ? 'e.g. Wella, Schwarzkopf, Alfaparf' : ''}
+                placeholderTextColor="#AEAEB2"
+                value={brandStr}
+                onChangeText={setBrandStr}
               />
             </>
           ) : null}
 
-          {/* ── Brand ── */}
-          <Text style={styles.label}>Brand</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={isDeveloperItem ? 'e.g. Wella, Schwarzkopf, Alfaparf' : ''}
-            placeholderTextColor="#AEAEB2"
-            value={brandStr}
-            onChangeText={setBrandStr}
-          />
+          {isColorProduct && !isDeveloperItem && !isDyeItem ? (
+            <>
+              <Text style={[styles.label, { marginTop: 4 }]}>{detailLabel}</Text>
+              <TextInput
+                style={[styles.input, compactColorCodeField && styles.inputColorCodeTab]}
+                placeholder=""
+                placeholderTextColor="#AEAEB2"
+                value={shadeStr}
+                onChangeText={setShadeStr}
+                autoCapitalize="characters"
+              />
+            </>
+          ) : null}
+
+          {isDyeItem ? (
+            <>
+              <Text style={[styles.label, { marginTop: 4 }]}>{detailLabel}</Text>
+              <TextInput
+                style={[styles.input, styles.inputColorCodeTab]}
+                placeholder=""
+                placeholderTextColor="#AEAEB2"
+                value={shadeStr}
+                onChangeText={setShadeStr}
+                autoCapitalize="characters"
+              />
+              <Text style={[styles.label, { marginTop: 14 }]}>Tube size</Text>
+              <View style={styles.tubeRowDyeStacked}>
+                <TextInput
+                  style={[styles.input, styles.inputTubeAmountXs]}
+                  placeholder="0"
+                  placeholderTextColor="#AEAEB2"
+                  value={tubeAmountStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
+                  keyboardType="decimal-pad"
+                />
+                <View style={styles.tubeUnitRowTight}>
+                  {TUBE_UNIT_OPTIONS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.tubeUnitChipXs, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                      onPress={() => setTubeSizeUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.tubeUnitTxtXs, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <Text style={[styles.label, { marginTop: 14 }]}>Formula type</Text>
+              <View style={styles.checkGroup}>
+                {[['ammonia', 'Ammonia'], ['non-ammonia', 'Non-ammonia']].map(([val, lbl], i, arr) => (
+                  <CheckRow
+                    key={val}
+                    label={lbl}
+                    checked={ammoniaType === val}
+                    onPress={() => {
+                      const next = ammoniaType === val ? null : val;
+                      setAmmoniaType(next);
+                      if (next) setSubcategoryStr('');
+                    }}
+                    style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
+                  />
+                ))}
+              </View>
+              {ammoniaType == null ? (
+                <ProductTypeComboField
+                  label="Type of product"
+                  value={subcategoryStr}
+                  onChangeText={(t) => {
+                    setSubcategoryStr(t);
+                    setAmmoniaType(null);
+                  }}
+                  options={subcategoryChipSuggestions}
+                  inputStyle={styles.input}
+                />
+              ) : null}
+            </>
+          ) : null}
 
           {/* ══ DEVELOPER-SPECIFIC FIELDS ══ */}
           {isDeveloperItem ? (
@@ -485,51 +874,66 @@ export default function InventoryItemScreen({ route, navigation }) {
                     key={val}
                     label={lbl}
                     checked={ammoniaType === val}
-                    onPress={() => setAmmoniaType(ammoniaType === val ? null : val)}
+                    onPress={() => {
+                      const next = ammoniaType === val ? null : val;
+                      setAmmoniaType(next);
+                      if (next) setSubcategoryStr('');
+                    }}
                     style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
                   />
                 ))}
               </View>
+              {ammoniaType == null ? (
+                <ProductTypeComboField
+                  label="Type of product"
+                  value={subcategoryStr}
+                  onChangeText={(t) => {
+                    setSubcategoryStr(t);
+                    setAmmoniaType(null);
+                  }}
+                  options={subcategoryChipSuggestions}
+                  inputStyle={styles.input}
+                />
+              ) : null}
             </>
           ) : null}
 
-          {/* ── Section ── */}
-          <Text style={styles.label}>Section</Text>
-          <View style={styles.checkGroup}>
-            {[
-              { key: isDeveloperItem ? 'oxidant' : 'consumable', label: 'Stock' },
-              { key: 'retail', label: 'Retail' },
-            ].map(({ key, label }, i, arr) => (
-              <CheckRow
-                key={key}
-                label={label}
-                checked={categoryPreset === key}
-                onPress={() => { setCategoryPreset(key); setCategoryCustom(''); }}
-                style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
-              />
-            ))}
-          </View>
-
-          {/* ── Subcategory — hidden for developers ── */}
-          {!isDeveloperItem ? (
+          {/* ── Subcategory — retail / custom lines; stock consumable uses Type of product above ── */}
+          {!isDeveloperItem && !isDyeItem && !isStockProductForm ? (
             <>
-              <Text style={styles.label}>Subcategory</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Shampoos, Styling, Thermal protection"
-                placeholderTextColor="#AEAEB2"
+              <ProductTypeComboField
+                label="Type of product"
                 value={subcategoryStr}
                 onChangeText={setSubcategoryStr}
-                autoCapitalize="words"
+                options={subcategoryChipSuggestions}
+                inputStyle={styles.input}
               />
-              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
-                <View style={styles.subSuggestions}>
-                  {subcategorySuggestions.slice(0, 6).map((s) => (
-                    <TouchableOpacity key={s} style={styles.subSuggestionChip} onPress={() => setSubcategoryStr(s)} activeOpacity={0.8}>
-                      <Text style={styles.subSuggestionTxt}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+              {isRetailItem ? (
+                <>
+                  <Text style={[styles.label, { marginTop: 14 }]}>Package size</Text>
+                  <View style={styles.tubeRow}>
+                    <TextInput
+                      style={[styles.input, styles.inputTubeAmount]}
+                      placeholder="0"
+                      placeholderTextColor="#AEAEB2"
+                      value={tubeAmountStr}
+                      onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
+                      keyboardType="decimal-pad"
+                    />
+                    <View style={styles.tubeUnitRow}>
+                      {TUBE_UNIT_OPTIONS.map((u) => (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.tubeUnitChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                          onPress={() => setTubeSizeUnit(u)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={[styles.tubeUnitTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
               ) : null}
             </>
           ) : null}
@@ -561,33 +965,38 @@ export default function InventoryItemScreen({ route, navigation }) {
             </>
           ) : null}
 
-          {/* ── Stock quantity inline ── */}
-          <View style={styles.inlineRow}>
-            <Text style={styles.inlineLabel}>Stock {!isDeveloperItem ? `(${unit})` : '(pcs)'}</Text>
-            <TextInput
-              style={[styles.input, styles.inputInline]}
-              placeholder="0"
-              placeholderTextColor="#AEAEB2"
-              value={qtyStr}
-              onChangeText={setQtyStr}
-              keyboardType="decimal-pad"
-              textAlign="right"
-            />
-          </View>
-          {/* Unit chips for non-developer items */}
-          {!isDeveloperItem ? (
-            <View style={[styles.chips, { marginTop: -6 }]}>
-              {UNIT_OPTIONS.map((u) => (
-                <TouchableOpacity
-                  key={u}
-                  style={[styles.chip, unit === u && styles.chipOn]}
-                  onPress={() => setUnit(u)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* ── Stock quantity + unit chips (retail: after prices; consumable: block above) ── */}
+          {!isRetailItem && !isStockProductForm ? (
+            <>
+              <View style={styles.inlineRow}>
+                <Text style={styles.inlineLabel}>
+                  Stock {isDeveloperItem || isDyeItem ? '(pcs)' : `(${unit})`}
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.inputInline]}
+                  placeholder=""
+                  placeholderTextColor="#AEAEB2"
+                  value={qtyStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setQtyStr, t)}
+                  keyboardType="decimal-pad"
+                  textAlign="right"
+                />
+              </View>
+              {showUnitChips ? (
+                <View style={[styles.chips, { marginTop: -6 }]}>
+                  {UNIT_OPTIONS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.chip, unit === u && styles.chipOn]}
+                      onPress={() => setUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </>
           ) : null}
 
           {/* ── Low stock ── */}
@@ -598,7 +1007,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               placeholder="0"
               placeholderTextColor="#AEAEB2"
               value={threshStr}
-              onChangeText={setThreshStr}
+              onChangeText={(t) => applyIntegerDraftChange(setThreshStr, t)}
               keyboardType="decimal-pad"
               textAlign="right"
             />
@@ -651,6 +1060,39 @@ export default function InventoryItemScreen({ route, navigation }) {
             );
           })() : null}
 
+          {isRetailItem ? (
+            <>
+              <View style={[styles.inlineRow, { marginTop: 14 }]}>
+                <Text style={styles.inlineLabel}>
+                  Stock {`(${unit})`}
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.inputInline]}
+                  placeholder=""
+                  placeholderTextColor="#AEAEB2"
+                  value={qtyStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setQtyStr, t)}
+                  keyboardType="decimal-pad"
+                  textAlign="right"
+                />
+              </View>
+              {showUnitChips ? (
+                <View style={[styles.chips, { marginTop: 4, marginBottom: 2 }]}>
+                  {UNIT_OPTIONS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.chip, unit === u && styles.chipOn]}
+                      onPress={() => setUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
           {/* ── Note (edit only) ── */}
           {isEdit ? (
             <>
@@ -678,11 +1120,26 @@ export default function InventoryItemScreen({ route, navigation }) {
           <TouchableOpacity
             style={[styles.saveBtn, saving && styles.saveDisabled]}
             onPress={save}
-            disabled={saving}
+            disabled={saving || deleting}
             activeOpacity={0.9}
           >
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveTxt}>Save</Text>}
           </TouchableOpacity>
+
+          {isEdit ? (
+            <TouchableOpacity
+              style={[styles.deleteProductBtn, (saving || deleting) && styles.saveDisabled]}
+              onPress={deleteProduct}
+              disabled={saving || deleting}
+              activeOpacity={0.85}
+            >
+              {deleting ? (
+                <ActivityIndicator color="#C62828" />
+              ) : (
+                <Text style={styles.deleteProductTxt}>Delete product</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
 
           {isEdit && movements.length ? (
             <View style={styles.histSection}>
@@ -722,6 +1179,7 @@ const reliefShadow = {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  screenFill: { flex: 1, backgroundColor: '#FFFFFF' },
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
@@ -730,6 +1188,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
   },
   headerSide: { width: 40, height: 40 },
   iconBtn: {
@@ -760,7 +1219,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
     marginBottom: 14,
-    overflow: 'hidden',
+    ...reliefShadow,
   },
   marginRow: {
     flexDirection: 'row',
@@ -823,26 +1282,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  subSuggestions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-    marginTop: 4,
-  },
-  subSuggestionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    backgroundColor: '#FFFFFF',
-  },
-  subSuggestionTxt: {
-    fontFamily: FontFamily.medium,
-    fontSize: 13,
-    color: '#0D0D0D',
-  },
   label: {
     fontSize: 13,
     lineHeight: typeLh(13),
@@ -879,7 +1318,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
   },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -889,6 +1328,59 @@ const styles = StyleSheet.create({
     color: '#0D0D0D',
     marginBottom: 4,
     ...reliefShadow,
+  },
+  /** Narrow “tab” for shade / SKU-style numeric codes (color lines). */
+  inputColorCodeTab: {
+    alignSelf: 'flex-start',
+    minWidth: 88,
+    maxWidth: 132,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    fontSize: 15,
+    fontFamily: FontFamily.medium,
+    marginBottom: 4,
+  },
+  tubeRowDyeStacked: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  /** Dye tube amount — same footprint as `inputColorCodeTab` (shade). */
+  inputTubeAmountXs: {
+    alignSelf: 'flex-start',
+    minWidth: 88,
+    maxWidth: 132,
+    marginBottom: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    fontFamily: FontFamily.medium,
+    textAlign: 'center',
+  },
+  tubeUnitRowTight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  tubeUnitChipXs: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  tubeUnitTxtXs: {
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
   },
   inputCompact: {
     paddingVertical: 9,
@@ -912,6 +1404,75 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     paddingVertical: 9,
     textAlign: 'right',
+  },
+  tubeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  tubeRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  inputTubeAmount: {
+    flex: 1,
+    minWidth: 0,
+    marginBottom: 0,
+  },
+  inputTubeAmountSmall: {
+    width: 76,
+    marginBottom: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    fontSize: 15,
+    fontFamily: FontFamily.medium,
+    textAlign: 'center',
+  },
+  tubeUnitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  tubeUnitChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  tubeUnitChipSm: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  tubeUnitChipOn: {
+    backgroundColor: '#5E35B1',
+    borderColor: '#5E35B1',
+  },
+  tubeUnitTxt: {
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
+  },
+  tubeUnitTxtSm: {
+    fontSize: 12,
+    lineHeight: typeLh(12),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
+  },
+  tubeUnitTxtOn: {
+    color: '#FFFFFF',
   },
   stockRowInline: {
     flexDirection: 'row',
@@ -985,6 +1546,16 @@ const styles = StyleSheet.create({
   },
   saveDisabled: { opacity: 0.6 },
   saveTxt: { color: '#fff', ...Type.buttonLabel },
+  deleteProductBtn: {
+    marginTop: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  deleteProductTxt: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: '#C62828',
+  },
   histSection: { marginTop: 32 },
   histTitle: {
     ...Type.sectionLabel,

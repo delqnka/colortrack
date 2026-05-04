@@ -22,11 +22,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiGet, apiReadStaleCache, getProfileMeCacheStorageKey, resolveImagePublicUri } from '../api/client';
+import {
+  apiGet,
+  apiReadStaleCache,
+  getProfileMeCacheStorageKey,
+  mergeStaffMeResponse,
+  resolveImagePublicUri,
+} from '../api/client';
 import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
 import { hapticImpactLight } from '../theme/haptics';
 import { useCurrency } from '../context/CurrencyContext';
 import CurrencyPickerModal from '../components/CurrencyPickerModal';
+import { getCurrencySymbol } from '../constants/currencyCodes';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
@@ -251,17 +258,31 @@ export default function HomeScreen() {
   const loadProfileMe = useCallback((opts) => {
     const forceFresh = opts && opts.force === true;
     const cacheKey = getProfileMeCacheStorageKey();
-    apiGet('/api/me', { allowStaleCache: !forceFresh })
-      .then((row) => {
-        if (row && typeof row === 'object') {
-          setProfileMe(row);
-          AsyncStorage.setItem(cacheKey, JSON.stringify(row)).catch(() => {});
-          AsyncStorage.removeItem('colortrack_profile_me_v1').catch(() => {});
+    (async () => {
+      let diskPrev = null;
+      try {
+        const raw = await AsyncStorage.getItem(cacheKey);
+        if (raw) {
+          const o = JSON.parse(raw);
+          if (o && typeof o === 'object') diskPrev = o;
         }
-      })
-      .catch(() => {
+      } catch {
+        /* noop */
+      }
+      try {
+        const row = await apiGet('/api/me', { allowStaleCache: !forceFresh });
+        if (!row || typeof row !== 'object') return;
+        setProfileMe((reactPrev) => {
+          const seed = mergeStaffMeResponse(diskPrev, reactPrev);
+          const merged = mergeStaffMeResponse(seed, row);
+          AsyncStorage.setItem(cacheKey, JSON.stringify(merged)).catch(() => {});
+          return merged;
+        });
+        AsyncStorage.removeItem('colortrack_profile_me_v1').catch(() => {});
+      } catch {
         /* Keep last good name/avatar on transient errors */
-      });
+      }
+    })();
   }, []);
 
   const headerAvatarUri = useMemo(
@@ -452,7 +473,8 @@ export default function HomeScreen() {
   const upcoming = d.upcoming;
   const appointmentCount =
     data != null && typeof data.appointmentCount === 'number' ? data.appointmentCount : null;
-  const lowCount = d.lowStockCount ?? 1;
+  const lowCount =
+    data != null && typeof data.lowStockCount === 'number' ? data.lowStockCount : 0;
 
   const loadedYmd =
     data != null && typeof data.dashboardDate === 'string' ? data.dashboardDate : null;
@@ -578,6 +600,9 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
+              <Ionicons name="search" size={20} color={MY_LAB_VIOLET} />
+            </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.82} onPress={() => setPickCurOpen(true)} style={styles.currencyBtnWrap}>
               <LinearGradient
                 colors={SALON_LAB_GRADIENT_COLORS}
@@ -586,11 +611,15 @@ export default function HomeScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.currencyBtn}
               >
-                <Text style={styles.currencyBtnTxt}>{currency}</Text>
+                {(() => {
+                  const sym = getCurrencySymbol(currency);
+                  return (
+                    <Text style={styles.currencyBtnTxt}>
+                      {sym ? `${sym} ${currency}` : currency}
+                    </Text>
+                  );
+                })()}
               </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
-              <Ionicons name="search" size={20} color={MY_LAB_VIOLET} />
             </TouchableOpacity>
           </View>
         </View>
@@ -816,7 +845,10 @@ export default function HomeScreen() {
                   activeOpacity={0.92}
                   onPress={() => {
                     hapticImpactLight();
-                    navigation.navigate('InventoryStack');
+                    navigation.navigate(
+                      'InventoryStack',
+                      lowCount > 0 ? { openLowStock: true } : undefined,
+                    );
                   }}
                 >
                   <View style={styles.salonLowStockInner}>
@@ -979,7 +1011,7 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 10,
     flexShrink: 0,
   },
   currencyBtnWrap: {
@@ -1195,7 +1227,6 @@ const styles = StyleSheet.create({
     minHeight: 0,
     justifyContent: 'center',
   },
-
   salonLabCardTouchable: {
     borderRadius: 20,
     overflow: 'hidden',

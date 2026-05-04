@@ -46,3 +46,11 @@ export function isColourFormulaPickItem(item) {
 export function isDeveloperInventoryPickItem(item) {
   return inventoryCategoryKey(item?.category) === 'oxidant';
 }
+
+/** List / picker: developer + tube dyes counted in bottles (pcs), not ml/g on hand. */
+export function displayStockUnit(item) {
+  const c = inventoryCategoryKey(item?.category);
+  if (c === 'oxidant' || c === 'dye') return 'pcs';
+  const u = String(item?.unit || '').trim().toLowerCase();
+  return u || 'pcs';
+}

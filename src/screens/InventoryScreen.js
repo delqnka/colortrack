@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -26,17 +26,18 @@ import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import SFIcon from '../components/SFIcon';
 import {
+  displayStockUnit,
   importCategoryForItem,
   inventoryCategoryKey,
   isColorItem,
 } from '../inventory/inventoryCategories';
 import { MY_LAB_VIOLET } from '../theme/glassUi';
 import { hapticImpactLight } from '../theme/haptics';
+import LowStockHeaderPill from '../components/LowStockHeaderPill';
 
 const IMAGE_MEDIA_TYPES = ImagePicker.MediaType?.Images ? [ImagePicker.MediaType.Images] : ['images'];
 const ORDER = ['dye', 'oxidant', 'retail', 'consumable'];
 const BRAND_ACCENT = '#6B4EFF';
-const LOW_STOCK_ORANGE = '#FF6B35';
 
 const LABEL = {
   dye: 'Color',
@@ -96,6 +97,51 @@ function sectionTitle(cat) {
   if (LABEL[cat]) return LABEL[cat];
   const s = String(cat).replace(/_/g, ' ');
   return s.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/** Colors tab: same ammonia split as developer; mixtone/toner separate. */
+function colorTabGroupKey(item) {
+  const c = inventoryCategoryKey(item?.category);
+  if (c === 'mixtone') return 'mixtone';
+  if (c === 'toner') return 'toner';
+  if (c === 'dye') {
+    const sub = String(item?.custom_subcategory || '').trim().toLowerCase();
+    if (sub === 'ammonia') return 'dye_ammonia';
+    if (sub === 'non-ammonia') return 'dye_non_ammonia';
+    return 'dye_other';
+  }
+  return 'dye_other';
+}
+
+const COLOR_TAB_SECTION_ORDER = ['dye_ammonia', 'dye_non_ammonia', 'dye_other', 'mixtone', 'toner'];
+
+function colorTabSectionTitle(key) {
+  switch (key) {
+    case 'dye_ammonia':
+      return 'Ammonia';
+    case 'dye_non_ammonia':
+      return 'Non-ammonia';
+    case 'dye_other':
+      return 'Color';
+    case 'mixtone':
+      return 'Mixtone';
+    case 'toner':
+      return 'Toner';
+    default:
+      return sectionTitle(key);
+  }
+}
+
+/** Value sent to clear-subcategory API for this list section, or null. */
+function sectionSubcategoryClearLabel(inventoryFilter, sectionKey, useSubcategoryGrouping) {
+  if (sectionKey === '_all') return null;
+  if (inventoryFilter === 'colors') {
+    if (sectionKey === 'dye_ammonia') return 'Ammonia';
+    if (sectionKey === 'dye_non_ammonia') return 'Non-ammonia';
+    return null;
+  }
+  if (useSubcategoryGrouping) return sectionKey;
+  return null;
 }
 
 /** BGR queries often don’t match Latin product names — map to EN/category needles. */
@@ -228,8 +274,9 @@ function invoiceRowsFromItems(items) {
     .filter((item) => item.name && item.quantity);
 }
 
-export default function InventoryScreen({ navigation }) {
+export default function InventoryScreen({ navigation, route }) {
   const { currency } = useCurrency();
+  const pendingOpenLowStockRef = useRef(false);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importBusy, setImportBusy] = useState(false);
@@ -238,6 +285,8 @@ export default function InventoryScreen({ navigation }) {
   const [savingImport, setSavingImport] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState('stock');
   const [activeSubcategory, setActiveSubcategory] = useState(null); // null = All
+  /** Colors tab: filter dye sections by formula type (matches developer pills). */
+  const [activeColorPill, setActiveColorPill] = useState(null); // null | 'ammonia' | 'non-ammonia'
   const [lowListOpen, setLowListOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [inventorySearchOpen, setInventorySearchOpen] = useState(false);
@@ -257,8 +306,12 @@ export default function InventoryScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      if (route.params?.openLowStock) {
+        pendingOpenLowStockRef.current = true;
+        navigation.setParams({ openLowStock: undefined });
+      }
       load();
-    }, [load]),
+    }, [load, navigation, route.params?.openLowStock]),
   );
 
   const filteredRows = useMemo(() => {
@@ -290,8 +343,15 @@ export default function InventoryScreen({ navigation }) {
       const s = item.custom_subcategory?.trim();
       if (s) seen.add(s);
     }
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  }, [filteredRows, useSubcategoryGrouping]);
+    let list = [...seen].sort((a, b) => a.localeCompare(b));
+    if (inventoryFilter === 'retail' || inventoryFilter === 'stock') {
+      list = list.filter((s) => {
+        const t = String(s).trim().toLowerCase();
+        return t !== 'ammonia' && t !== 'non-ammonia';
+      });
+    }
+    return list;
+  }, [filteredRows, useSubcategoryGrouping, inventoryFilter]);
 
   // Apply subcategory pill filter on top of the tab filter
   const subcategoryFilteredRows = useMemo(() => {
@@ -301,19 +361,43 @@ export default function InventoryScreen({ navigation }) {
     );
   }, [searchFilteredRows, useSubcategoryGrouping, activeSubcategory]);
 
+  const rowsForGrouping = useMemo(() => {
+    if (inventoryFilter !== 'colors') return subcategoryFilteredRows;
+    if (!activeColorPill) return searchFilteredRows;
+    return searchFilteredRows.filter((item) => {
+      const k = colorTabGroupKey(item);
+      if (activeColorPill === 'ammonia') return k === 'dye_ammonia';
+      if (activeColorPill === 'non-ammonia') return k === 'dye_non_ammonia';
+      return true;
+    });
+  }, [inventoryFilter, subcategoryFilteredRows, searchFilteredRows, activeColorPill]);
+
   const grouped = useMemo(() => {
     const m = {};
-    for (const item of subcategoryFilteredRows) {
-      const key = useSubcategoryGrouping
-        ? (item.custom_subcategory?.trim() || '_all')
-        : inventoryCategoryKey(item.category);
+    for (const item of rowsForGrouping) {
+      let key;
+      if (inventoryFilter === 'colors') {
+        key = colorTabGroupKey(item);
+      } else if (useSubcategoryGrouping) {
+        key = item.custom_subcategory?.trim() || '_all';
+      } else {
+        key = inventoryCategoryKey(item.category);
+      }
       if (!m[key]) m[key] = [];
       m[key].push(item);
     }
     return m;
-  }, [subcategoryFilteredRows, useSubcategoryGrouping]);
+  }, [rowsForGrouping, useSubcategoryGrouping, inventoryFilter]);
 
   const sectionKeys = useMemo(() => {
+    if (inventoryFilter === 'colors') {
+      const keys = Object.keys(grouped);
+      const ordered = COLOR_TAB_SECTION_ORDER.filter((k) => grouped[k]?.length);
+      const rest = keys.filter((k) => !COLOR_TAB_SECTION_ORDER.includes(k)).sort((a, b) =>
+        a.localeCompare(b),
+      );
+      return [...ordered, ...rest];
+    }
     if (useSubcategoryGrouping) {
       // Named subcategories first (alphabetical), then uncategorised ('_all') last
       const keys = Object.keys(grouped);
@@ -326,12 +410,22 @@ export default function InventoryScreen({ navigation }) {
     const preset = ORDER.filter((k) => grouped[k]?.length);
     const rest = keys.filter((k) => !ORDER.includes(k)).sort((a, b) => a.localeCompare(b));
     return [...preset, ...rest];
-  }, [grouped, useSubcategoryGrouping]);
+  }, [grouped, useSubcategoryGrouping, inventoryFilter]);
 
   const lowCount = rows.filter((r) => r.is_low_stock).length;
 
   const lowStockItems = useMemo(() => rows.filter((r) => r.is_low_stock), [rows]);
-  const primaryLowStockItem = lowStockItems[0] || null;
+
+  useEffect(() => {
+    if (!pendingOpenLowStockRef.current || loading) return;
+    pendingOpenLowStockRef.current = false;
+    if (lowStockItems.length === 0) return;
+    setLowListOpen(true);
+  }, [loading, lowStockItems, navigation]);
+
+  useEffect(() => {
+    if (inventorySearchNorm) setActiveColorPill(null);
+  }, [inventorySearchNorm]);
 
   const onRefresh = useCallback(async () => {
     // Micro-interaction: pull to refresh uses a purple spinner instead of a default gray one.
@@ -343,12 +437,35 @@ export default function InventoryScreen({ navigation }) {
   const onLowBadgePress = useCallback(() => {
     if (lowStockItems.length === 0) return;
     hapticImpactLight();
-    if (lowStockItems.length === 1) {
-      navigation.navigate('InventoryItem', { itemId: lowStockItems[0].id });
-      return;
-    }
     setLowListOpen(true);
-  }, [lowStockItems, navigation]);
+  }, [lowStockItems]);
+
+  const promptClearSubcategory = useCallback(
+    (label, categoryScope) => {
+      if (!label) return;
+      Alert.alert('', 'Remove label from all products in this group?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiPost('/api/inventory/clear-subcategory', {
+                subcategory: label,
+                ...(categoryScope ? { category: categoryScope } : {}),
+              });
+              setActiveSubcategory(null);
+              setActiveColorPill(null);
+              await load();
+            } catch (e) {
+              Alert.alert('', e.message || '');
+            }
+          },
+        },
+      ]);
+    },
+    [load],
+  );
 
   const updatePreviewRow = (key, patch) => {
     setPreviewRows((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
@@ -528,7 +645,7 @@ export default function InventoryScreen({ navigation }) {
         brand: item.brand || null,
         shade_code: item.shade_code || null,
         package_size: item.package_size || null,
-        unit: item.unit || 'pcs',
+        unit: item.category === 'oxidant' ? 'pcs' : (item.unit || 'pcs'),
         quantity: Number(String(item.quantity).replace(',', '.')),
         price_per_unit_cents: centsFromPriceText(item.price),
         supplier_hint: item.supplier_hint || null,
@@ -573,7 +690,7 @@ export default function InventoryScreen({ navigation }) {
                 accessibilityRole="button"
                 accessibilityLabel="Clear"
               >
-                <Ionicons name="close-circle" size={20} color="#C7C7CC" />
+                <Ionicons name="close-circle-outline" size={20} color={MY_LAB_VIOLET} />
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
@@ -595,15 +712,18 @@ export default function InventoryScreen({ navigation }) {
               <Text style={styles.title}>Inventory</Text>
               <Text style={styles.subtitle}>Add stock from a photo or invoice</Text>
             </View>
-            <TouchableOpacity
-              style={styles.headerSearchOpenBtn}
-              onPress={() => setInventorySearchOpen(true)}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Search"
-            >
-              <Ionicons name="search-outline" size={22} color="#0D0D0D" />
-            </TouchableOpacity>
+            <View style={styles.headerRightCluster}>
+              <LowStockHeaderPill count={lowCount} onPress={onLowBadgePress} />
+              <TouchableOpacity
+                style={styles.headerSearchOpenBtn}
+                onPress={() => setInventorySearchOpen(true)}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Search"
+              >
+                <Ionicons name="search-outline" size={22} color="#0D0D0D" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -649,7 +769,11 @@ export default function InventoryScreen({ navigation }) {
             <TouchableOpacity
               key={option.key}
               style={[styles.filterCard, selected && styles.filterCardOn]}
-              onPress={() => { setInventoryFilter(option.key); setActiveSubcategory(null); }}
+              onPress={() => {
+                setInventoryFilter(option.key);
+                setActiveSubcategory(null);
+                setActiveColorPill(null);
+              }}
               activeOpacity={0.86}
             >
               <TouchableOpacity
@@ -728,63 +852,93 @@ export default function InventoryScreen({ navigation }) {
             </ScrollView>
           ) : null}
 
-          {primaryLowStockItem && !inventorySearchNorm ? (
-            <TouchableOpacity
-              style={styles.lowBanner}
-              onPress={onLowBadgePress}
-              activeOpacity={0.82}
-              accessibilityRole="button"
-              accessibilityLabel="Low stock"
+          {inventoryFilter === 'colors' && !inventorySearchNorm ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.subcatPillRow}
+              style={styles.subcatPillScroll}
             >
-              <View style={styles.lowBannerLeft}>
-                <View style={styles.lowBannerDot} />
-              </View>
-              <View style={styles.lowBannerBody}>
-                <Text style={styles.lowBannerName} numberOfLines={1}>
-                  {[primaryLowStockItem.brand, primaryLowStockItem.name]
-                    .filter(Boolean)
-                    .join(' ') || primaryLowStockItem.name}
+              <TouchableOpacity
+                style={[styles.subcatPill, !activeColorPill && styles.subcatPillOn]}
+                onPress={() => setActiveColorPill(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.subcatPillTxt, !activeColorPill && styles.subcatPillTxtOn]}>All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subcatPill, activeColorPill === 'ammonia' && styles.subcatPillOn]}
+                onPress={() => setActiveColorPill(activeColorPill === 'ammonia' ? null : 'ammonia')}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.subcatPillTxt,
+                    activeColorPill === 'ammonia' && styles.subcatPillTxtOn,
+                  ]}
+                >
+                  Ammonia
                 </Text>
-                {primaryLowStockItem.shade_code ? (
-                  <Text style={styles.lowBannerShade} numberOfLines={1}>
-                    {primaryLowStockItem.shade_code}
-                    {primaryLowStockItem.package_size
-                      ? `  ·  ${primaryLowStockItem.package_size}`
-                      : ''}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.lowBannerRight}>
-                <Text style={styles.lowBannerQtyNum}>
-                  {primaryLowStockItem.quantity}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subcatPill, activeColorPill === 'non-ammonia' && styles.subcatPillOn]}
+                onPress={() =>
+                  setActiveColorPill(activeColorPill === 'non-ammonia' ? null : 'non-ammonia')
+                }
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.subcatPillTxt,
+                    activeColorPill === 'non-ammonia' && styles.subcatPillTxtOn,
+                  ]}
+                >
+                  Non-ammonia
                 </Text>
-                <Text style={styles.lowBannerQtyUnit}>
-                  {primaryLowStockItem.unit}
-                </Text>
-              </View>
-              {lowCount > 1 ? (
-                <View style={styles.lowBannerMore}>
-                  <Text style={styles.lowBannerMoreText}>+{lowCount - 1}</Text>
-                </View>
-              ) : null}
-              <Ionicons
-                name="chevron-forward"
-                size={13}
-                color="rgba(204,68,0,0.45)"
-                style={{ marginRight: 14 }}
-              />
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </ScrollView>
           ) : null}
 
           {sectionKeys.map((cat) => {
             const list = grouped[cat];
             if (!list?.length) return null;
+            const showOtherBucketTitle =
+              useSubcategoryGrouping &&
+              cat === '_all' &&
+              sectionKeys.some((k) => k !== '_all' && grouped[k]?.length);
+            const sectionHeader =
+              inventoryFilter === 'colors'
+                ? colorTabSectionTitle(cat)
+                : cat !== '_all'
+                  ? useSubcategoryGrouping
+                    ? cat
+                    : sectionTitle(cat)
+                  : showOtherBucketTitle
+                    ? 'Other'
+                    : null;
+            const clearLabel = sectionSubcategoryClearLabel(
+              inventoryFilter,
+              cat,
+              useSubcategoryGrouping,
+            );
+            const clearCategoryScope =
+              inventoryFilter === 'colors' ? 'dye' : inventoryFilter === 'developer' ? 'oxidant' : null;
             return (
               <View key={cat} style={styles.section}>
-                {cat !== '_all' ? (
-                  <Text style={styles.sectionTitle}>
-                    {useSubcategoryGrouping ? cat : sectionTitle(cat)}
-                  </Text>
+                {sectionHeader ? (
+                  <View style={styles.sectionTitleRow}>
+                    <Text style={styles.sectionTitle}>{sectionHeader}</Text>
+                    {clearLabel ? (
+                      <TouchableOpacity
+                        onPress={() => promptClearSubcategory(clearLabel, clearCategoryScope)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove label"
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#8E8E93" />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 ) : null}
                 {list.map((item) => {
                   const isRetail = item.category === 'retail';
@@ -797,7 +951,15 @@ export default function InventoryScreen({ navigation }) {
                     ? Math.round((item.sell_price_cents - item.price_per_unit_cents) / item.sell_price_cents * 100)
                     : null;
                   const truncName = item.name.length > 20 ? item.name.slice(0, 20) + '…' : item.name;
-                  const mainLine = [truncName, `${item.quantity} ${item.unit}`].join('  ·  ');
+                  const qtyBit = `${item.quantity} ${displayStockUnit(item)}`;
+                  const pkgShow = String(item.package_size || '').trim();
+                  const nameQtyLine = [truncName, ...(pkgShow ? [pkgShow] : []), qtyBit].join('  ·  ');
+                  const shadeShow = String(item.shade_code || '').trim();
+                  const brandMeta = String(item.brand || '').trim();
+                  const catKey = inventoryCategoryKey(item.category);
+                  const showBigShade = Boolean(
+                    shadeShow && (catKey === 'dye' || catKey === 'mixtone' || catKey === 'toner'),
+                  );
                   return (
                     <TouchableOpacity
                       key={item.id}
@@ -809,11 +971,24 @@ export default function InventoryScreen({ navigation }) {
                       }}
                     >
                       <View style={styles.rowMain}>
-                        <Text style={styles.rowLine} numberOfLines={1}>
-                          {mainLine}
-                        </Text>
-                        {item.brand ? (
-                          <Text style={styles.rowMeta} numberOfLines={1}>{item.brand}</Text>
+                        {showBigShade ? (
+                          <View style={styles.rowColorTop}>
+                            <Text style={styles.rowShadeCodeLarge} numberOfLines={1}>
+                              {shadeShow}
+                            </Text>
+                            <View style={styles.rowColorTopRest}>
+                              <Text style={styles.rowLine} numberOfLines={1}>
+                                {nameQtyLine}
+                              </Text>
+                            </View>
+                          </View>
+                        ) : (
+                          <Text style={styles.rowLine} numberOfLines={1}>
+                            {nameQtyLine}
+                          </Text>
+                        )}
+                        {brandMeta ? (
+                          <Text style={styles.rowMeta} numberOfLines={1}>{brandMeta}</Text>
                         ) : null}
                       </View>
                       {priceLine != null || marginPct != null ? (
@@ -917,7 +1092,7 @@ export default function InventoryScreen({ navigation }) {
                         placeholderTextColor="#1C1C1E"
                       />
                       <TouchableOpacity onPress={() => removePreviewRow(item.key)} hitSlop={8}>
-                        <Ionicons name="close-circle" size={22} color="#1C1C1E" />
+                        <Ionicons name="close-circle-outline" size={22} color={MY_LAB_VIOLET} />
                       </TouchableOpacity>
                     </View>
                     <View style={styles.previewChoiceRow}>
@@ -1043,7 +1218,7 @@ export default function InventoryScreen({ navigation }) {
                         placeholderTextColor="#1C1C1E"
                         keyboardType="decimal-pad"
                       />
-                      <Text style={styles.previewUnit}>{item.unit}</Text>
+                      <Text style={styles.previewUnit}>{displayStockUnit(item)}</Text>
                       <TextInput
                         style={[styles.previewInput, styles.previewPriceInput]}
                         value={item.price}
@@ -1107,10 +1282,12 @@ export default function InventoryScreen({ navigation }) {
                   <View style={styles.lowPickRowMain}>
                     <Text style={styles.lowPickName} numberOfLines={2}>{item.name}</Text>
                     <Text style={styles.lowPickMeta} numberOfLines={1}>
-                      {[item.brand, item.shade_code].filter(Boolean).join(' · ') || '—'}
+                      {[item.brand, item.shade_code, String(item.package_size || '').trim()]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
                     </Text>
                   </View>
-                  <Text style={styles.lowPickQty}>{item.quantity} {item.unit}</Text>
+                  <Text style={styles.lowPickQty}>{item.quantity} {displayStockUnit(item)}</Text>
                   <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />
                 </TouchableOpacity>
               ))}
@@ -1139,6 +1316,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     paddingRight: 8,
+  },
+  headerRightCluster: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexShrink: 0,
+    gap: 2,
   },
   headerSearchOpenBtn: {
     marginTop: 2,
@@ -1364,87 +1547,18 @@ const styles = StyleSheet.create({
   subcatPillTxtOn: {
     color: '#FFFFFF',
   },
-  lowBanner: {
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 20,
+  section: { marginBottom: 22 },
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,53,0.22)',
-    ...Platform.select({
-      ios: {
-        shadowColor: LOW_STOCK_ORANGE,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 10,
   },
-  lowBannerLeft: {
-    width: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'stretch',
-  },
-  lowBannerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: LOW_STOCK_ORANGE,
-  },
-  lowBannerBody: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 2,
-  },
-  lowBannerName: {
-    ...Type.listPrimary,
-    letterSpacing: -0.15,
-  },
-  lowBannerShade: {
-    fontSize: 13,
-    lineHeight: typeLh(13),
-    fontFamily: FontFamily.regular,
-    color: LOW_STOCK_ORANGE,
-    letterSpacing: 0.05,
-  },
-  lowBannerRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  lowBannerQtyNum: {
-    ...Type.price,
-    color: '#0D0D0D',
-    letterSpacing: -0.2,
-  },
-  lowBannerQtyUnit: {
-    ...Type.tabBarLabel,
-    lineHeight: typeLh(11),
-    color: '#AEAEB2',
-    letterSpacing: 0,
-  },
-  lowBannerMore: {
-    marginRight: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,107,53,0.10)',
-  },
-  lowBannerMoreText: {
-    ...Type.tabBarLabel,
-    fontFamily: FontFamily.medium,
-    lineHeight: typeLh(11),
-    color: LOW_STOCK_ORANGE,
-  },
-  section: { marginBottom: 22 },
   sectionTitle: {
     ...Type.sectionLabel,
-    marginBottom: 10,
+    flex: 1,
+    marginBottom: 0,
     color: '#0D0D0D',
   },
   row: {
@@ -1464,6 +1578,25 @@ const styles = StyleSheet.create({
   },
   rowAccent: { display: 'none' },
   rowMain: { flex: 1, minWidth: 0, paddingRight: 10 },
+  rowColorTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rowShadeCodeLarge: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 24,
+    lineHeight: 28,
+    letterSpacing: -0.6,
+    color: '#0D0D0D',
+    flexShrink: 0,
+    minWidth: 40,
+    fontVariant: ['tabular-nums'],
+  },
+  rowColorTopRest: {
+    flex: 1,
+    minWidth: 0,
+  },
   rowTail: {
     flexDirection: 'row',
     alignItems: 'center',

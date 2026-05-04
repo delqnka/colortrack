@@ -1112,6 +1112,15 @@ const INVENTORY_UNITS = new Set(['g', 'ml', 'pcs', 'oz']);
 const INVENTORY_CATEGORY_MAX = 80;
 const INVENTORY_CATEGORIES = new Set(['dye', 'oxidant', 'mixtone', 'toner', 'retail', 'consumable']);
 
+/** Route :id → int (trim; rejects floats / junk so GET/DELETE/PATCH stay aligned). */
+function parseInventoryItemIdParam(raw) {
+  const s = String(raw ?? '').trim();
+  if (!/^\d{1,12}$/.test(s)) return null;
+  const n = parseInt(s, 10);
+  if (!Number.isFinite(n) || n < 1 || n > Number.MAX_SAFE_INTEGER) return null;
+  return n;
+}
+
 function sanitizeInventoryText(raw, max = 200) {
   if (typeof raw !== 'string') return null;
   const t = raw.trim().replace(/\s+/g, ' ').slice(0, max);
@@ -1377,10 +1386,46 @@ app.get('/api/inventory/subcategories', async (req, res, next) => {
   }
 });
 
+/** Clear custom_subcategory on all salon items matching label (case-insensitive trim). Optional body.category limits to that inventory category (e.g. dye vs oxidant). */
+app.post('/api/inventory/clear-subcategory', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const raw = typeof b.subcategory === 'string' ? b.subcategory.trim() : '';
+    if (!raw || raw.length > 100) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const catFilter =
+      typeof b.category === 'string' && b.category.trim()
+        ? String(b.category).trim().slice(0, 80)
+        : null;
+    const sql = getSql();
+    const norm = raw.toLowerCase();
+    const updated = catFilter
+      ? await sql`
+          UPDATE inventory_items
+          SET custom_subcategory = NULL
+          WHERE salon_id = ${req.auth.salonId}
+            AND lower(trim(custom_subcategory)) = ${norm}
+            AND category = ${catFilter}
+          RETURNING id
+        `
+      : await sql`
+          UPDATE inventory_items
+          SET custom_subcategory = NULL
+          WHERE salon_id = ${req.auth.salonId}
+            AND lower(trim(custom_subcategory)) = ${norm}
+          RETURNING id
+        `;
+    res.json({ count: updated.length });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.get('/api/inventory/:id/movements', async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id < 1) {
+    const id = parseInventoryItemIdParam(req.params.id);
+    if (id == null) {
       return res.status(400).json({ error: 'bad_request' });
     }
     const sql = getSql();
@@ -1405,8 +1450,8 @@ app.get('/api/inventory/:id/movements', async (req, res, next) => {
 
 app.get('/api/inventory/:id', async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id < 1) {
+    const id = parseInventoryItemIdParam(req.params.id);
+    if (id == null) {
       return res.status(400).json({ error: 'bad_request' });
     }
     const sql = getSql();
@@ -1441,8 +1486,8 @@ app.get('/api/inventory/:id', async (req, res, next) => {
 
 app.patch('/api/inventory/:id', async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id < 1) {
+    const id = parseInventoryItemIdParam(req.params.id);
+    if (id == null) {
       return res.status(400).json({ error: 'bad_request' });
     }
     const sql = getSql();
@@ -1601,6 +1646,27 @@ app.patch('/api/inventory/:id', async (req, res, next) => {
         (quantity <= low_stock_threshold) AS is_low_stock
     `;
     res.json(updated[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/inventory/:id', async (req, res, next) => {
+  try {
+    const id = parseInventoryItemIdParam(req.params.id);
+    if (id == null) {
+      return res.status(400).json({ error: 'bad_request' });
+    }
+    const sql = getSql();
+    const del = await sql`
+      DELETE FROM inventory_items
+      WHERE id = ${id} AND salon_id = ${req.auth.salonId}
+      RETURNING id
+    `;
+    if (!del.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    res.status(204).end();
   } catch (e) {
     next(e);
   }

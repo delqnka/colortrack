@@ -37,7 +37,7 @@ import {
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import IsoDatePickField from '../components/IsoDatePickField';
-import { isColourFormulaPickItem, isDeveloperInventoryPickItem } from '../inventory/inventoryCategories';
+import { displayStockUnit, isColourFormulaPickItem, isDeveloperInventoryPickItem } from '../inventory/inventoryCategories';
 
 const FORMULA_ZONE_ROOTS_ART = require('../../assets/formula-zone-roots.png');
 const FORMULA_ZONE_LENGTHS_ART = require('../../assets/c.png');
@@ -876,7 +876,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
               hitSlop={10}
               activeOpacity={0.7}
             >
-              <SFIcon name="close-circle" iosName="xmark.circle.fill" size={15} color="#8A8A8E" />
+              <SFIcon name="close-circle-outline" iosName="xmark.circle" size={15} color={MY_LAB_VIOLET} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -1054,7 +1054,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 hitSlop={10}
                 activeOpacity={0.7}
               >
-                <SFIcon name="close-circle" iosName="xmark.circle.fill" size={15} color="#8A8A8E" />
+                <SFIcon name="close-circle-outline" iosName="xmark.circle" size={15} color={MY_LAB_VIOLET} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -1219,7 +1219,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                 >
                   <Image source={{ uri: p.uri }} style={styles.photoThumbImg} />
                   <View style={styles.photoRemove}>
-                    <SFIcon name="close-circle" iosName="xmark.circle.fill" size={20} color="#FFFFFF" />
+                    <SFIcon name="close-circle-outline" iosName="xmark.circle" size={20} color={MY_LAB_VIOLET} />
                   </View>
                 </TouchableOpacity>
               ))}
@@ -1333,7 +1333,7 @@ export default function FormulaBuilderScreen({ route, navigation }) {
                   <Text style={styles.invRowName}>{item.name}</Text>
                   <Text style={styles.invRowMeta}>
                     {[item.brand, item.shade_code].filter(Boolean).join(' · ')}
-                    {item.quantity != null ? `  ·  In stock: ${item.quantity} ${item.unit || ''}` : ''}
+                    {item.quantity != null ? `  ·  In stock: ${item.quantity} ${displayStockUnit(item)}` : ''}
                   </Text>
                 </View>
                 <SFIcon name="add-circle-outline" iosName="plus.circle" size={22} color={MY_LAB_VIOLET} />

@@ -15,7 +15,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { apiDelete, apiGet, apiPatch, apiPost, saveSessionToken, resolveImagePublicUri } from '../api/client';
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  saveSessionToken,
+  resolveImagePublicUri,
+  mergeStaffMeResponse,
+} from '../api/client';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import { useCurrency } from '../context/CurrencyContext';
@@ -68,14 +76,15 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
       const row = await apiGet('/api/me', { allowStaleCache: false });
-      setMe(row);
+      if (!row || typeof row !== 'object') return;
+      setMe((prev) => mergeStaffMeResponse(prev, row));
       setNameDraft(row.display_name || '');
       setEmailDraft(row.email || '');
       setCurrentPasswordDraft('');
       setNewPasswordDraft('');
       setConfirmPasswordDraft('');
     } catch {
-      setMe(null);
+      /* Do not clear profile/avatar on transient errors */
     } finally {
       setLoading(false);
     }

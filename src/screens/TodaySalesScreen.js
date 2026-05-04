@@ -282,7 +282,7 @@ export default function TodaySalesScreen({ navigation, route }) {
               ) : clientMode === 'client' && selectedClient ? (
                 <TouchableOpacity style={s.selectedChip} onPress={() => setSelectedClient(null)} activeOpacity={0.8}>
                   <Text style={s.selectedChipTxt}>{selectedClient.full_name}</Text>
-                  <Ionicons name="close-circle" size={16} color={BRAND_PURPLE} />
+                  <Ionicons name="close-circle-outline" size={16} color={MY_LAB_VIOLET} />
                 </TouchableOpacity>
               ) : null}
 
@@ -322,7 +322,7 @@ export default function TodaySalesScreen({ navigation, route }) {
                   activeOpacity={0.8}
                 >
                   <Text style={s.selectedChipTxt}>{selectedProduct.name}</Text>
-                  <Ionicons name="close-circle" size={16} color={BRAND_PURPLE} />
+                  <Ionicons name="close-circle-outline" size={16} color={MY_LAB_VIOLET} />
                 </TouchableOpacity>
               )}
 

@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../api/client';
-import { glassPurpleIconBtn } from '../theme/glassUi';
+import { glassPurpleIconBtn, MY_LAB_VIOLET } from '../theme/glassUi';
 import { formatDisplayDate } from '../lib/formatDate';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
@@ -367,7 +367,7 @@ export default function AppointmentFormScreen({ route, navigation }) {
             </Text>
             {clientId ? (
               <TouchableOpacity onPress={clearClient} hitSlop={8}>
-                <Ionicons name="close-circle" size={22} color="#1C1C1E" />
+                <Ionicons name="close-circle-outline" size={22} color={MY_LAB_VIOLET} />
               </TouchableOpacity>
             ) : (
               <Ionicons name="chevron-forward" size={20} color="#1C1C1E" />

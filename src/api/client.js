@@ -132,6 +132,25 @@ export function resolveStaffAvatarUri(raw) {
   return resolveImagePublicUri(raw);
 }
 
+/**
+ * Merge GET /api/me (or PATCH) payload with previously known staff profile so we never
+ * wipe `avatar_url` when the server omits it, returns null, or a transient response is wrong.
+ * If `next.id` differs from `prev.id`, `next` wins (different account).
+ */
+export function mergeStaffMeResponse(prev, next) {
+  if (!next || typeof next !== 'object') return prev && typeof prev === 'object' ? prev : null;
+  if (!prev || typeof prev !== 'object') return next;
+  const pa = Number(prev.id);
+  const na = Number(next.id);
+  if (Number.isFinite(pa) && Number.isFinite(na) && pa !== na) return next;
+  const prevAvatar = String(prev.avatar_url ?? '').trim();
+  const nextAvatar = String(next.avatar_url ?? '').trim();
+  if (!nextAvatar && prevAvatar) {
+    return { ...next, avatar_url: prev.avatar_url };
+  }
+  return next;
+}
+
 const TOKEN_KEY = 'auth_token';
 const API_BASE_KEY = 'colortrack_token_api_base';
 const OUTBOX_KEY = 'api_outbox';

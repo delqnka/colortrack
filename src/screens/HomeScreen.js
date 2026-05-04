@@ -26,6 +26,7 @@ import { apiGet, apiReadStaleCache, getProfileMeCacheStorageKey, resolveImagePub
 import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
 import { hapticImpactLight } from '../theme/haptics';
 import { useCurrency } from '../context/CurrencyContext';
+import CurrencyPickerModal from '../components/CurrencyPickerModal';
 import { formatMinorFromStoredCents } from '../format/moneyDisplay';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
@@ -210,7 +211,8 @@ export default function HomeScreen() {
   const dateStripScrollRef = useRef(null);
   const homeDateCacheRef = useRef(new Map()); // per-date data cache
   const [financeSummary, setFinanceSummary] = useState(null);
-  const { currency } = useCurrency();
+  const { currency, setCurrency } = useCurrency();
+  const [pickCurOpen, setPickCurOpen] = useState(false);
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
@@ -575,10 +577,21 @@ export default function HomeScreen() {
               <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
-            <Ionicons name="search" size={20} color={MY_LAB_VIOLET} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.currencyBtn} activeOpacity={0.85} onPress={() => setPickCurOpen(true)}>
+              <Text style={styles.currencyBtnTxt}>{currency}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
+              <Ionicons name="search" size={20} color={MY_LAB_VIOLET} />
+            </TouchableOpacity>
+          </View>
         </View>
+        <CurrencyPickerModal
+          visible={pickCurOpen}
+          currentCode={currency}
+          onClose={() => setPickCurOpen(false)}
+          onSelect={(code) => { setCurrency(code); setPickCurOpen(false); }}
+        />
 
             {loading && !hasFetchedOnce.current ? (
               <View style={styles.loadingBanner}>
@@ -954,6 +967,25 @@ const styles = StyleSheet.create({
     ...Type.greetingDate,
     marginTop: 2,
     flexShrink: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  currencyBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(94,53,177,0.25)',
+  },
+  currencyBtnTxt: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    color: MY_LAB_VIOLET,
+    letterSpacing: 0.3,
   },
   searchButton: {
     width: 44,

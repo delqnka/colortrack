@@ -72,13 +72,24 @@ const INVENTORY_FILTERS = [
     key: 'colors',
     label: 'Colors',
     icon: 'color-wand-outline',
-    iosIcon: 'pencil.tip.crop.circle.badge.plus.fill',
+    iosIcon: 'paintpalette.fill',
     addCategory: 'dye',
+  },
+  {
+    key: 'developer',
+    label: 'Developer',
+    icon: 'flask-outline',
+    iosIcon: 'flask.fill',
+    addCategory: 'oxidant',
   },
 ];
 
 function isRetailItem(item) {
   return inventoryCategoryKey(item?.category) === 'retail';
+}
+
+function isOxidantItem(item) {
+  return inventoryCategoryKey(item?.category) === 'oxidant';
 }
 
 function sectionTitle(cat) {
@@ -252,8 +263,14 @@ export default function InventoryScreen({ navigation }) {
 
   const filteredRows = useMemo(() => {
     if (inventoryFilter === 'retail') return rows.filter(isRetailItem);
-    if (inventoryFilter === 'colors') return rows.filter(isColorItem);
-    return rows.filter((item) => !isRetailItem(item) && !isColorItem(item));
+    if (inventoryFilter === 'developer') return rows.filter(isOxidantItem);
+    if (inventoryFilter === 'colors') return rows.filter(
+      (item) => isColorItem(item) && !isOxidantItem(item),
+    );
+    // stock: everything that's not retail, not color (dye/toner/mixtone), not oxidant
+    return rows.filter(
+      (item) => !isRetailItem(item) && !isColorItem(item) && !isOxidantItem(item),
+    );
   }, [inventoryFilter, rows]);
 
   const inventorySearchNorm = inventorySearchQ.normalize('NFC').trim();
@@ -263,7 +280,7 @@ export default function InventoryScreen({ navigation }) {
     return rows.filter((item) => itemMatchesInventorySearch(item, inventorySearchNorm));
   }, [rows, filteredRows, inventorySearchNorm]);
 
-  const useSubcategoryGrouping = inventoryFilter === 'stock' || inventoryFilter === 'retail';
+  const useSubcategoryGrouping = inventoryFilter === 'stock' || inventoryFilter === 'retail' || inventoryFilter === 'developer';
 
   // All unique subcategories present in the current filtered set (for pill row)
   const availableSubcategories = useMemo(() => {
@@ -1217,8 +1234,8 @@ const styles = StyleSheet.create({
   importBtnText: { color: '#fff', ...Type.buttonLabel },
   filterRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 24,
+    gap: 7,
+    paddingHorizontal: 20,
     paddingBottom: 20,
     backgroundColor: '#FFFFFF',
   },
@@ -1229,8 +1246,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 14,
+    paddingHorizontal: 4,
+    paddingVertical: 12,
     position: 'relative',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
@@ -1276,7 +1293,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(107,78,255,0.28)',
   },
   filterCardText: {
-    fontSize: 15,
+    fontSize: 13,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.medium,
     color: '#0D0D0D',

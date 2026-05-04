@@ -1,4 +1,62 @@
 import React, { useCallback, useState } from 'react';
+
+function CheckRow({ label, checked, onPress, style }) {
+  return (
+    <TouchableOpacity
+      style={[crStyles.row, style]}
+      onPress={onPress}
+      activeOpacity={0.75}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: checked }}
+    >
+      <View style={[crStyles.circle, checked && crStyles.circleOn]}>
+        {checked ? <View style={crStyles.tick} /> : null}
+      </View>
+      <Text style={[crStyles.label, checked && crStyles.labelOn]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const crStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+    gap: 12,
+  },
+  circle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#C7C7CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleOn: {
+    borderColor: '#5E35B1',
+    backgroundColor: '#5E35B1',
+  },
+  tick: {
+    width: 6,
+    height: 10,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: '#FFFFFF',
+    transform: [{ rotate: '45deg' }, { translateY: -1 }],
+  },
+  label: {
+    fontFamily: 'Manrope_400Regular',
+    fontSize: 15,
+    color: '#0D0D0D',
+  },
+  labelOn: {
+    fontFamily: 'Manrope_600SemiBold',
+    color: '#5E35B1',
+  },
+});
 import {
   View,
   Text,
@@ -392,40 +450,35 @@ export default function InventoryItemScreen({ route, navigation }) {
 
               {/* Ammonia toggle */}
               <Text style={[styles.label, { marginTop: 14 }]}>Formula type</Text>
-              <View style={styles.sectionToggle}>
-                {[['ammonia', 'Ammonia'], ['non-ammonia', 'Non-ammonia']].map(([val, lbl]) => (
-                  <TouchableOpacity
+              <View style={styles.checkGroup}>
+                {[['ammonia', 'Ammonia'], ['non-ammonia', 'Non-ammonia']].map(([val, lbl], i, arr) => (
+                  <CheckRow
                     key={val}
-                    style={[styles.sectionBtn, ammoniaType === val && styles.sectionBtnOn]}
+                    label={lbl}
+                    checked={ammoniaType === val}
                     onPress={() => setAmmoniaType(ammoniaType === val ? null : val)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.sectionBtnTxt, ammoniaType === val && styles.sectionBtnTxtOn]}>{lbl}</Text>
-                  </TouchableOpacity>
+                    style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
+                  />
                 ))}
               </View>
             </>
           ) : null}
 
-          {/* ── Section toggle: Stock / Retail ── */}
+          {/* ── Section ── */}
           <Text style={styles.label}>Section</Text>
-          <View style={styles.sectionToggle}>
+          <View style={styles.checkGroup}>
             {[
               { key: isDeveloperItem ? 'oxidant' : 'consumable', label: 'Stock' },
               { key: 'retail', label: 'Retail' },
-            ].map(({ key, label }) => {
-              const on = categoryPreset === key;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[styles.sectionBtn, on && styles.sectionBtnOn]}
-                  onPress={() => { setCategoryPreset(key); setCategoryCustom(''); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.sectionBtnTxt, on && styles.sectionBtnTxtOn]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
+            ].map(({ key, label }, i, arr) => (
+              <CheckRow
+                key={key}
+                label={label}
+                checked={categoryPreset === key}
+                onPress={() => { setCategoryPreset(key); setCategoryCustom(''); }}
+                style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
+              />
+            ))}
           </View>
 
           {/* ── Subcategory — hidden for developers ── */}
@@ -621,31 +674,14 @@ const styles = StyleSheet.create({
     color: '#5E35B1',
     marginBottom: 16,
   },
-  sectionToggle: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
-  sectionBtn: {
-    flex: 1,
-    paddingVertical: 12,
+  checkGroup: {
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E5E5EA',
     backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-  },
-  sectionBtnOn: {
-    backgroundColor: '#0D0D0D',
-    borderColor: '#0D0D0D',
-  },
-  sectionBtnTxt: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 14,
-    color: '#0D0D0D',
-  },
-  sectionBtnTxtOn: {
-    color: '#FFFFFF',
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
   marginRow: {
     flexDirection: 'row',

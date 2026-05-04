@@ -3,6 +3,7 @@
     "name": "ColorBar Suite",
     "slug": "ColorBar-Suite",
     "version": "1.0.0",
+    "scheme": "colorbar-suite",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

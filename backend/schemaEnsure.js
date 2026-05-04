@@ -331,6 +331,43 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sell_price_cents BIGINT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_global_products_brand ON global_products(brand)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_global_products_count ON global_products(confirmed_count DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS affiliates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      affiliate_code TEXT NOT NULL UNIQUE,
+      owner_staff_id INT REFERENCES staff (id) ON DELETE SET NULL,
+      commission_rate NUMERIC(5, 4) NOT NULL DEFAULT 0.20,
+      total_earnings_cents BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_affiliates_code ON affiliates (affiliate_code)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_affiliates_owner ON affiliates (owner_staff_id)`;
+  await sql`ALTER TABLE affiliates ADD COLUMN IF NOT EXISTS salon_id INT REFERENCES salons (id) ON DELETE CASCADE`;
+  await sql`ALTER TABLE affiliates ADD COLUMN IF NOT EXISTS influencer_name TEXT NOT NULL DEFAULT ''`;
+  await sql`
+    UPDATE affiliates SET salon_id = (
+      SELECT salon_id FROM staff WHERE staff.id = affiliates.owner_staff_id LIMIT 1
+    ) WHERE salon_id IS NULL AND owner_staff_id IS NOT NULL
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_affiliates_salon ON affiliates (salon_id)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      affiliate_id UUID NOT NULL REFERENCES affiliates (id) ON DELETE CASCADE,
+      revenuecat_user_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'active_subscriber')),
+      credited_cents BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (revenuecat_user_id)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_referrals_affiliate ON referrals (affiliate_id)`;
+  await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS credited_at TIMESTAMPTZ`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_referrals_credited_at ON referrals (credited_at)`;
 }
 
 module.exports = { ensureSchema };

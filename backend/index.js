@@ -3725,23 +3725,39 @@ async function generateUniqueAffiliateCode(sql) {
   throw new Error('Could not generate unique affiliate code after 10 attempts');
 }
 
-// POST /api/affiliates — create affiliate link for the authenticated staff member (admin only)
+// GET /api/affiliates — list all affiliate codes for the salon (admin only)
+app.get('/api/affiliates', async (req, res, next) => {
+  try {
+    if (req.auth.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+    const sql = getSql();
+    const rows = await sql`
+      SELECT
+        a.*,
+        COUNT(r.id)::int                                                AS total_referrals,
+        COUNT(r.id) FILTER (WHERE r.status = 'active_subscriber')::int  AS active_referrals
+      FROM affiliates a
+      LEFT JOIN referrals r ON r.affiliate_id = a.id
+      WHERE a.salon_id = ${req.auth.salonId}
+      GROUP BY a.id
+      ORDER BY a.created_at DESC
+    `;
+    res.json(rows);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/affiliates — create affiliate code for an influencer (admin only)
 app.post('/api/affiliates', async (req, res, next) => {
   try {
-    if (req.auth.role !== 'admin') {
-      return res.status(403).json({ error: 'forbidden' });
-    }
+    if (req.auth.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+    const influencerName = String((req.body || {}).influencer_name || '').trim();
+    if (!influencerName) return res.status(400).json({ error: 'influencer_name is required' });
     const sql = getSql();
-    const existing = await sql`
-      SELECT * FROM affiliates WHERE owner_staff_id = ${req.auth.userId}
-    `;
-    if (existing.length) {
-      return res.status(409).json({ error: 'already_exists', affiliate: existing[0] });
-    }
     const code = await generateUniqueAffiliateCode(sql);
     const [affiliate] = await sql`
-      INSERT INTO affiliates (affiliate_code, owner_staff_id, commission_rate)
-      VALUES (${code}, ${req.auth.userId}, 0.20)
+      INSERT INTO affiliates (affiliate_code, salon_id, owner_staff_id, influencer_name, commission_rate)
+      VALUES (${code}, ${req.auth.salonId}, ${req.auth.userId}, ${influencerName}, 0.20)
       RETURNING *
     `;
     res.status(201).json(affiliate);
@@ -3750,22 +3766,61 @@ app.post('/api/affiliates', async (req, res, next) => {
   }
 });
 
-// GET /api/affiliates/me — dashboard stats for the authenticated staff member
-app.get('/api/affiliates/me', async (req, res, next) => {
+// DELETE /api/affiliates/:id — remove an affiliate code (admin only)
+app.delete('/api/affiliates/:id', async (req, res, next) => {
   try {
+    if (req.auth.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
     const sql = getSql();
-    const [row] = await sql`
+    const del = await sql`
+      DELETE FROM affiliates WHERE id = ${req.params.id} AND salon_id = ${req.auth.salonId} RETURNING id
+    `;
+    if (!del.length) return res.status(404).json({ error: 'not_found' });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/affiliates/report?from=YYYY-MM-DD&to=YYYY-MM-DD — weekly earnings report (admin only)
+app.get('/api/affiliates/report', async (req, res, next) => {
+  try {
+    if (req.auth.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+    const sql = getSql();
+
+    const toDate = req.query.to
+      ? new Date(String(req.query.to))
+      : new Date();
+    const fromDate = req.query.from
+      ? new Date(String(req.query.from))
+      : new Date(toDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      return res.status(400).json({ error: 'invalid date range' });
+    }
+
+    const rows = await sql`
       SELECT
-        a.*,
-        COUNT(r.id)::int                                                AS total_referrals,
-        COUNT(r.id) FILTER (WHERE r.status = 'active_subscriber')::int  AS active_referrals
+        a.id,
+        a.affiliate_code,
+        a.influencer_name,
+        a.commission_rate,
+        a.total_earnings_cents,
+        COUNT(r.id) FILTER (WHERE r.status = 'active_subscriber')::int          AS total_active,
+        COUNT(r.id) FILTER (WHERE r.created_at >= ${fromDate} AND r.created_at <= ${toDate})::int
+                                                                                 AS week_new_referrals,
+        COUNT(r.id) FILTER (
+          WHERE r.credited_at >= ${fromDate} AND r.credited_at <= ${toDate}
+        )::int                                                                   AS week_new_subscribers,
+        COALESCE(SUM(r.credited_cents) FILTER (
+          WHERE r.credited_at >= ${fromDate} AND r.credited_at <= ${toDate}
+        ), 0)::bigint                                                            AS week_earnings_cents
       FROM affiliates a
       LEFT JOIN referrals r ON r.affiliate_id = a.id
-      WHERE a.owner_staff_id = ${req.auth.userId}
+      WHERE a.salon_id = ${req.auth.salonId}
       GROUP BY a.id
+      ORDER BY a.created_at DESC
     `;
-    if (!row) return res.status(404).json({ error: 'not_found' });
-    res.json(row);
+    res.json({ from: fromDate.toISOString(), to: toDate.toISOString(), affiliates: rows });
   } catch (e) {
     next(e);
   }
@@ -3812,11 +3867,12 @@ app.post('/api/webhooks/revenuecat', async (req, res, next) => {
     // - Retry/dup     → conflict but credited_cents > 0 → DO NOTHING → CTE returns nothing → no double-credit.
     await sql`
       WITH credit AS (
-        INSERT INTO referrals (affiliate_id, revenuecat_user_id, status, credited_cents)
-        VALUES (${affiliate.id}, ${appUserId}, 'active_subscriber', ${commissionCents})
+        INSERT INTO referrals (affiliate_id, revenuecat_user_id, status, credited_cents, credited_at)
+        VALUES (${affiliate.id}, ${appUserId}, 'active_subscriber', ${commissionCents}, NOW())
         ON CONFLICT (revenuecat_user_id) DO UPDATE
-          SET status      = 'active_subscriber',
-              credited_cents = EXCLUDED.credited_cents
+          SET status         = 'active_subscriber',
+              credited_cents = EXCLUDED.credited_cents,
+              credited_at    = NOW()
           WHERE referrals.credited_cents = 0
         RETURNING affiliate_id
       )

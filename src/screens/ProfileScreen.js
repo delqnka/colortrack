@@ -363,13 +363,15 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('Affiliate')} activeOpacity={0.8}>
-              <Text style={styles.currencyLabel}>Partner Program</Text>
-              <View style={styles.currencyRight}>
-                <Text style={styles.currencyValue}>Affiliate</Text>
-                <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
-              </View>
-            </TouchableOpacity>
+            {me?.role === 'admin' && (
+              <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('Affiliate')} activeOpacity={0.8}>
+                <Text style={styles.currencyLabel}>Partner Program</Text>
+                <View style={styles.currencyRight}>
+                  <Text style={styles.currencyValue}>Affiliate</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
+                </View>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={styles.signOut} onPress={confirmSignOut} activeOpacity={0.88}>
               <Text style={styles.signOutText}>Sign out</Text>

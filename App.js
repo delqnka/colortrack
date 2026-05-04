@@ -31,6 +31,8 @@ import OnboardingEmailScreen from './src/onboarding/screens/OnboardingEmailScree
 import { isOnboardingComplete } from './src/onboarding/storage';
 import ProfileScreen from './src/screens/ProfileScreen';
 import AffiliateScreen from './src/screens/AffiliateScreen';
+import PaywallScreen from './src/screens/PaywallScreen';
+import { useEntitlement } from './src/hooks/useEntitlement';
 import TodaySalesScreen from './src/screens/TodaySalesScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import { CurrencyProvider } from './src/context/CurrencyContext';
@@ -262,6 +264,8 @@ export default function App() {
 
   const [authReady, setAuthReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const { isActive: hasEntitlement, loading: entitlementLoading, refresh: refreshEntitlement } = useEntitlement();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const textFontDefaultsApplied = useRef(false);
@@ -274,6 +278,7 @@ export default function App() {
       await flushOutbox();
       registerExpoPushIfPossible();
       applyAffiliateAttribute();
+      await refreshEntitlement();
     }
   }, []);
 
@@ -331,10 +336,29 @@ export default function App() {
     SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
+  useEffect(() => {
+    if (signedIn && authReady && !entitlementLoading && !hasEntitlement) {
+      setShowPaywall(true);
+    }
+  }, [signedIn, authReady, entitlementLoading, hasEntitlement]);
+
   if (!fontsLoaded || !authReady || !onboardingChecked) {
     return (
       <SafeAreaProvider>
         <View style={{ flex: 1, backgroundColor: '#fff' }} />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (signedIn && showPaywall) {
+    return (
+      <SafeAreaProvider>
+        <PaywallScreen
+          onDismiss={({ subscribed }) => {
+            if (subscribed) refreshEntitlement();
+            setShowPaywall(false);
+          }}
+        />
       </SafeAreaProvider>
     );
   }

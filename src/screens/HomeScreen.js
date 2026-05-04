@@ -578,8 +578,16 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.currencyBtn} activeOpacity={0.85} onPress={() => setPickCurOpen(true)}>
-              <Text style={styles.currencyBtnTxt}>{currency}</Text>
+            <TouchableOpacity activeOpacity={0.82} onPress={() => setPickCurOpen(true)} style={styles.currencyBtnWrap}>
+              <LinearGradient
+                colors={SALON_LAB_GRADIENT_COLORS}
+                locations={SALON_LAB_GRADIENT_LOCATIONS}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.currencyBtn}
+              >
+                <Text style={styles.currencyBtnTxt}>{currency}</Text>
+              </LinearGradient>
             </TouchableOpacity>
             <TouchableOpacity style={styles.searchButton} activeOpacity={0.85} onPress={openSearch}>
               <Ionicons name="search" size={20} color={MY_LAB_VIOLET} />
@@ -974,18 +982,25 @@ const styles = StyleSheet.create({
     gap: 6,
     flexShrink: 0,
   },
+  currencyBtnWrap: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
+    borderRadius: 20,
+  },
   currencyBtn: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(94,53,177,0.25)',
+    borderRadius: 20,
+    overflow: 'hidden',
   },
   currencyBtnTxt: {
     fontFamily: FontFamily.semibold,
     fontSize: 13,
-    color: MY_LAB_VIOLET,
-    letterSpacing: 0.3,
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
   },
   searchButton: {
     width: 44,

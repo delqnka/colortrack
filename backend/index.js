@@ -30,6 +30,7 @@ function authGate(req, res, next) {
   if (req.method === 'POST' && req.path === '/api/auth/apple') return next();
   if (req.method === 'GET' && req.path === '/health') return next();
   if (req.method === 'GET' && req.path === '/api/media/r2') return next();
+  if (req.method === 'POST' && req.path === '/api/webhooks/revenuecat') return next();
   if (req.path.startsWith('/api')) return authMiddleware(req, res, next);
   return next();
 }
@@ -3707,6 +3708,131 @@ app.delete('/api/finance/product-sales/:id', async (req, res, next) => {
     next(e);
   }
 });
+
+// ─── Affiliate system ────────────────────────────────────────────────────────
+
+const AFFILIATE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+async function generateUniqueAffiliateCode(sql) {
+  for (let i = 0; i < 10; i++) {
+    let code = '';
+    for (let j = 0; j < 8; j++) {
+      code += AFFILIATE_CODE_CHARS[Math.floor(Math.random() * AFFILIATE_CODE_CHARS.length)];
+    }
+    const existing = await sql`SELECT id FROM affiliates WHERE affiliate_code = ${code}`;
+    if (!existing.length) return code;
+  }
+  throw new Error('Could not generate unique affiliate code after 10 attempts');
+}
+
+// POST /api/affiliates — create affiliate link for the authenticated staff member (admin only)
+app.post('/api/affiliates', async (req, res, next) => {
+  try {
+    if (req.auth.role !== 'admin') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const sql = getSql();
+    const existing = await sql`
+      SELECT * FROM affiliates WHERE owner_staff_id = ${req.auth.userId}
+    `;
+    if (existing.length) {
+      return res.status(409).json({ error: 'already_exists', affiliate: existing[0] });
+    }
+    const code = await generateUniqueAffiliateCode(sql);
+    const [affiliate] = await sql`
+      INSERT INTO affiliates (affiliate_code, owner_staff_id, commission_rate)
+      VALUES (${code}, ${req.auth.userId}, 0.20)
+      RETURNING *
+    `;
+    res.status(201).json(affiliate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/affiliates/me — dashboard stats for the authenticated staff member
+app.get('/api/affiliates/me', async (req, res, next) => {
+  try {
+    const sql = getSql();
+    const [row] = await sql`
+      SELECT
+        a.*,
+        COUNT(r.id)::int                                                AS total_referrals,
+        COUNT(r.id) FILTER (WHERE r.status = 'active_subscriber')::int  AS active_referrals
+      FROM affiliates a
+      LEFT JOIN referrals r ON r.affiliate_id = a.id
+      WHERE a.owner_staff_id = ${req.auth.userId}
+      GROUP BY a.id
+    `;
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    res.json(row);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/webhooks/revenuecat — RevenueCat purchase webhook (no auth, verified by secret)
+app.post('/api/webhooks/revenuecat', async (req, res, next) => {
+  try {
+    const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
+    if (secret) {
+      const authHeader = req.headers['authorization'] || '';
+      if (authHeader !== secret) {
+        return res.status(401).json({ error: 'unauthorized' });
+      }
+    }
+
+    const event = req.body && req.body.event;
+    if (!event) return res.status(400).json({ error: 'missing_event' });
+
+    // Only credit on initial purchases — renewals can be added later
+    if (event.type !== 'INITIAL_PURCHASE') {
+      return res.status(200).json({ received: true, skipped: true });
+    }
+
+    const affiliateCode = event.subscriber_attributes?.affiliate_id?.value
+      ?? event.subscriber_attributes?.affiliate_id?.$value;
+    if (!affiliateCode) return res.status(200).json({ received: true, skipped: true });
+
+    const appUserId = String(event.app_user_id || '').trim();
+    if (!appUserId) return res.status(400).json({ error: 'missing_app_user_id' });
+
+    const sql = getSql();
+    const [affiliate] = await sql`
+      SELECT id, commission_rate FROM affiliates WHERE affiliate_code = ${String(affiliateCode).trim().toUpperCase()}
+    `;
+    if (!affiliate) return res.status(200).json({ received: true, skipped: true });
+
+    const priceInCents = Math.round((Number(event.price_in_purchased_currency) || 0) * 100);
+    const commissionCents = Math.round(priceInCents * Number(affiliate.commission_rate));
+
+    // Atomic CTE: insert/update referral AND increment affiliate earnings in one statement.
+    // The DO UPDATE WHERE referrals.credited_cents = 0 ensures earnings are credited only once:
+    // - New referral  → INSERT succeeds, CTE returns affiliate_id → affiliate updated.
+    // - Retry/dup     → conflict but credited_cents > 0 → DO NOTHING → CTE returns nothing → no double-credit.
+    await sql`
+      WITH credit AS (
+        INSERT INTO referrals (affiliate_id, revenuecat_user_id, status, credited_cents)
+        VALUES (${affiliate.id}, ${appUserId}, 'active_subscriber', ${commissionCents})
+        ON CONFLICT (revenuecat_user_id) DO UPDATE
+          SET status      = 'active_subscriber',
+              credited_cents = EXCLUDED.credited_cents
+          WHERE referrals.credited_cents = 0
+        RETURNING affiliate_id
+      )
+      UPDATE affiliates
+         SET total_earnings_cents = total_earnings_cents + ${commissionCents}
+        FROM credit
+       WHERE affiliates.id = credit.affiliate_id
+    `;
+
+    res.status(200).json({ received: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.use((req, res) => {
   const orig = String(req.originalUrl || req.url || '');

@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { View, Pressable, Text, TextInput, StyleSheet, DeviceEventEmitter, Platform } from 'react-native';
+import Purchases from 'react-native-purchases';
 import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import * as SplashScreen from 'expo-splash-screen';
 import { BlurView } from 'expo-blur';
@@ -29,11 +30,13 @@ import OnboardingAuthScreen from './src/onboarding/screens/OnboardingAuthScreen'
 import OnboardingEmailScreen from './src/onboarding/screens/OnboardingEmailScreen';
 import { isOnboardingComplete } from './src/onboarding/storage';
 import ProfileScreen from './src/screens/ProfileScreen';
+import AffiliateScreen from './src/screens/AffiliateScreen';
 import TodaySalesScreen from './src/screens/TodaySalesScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import { CurrencyProvider } from './src/context/CurrencyContext';
 import { loadStoredToken, flushOutbox } from './src/api/client';
 import { registerExpoPushIfPossible } from './src/push/registerPush';
+import { useAffiliateTracker, applyAffiliateAttribute } from './src/hooks/useAffiliateTracker';
 import { FontFamily } from './src/theme/fonts';
 import { TAB_BAR_ACTIVE_BUBBLE, MY_LAB_VIOLET } from './src/theme/glassUi';
 import SFIcon from './src/components/SFIcon';
@@ -239,6 +242,17 @@ const styles = StyleSheet.create({
 });
 
 export default function App() {
+  useAffiliateTracker();
+
+  useEffect(() => {
+    const key = Platform.OS === 'ios'
+      ? process.env.EXPO_PUBLIC_RC_IOS_KEY
+      : process.env.EXPO_PUBLIC_RC_ANDROID_KEY;
+    if (key) {
+      Purchases.configure({ apiKey: key });
+    }
+  }, []);
+
   const [fontsLoaded] = useFonts({
     Manrope_400Regular,
     Manrope_500Medium,
@@ -259,6 +273,7 @@ export default function App() {
     if (t) {
       await flushOutbox();
       registerExpoPushIfPossible();
+      applyAffiliateAttribute();
     }
   }, []);
 
@@ -380,6 +395,7 @@ export default function App() {
               <AppStack.Screen name="Lab" component={LabScreen} />
               <AppStack.Screen name="Profile" component={ProfileScreen} />
               <AppStack.Screen name="Services" component={ServicesScreen} />
+              <AppStack.Screen name="Affiliate" component={AffiliateScreen} />
             </AppStack.Navigator>
           )}
         </NavigationContainer>

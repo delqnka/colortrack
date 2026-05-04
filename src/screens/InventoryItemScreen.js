@@ -73,7 +73,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiGet, apiPatch, apiPost } from '../api/client';
-import { glassPurpleIconBtn } from '../theme/glassUi';
+import { glassPurpleIconBtn, MY_LAB_VIOLET } from '../theme/glassUi';
 import { useCurrency } from '../context/CurrencyContext';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
@@ -207,7 +207,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, rc));
       }
       setAddingCategory(false);
-      setUnit(row.unit || 'pcs');
+      setUnit(row.category === 'oxidant' ? 'pcs' : (row.unit || 'pcs'));
       setSupplierStr(row.supplier_hint || '');
       // Developer fields — ammonia stored in custom_subcategory, bottle size in package_size
       const subcat = String(row.custom_subcategory || '').toLowerCase();
@@ -288,6 +288,7 @@ export default function InventoryItemScreen({ route, navigation }) {
 
     setSaving(true);
     try {
+      const persistUnit = categoryPreset === 'oxidant' && !categoryCustom.trim() ? 'pcs' : unit;
       if (!isEdit) {
         // For developer items, brand IS the name (e.g. "Wella Welloxon")
         const name = isDeveloperItem
@@ -303,7 +304,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         await apiPost('/api/inventory', {
           name,
           category: resolvedCategory,
-          unit,
+          unit: persistUnit,
           quantity: q,
           low_stock_threshold: t,
           brand: brandStr.trim() || null,
@@ -322,7 +323,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         const body = {
           quantity: q,
           low_stock_threshold: t,
-          unit,
+          unit: persistUnit,
           category: resolvedCategory,
           name: isDeveloperItem
             ? (brandStr.trim() || shadeStr.trim() || item.name || 'Developer')
@@ -379,10 +380,15 @@ export default function InventoryItemScreen({ route, navigation }) {
         <View style={styles.header}>
           <View style={styles.headerSide} />
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {isEdit ? item.name : 'New'}
+            {isEdit ? item.name : (
+              isDeveloperItem ? 'Adding developer' :
+              categoryPreset === 'retail' ? 'Adding retail product' :
+              COLOR_CATEGORY_KEYS.has(categoryPreset) ? 'Adding color' :
+              'Adding stock product'
+            )}
           </Text>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={12}>
-            <Ionicons name="close" size={26} color="#FFFFFF" />
+            <Ionicons name="close" size={22} color={MY_LAB_VIOLET} />
           </TouchableOpacity>
         </View>
 
@@ -600,25 +606,6 @@ export default function InventoryItemScreen({ route, navigation }) {
             </>
           ) : null}
 
-          {/* ── Unit (ml/oz toggle like % / vol) — developer; full chips otherwise ── */}
-          {isDeveloperItem ? (
-            <>
-              <Text style={styles.label}>Unit</Text>
-              <View style={styles.devModeToggle}>
-                {['ml', 'oz'].map(u => (
-                  <TouchableOpacity
-                    key={u}
-                    style={[styles.devModeBtn, unit === u && styles.devModeBtnOn]}
-                    onPress={() => setUnit(u)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.devModeTxt, unit === u && styles.devModeTxtOn]}>{u}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          ) : null}
-
           {/* ── Stock quantity inline ── */}
           <View style={styles.inlineRow}>
             <Text style={styles.inlineLabel}>Stock {!isDeveloperItem ? `(${unit})` : '(pcs)'}</Text>
@@ -744,9 +731,19 @@ const styles = StyleSheet.create({
   },
   headerSide: { width: 40, height: 40 },
   iconBtn: {
-    ...glassPurpleIconBtn,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: { flex: 1, textAlign: 'center', ...Type.screenTitle, color: '#0D0D0D' },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    color: '#0D0D0D',
+    letterSpacing: -0.2,
+  },
   scroll: { paddingHorizontal: 24, paddingBottom: 24 },
   subMeta: { ...Type.listPrimary, color: '#0D0D0D', marginBottom: 4 },
   supplier: {

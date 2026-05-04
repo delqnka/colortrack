@@ -112,6 +112,9 @@ export default function InventoryItemScreen({ route, navigation }) {
   const [unit, setUnit] = useState('g');
   const [supplierStr, setSupplierStr] = useState('');
   const [subcategoryStr, setSubcategoryStr] = useState('');
+  // Developer-specific
+  const [ammoniaType, setAmmoniaType] = useState(null); // 'ammonia' | 'non-ammonia' | null
+  const [strengthMode, setStrengthMode] = useState('percent'); // 'percent' | 'vol'
   const [subcategorySuggestions, setSubcategorySuggestions] = useState([]);
   const [qtyStr, setQtyStr] = useState('');
   const [threshStr, setThreshStr] = useState('');
@@ -146,8 +149,16 @@ export default function InventoryItemScreen({ route, navigation }) {
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, rc));
       }
       setAddingCategory(false);
-      setUnit(row.unit || 'g');
+      setUnit(row.unit || 'ml');
       setSupplierStr(row.supplier_hint || '');
+      // Developer fields
+      const ps = String(row.package_size || '').toLowerCase();
+      if (ps === 'ammonia') setAmmoniaType('ammonia');
+      else if (ps === 'non-ammonia') setAmmoniaType('non-ammonia');
+      else setAmmoniaType(null);
+      const sh = String(row.shade_code || '');
+      if (sh.includes('vol')) setStrengthMode('vol');
+      else setStrengthMode('percent');
       setSubcategoryStr(row.custom_subcategory || '');
       setQtyStr(numToStr(row.quantity));
       setThreshStr(numToStr(row.low_stock_threshold));
@@ -179,8 +190,10 @@ export default function InventoryItemScreen({ route, navigation }) {
       setCategoryCustom(initialCategory && !PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : '');
       setCategoryDraft('');
       setAddingCategory(false);
-      setUnit('pcs');
+      setUnit(initialPresetCategory === 'oxidant' ? 'ml' : 'pcs');
       setSupplierStr('');
+      setAmmoniaType(null);
+      setStrengthMode('percent');
       setSubcategoryStr('');
       setQtyStr('0');
       setThreshStr('0');
@@ -234,7 +247,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           low_stock_threshold: t,
           brand: brandStr.trim() || null,
           shade_code: shadeStr.trim() || null,
-          package_size: packageSizeStr.trim() || null,
+          package_size: effectivePackageSize,
           price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
           custom_subcategory: subcategoryStr.trim() || null,
@@ -251,7 +264,7 @@ export default function InventoryItemScreen({ route, navigation }) {
           name: nameStr.trim() || item.name,
           brand: brandStr.trim() || null,
           shade_code: shadeStr.trim() || null,
-          package_size: packageSizeStr.trim() || null,
+          package_size: effectivePackageSize,
           price_per_unit_cents: centsFromPriceText(priceStr),
           sell_price_cents: centsFromPriceText(sellPriceStr),
           supplier_hint: supplierStr.trim() || null,
@@ -282,6 +295,15 @@ export default function InventoryItemScreen({ route, navigation }) {
   const detailLabel = labelForDetailField(categoryPreset, categoryCustom);
   const customCategoryPills = addUniqueCategory(customCategoryOptions, categoryCustom);
   const isColorProduct = COLOR_CATEGORY_KEYS.has(categoryPreset) && !categoryCustom.trim();
+  const isDeveloperItem = categoryPreset === 'oxidant' && !categoryCustom.trim();
+
+  // For developer items, derive effective package_size from ammoniaType
+  const effectivePackageSize = isDeveloperItem
+    ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
+    : packageSizeStr.trim() || null;
+
+  const STRENGTH_PERCENT = ['1.9%', '3%', '6%', '9%', '12%'];
+  const STRENGTH_VOL = ['5 vol', '10 vol', '20 vol', '30 vol', '40 vol'];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -306,31 +328,91 @@ export default function InventoryItemScreen({ route, navigation }) {
           showsVerticalScrollIndicator={false}
         >
           {/* ── Name ── */}
-          <Text style={styles.label}>Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#AEAEB2"
-            value={nameStr}
-            onChangeText={setNameStr}
-          />
+          {!isDeveloperItem ? (
+            <>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder=""
+                placeholderTextColor="#AEAEB2"
+                value={nameStr}
+                onChangeText={setNameStr}
+              />
+            </>
+          ) : null}
 
           {/* ── Brand ── */}
           <Text style={styles.label}>Brand</Text>
           <TextInput
             style={styles.input}
-            placeholder=""
+            placeholder={isDeveloperItem ? 'e.g. Wella, Schwarzkopf, Alfaparf' : ''}
             placeholderTextColor="#AEAEB2"
             value={brandStr}
             onChangeText={setBrandStr}
           />
 
+          {/* ══ DEVELOPER-SPECIFIC FIELDS ══ */}
+          {isDeveloperItem ? (
+            <>
+              {/* Strength mode toggle */}
+              <Text style={styles.label}>Strength</Text>
+              <View style={styles.devModeToggle}>
+                {[['percent', '%'], ['vol', 'Vol']].map(([mode, lbl]) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.devModeBtn, strengthMode === mode && styles.devModeBtnOn]}
+                    onPress={() => { setStrengthMode(mode); setShadeStr(''); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.devModeTxt, strengthMode === mode && styles.devModeTxtOn]}>{lbl}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {/* Strength presets */}
+              <View style={styles.chips}>
+                {(strengthMode === 'percent' ? STRENGTH_PERCENT : STRENGTH_VOL).map(s => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.chip, shadeStr === s && styles.chipOn]}
+                    onPress={() => setShadeStr(shadeStr === s ? '' : s)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.chipTxt, shadeStr === s && styles.chipTxtOn]}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {/* Custom strength */}
+              <TextInput
+                style={[styles.input, { marginTop: 6 }]}
+                placeholder="or type custom e.g. 7.5%"
+                placeholderTextColor="#AEAEB2"
+                value={STRENGTH_PERCENT.includes(shadeStr) || STRENGTH_VOL.includes(shadeStr) ? '' : shadeStr}
+                onChangeText={v => setShadeStr(v)}
+              />
+
+              {/* Ammonia toggle */}
+              <Text style={[styles.label, { marginTop: 14 }]}>Formula type</Text>
+              <View style={styles.sectionToggle}>
+                {[['ammonia', 'Ammonia'], ['non-ammonia', 'Non-ammonia']].map(([val, lbl]) => (
+                  <TouchableOpacity
+                    key={val}
+                    style={[styles.sectionBtn, ammoniaType === val && styles.sectionBtnOn]}
+                    onPress={() => setAmmoniaType(ammoniaType === val ? null : val)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.sectionBtnTxt, ammoniaType === val && styles.sectionBtnTxtOn]}>{lbl}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          ) : null}
+
           {/* ── Section toggle: Stock / Retail ── */}
           <Text style={styles.label}>Section</Text>
           <View style={styles.sectionToggle}>
             {[
-              { key: 'consumable', label: 'Stock' },
-              { key: 'retail',     label: 'Retail' },
+              { key: isDeveloperItem ? 'oxidant' : 'consumable', label: 'Stock' },
+              { key: 'retail', label: 'Retail' },
             ].map(({ key, label }) => {
               const on = categoryPreset === key;
               return (
@@ -346,29 +428,28 @@ export default function InventoryItemScreen({ route, navigation }) {
             })}
           </View>
 
-          {/* ── Subcategory ── */}
-          <Text style={styles.label}>Subcategory</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Shampoos, Styling, Thermal protection"
-            placeholderTextColor="#AEAEB2"
-            value={subcategoryStr}
-            onChangeText={setSubcategoryStr}
-            autoCapitalize="words"
-          />
-          {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
-            <View style={styles.subSuggestions}>
-              {subcategorySuggestions.slice(0, 6).map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={styles.subSuggestionChip}
-                  onPress={() => setSubcategoryStr(s)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.subSuggestionTxt}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* ── Subcategory — hidden for developers ── */}
+          {!isDeveloperItem ? (
+            <>
+              <Text style={styles.label}>Subcategory</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Shampoos, Styling, Thermal protection"
+                placeholderTextColor="#AEAEB2"
+                value={subcategoryStr}
+                onChangeText={setSubcategoryStr}
+                autoCapitalize="words"
+              />
+              {subcategorySuggestions.length > 0 && !subcategoryStr.trim() ? (
+                <View style={styles.subSuggestions}>
+                  {subcategorySuggestions.slice(0, 6).map((s) => (
+                    <TouchableOpacity key={s} style={styles.subSuggestionChip} onPress={() => setSubcategoryStr(s)} activeOpacity={0.8}>
+                      <Text style={styles.subSuggestionTxt}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </>
           ) : null}
 
           {/* ── Price (cost) ── */}
@@ -424,7 +505,7 @@ export default function InventoryItemScreen({ route, navigation }) {
               keyboardType="decimal-pad"
             />
             <View style={styles.unitChips}>
-              {UNIT_OPTIONS.map((u) => (
+              {(isDeveloperItem ? ['ml', 'oz'] : UNIT_OPTIONS).map((u) => (
                 <TouchableOpacity
                   key={u}
                   style={[styles.chip, unit === u && styles.chipOn]}
@@ -583,6 +664,30 @@ const styles = StyleSheet.create({
     color: '#00A86B',
     letterSpacing: -0.2,
   },
+  devModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(94,53,177,0.07)',
+    borderRadius: 10,
+    padding: 3,
+    gap: 2,
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+  },
+  devModeBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  devModeBtnOn: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  devModeTxt: { fontFamily: FontFamily.medium, fontSize: 14, color: '#8A8A8E' },
+  devModeTxtOn: { color: '#0D0D0D', fontFamily: FontFamily.semibold },
   labelHint: {
     fontFamily: FontFamily.regular,
     fontSize: 12,

@@ -207,12 +207,12 @@ export default function InventoryItemScreen({ route, navigation }) {
         setCustomCategoryOptions((prev) => addUniqueCategory(prev, rc));
       }
       setAddingCategory(false);
-      setUnit(row.unit || 'ml');
+      setUnit(row.unit || 'pcs');
       setSupplierStr(row.supplier_hint || '');
-      // Developer fields
-      const ps = String(row.package_size || '').toLowerCase();
-      if (ps === 'ammonia') setAmmoniaType('ammonia');
-      else if (ps === 'non-ammonia') setAmmoniaType('non-ammonia');
+      // Developer fields — ammonia stored in custom_subcategory, bottle size in package_size
+      const subcat = String(row.custom_subcategory || '').toLowerCase();
+      if (subcat === 'ammonia') setAmmoniaType('ammonia');
+      else if (subcat === 'non-ammonia') setAmmoniaType('non-ammonia');
       else setAmmoniaType(null);
       const sh = String(row.shade_code || '');
       if (sh.includes('vol')) setStrengthMode('vol');
@@ -248,7 +248,7 @@ export default function InventoryItemScreen({ route, navigation }) {
       setCategoryCustom(initialCategory && !PRESET_CATEGORY_KEYS.has(initialCategory) ? initialCategory : '');
       setCategoryDraft('');
       setAddingCategory(false);
-      setUnit(initialPresetCategory === 'oxidant' ? 'ml' : 'pcs');
+      setUnit('pcs');
       setSupplierStr('');
       setAmmoniaType(null);
       setStrengthMode('percent');
@@ -289,9 +289,12 @@ export default function InventoryItemScreen({ route, navigation }) {
     setSaving(true);
     try {
       if (!isEdit) {
-        const name = nameStr.trim();
+        // For developer items, brand IS the name (e.g. "Wella Welloxon")
+        const name = isDeveloperItem
+          ? (brandStr.trim() || shadeStr.trim() || 'Developer')
+          : nameStr.trim();
         if (!name) {
-          Alert.alert('', 'Name');
+          Alert.alert('', 'Enter a name or brand.');
           setSaving(false);
           return;
         }
@@ -305,10 +308,12 @@ export default function InventoryItemScreen({ route, navigation }) {
           low_stock_threshold: t,
           brand: brandStr.trim() || null,
           shade_code: shadeStr.trim() || null,
-          package_size: effectivePackageSize,
+          package_size: packageSizeStr.trim() || null,
           price_per_unit_cents: centsFromPriceText(priceStr),
           supplier_hint: supplierStr.trim() || null,
-          custom_subcategory: subcategoryStr.trim() || null,
+          custom_subcategory: isDeveloperItem
+            ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
+            : subcategoryStr.trim() || null,
           sell_price_cents: centsFromPriceText(sellPriceStr),
         });
         navigation.goBack();
@@ -319,14 +324,18 @@ export default function InventoryItemScreen({ route, navigation }) {
           low_stock_threshold: t,
           unit,
           category: resolvedCategory,
-          name: nameStr.trim() || item.name,
+          name: isDeveloperItem
+            ? (brandStr.trim() || shadeStr.trim() || item.name || 'Developer')
+            : (nameStr.trim() || item.name),
           brand: brandStr.trim() || null,
           shade_code: shadeStr.trim() || null,
-          package_size: effectivePackageSize,
+          package_size: packageSizeStr.trim() || null,
           price_per_unit_cents: centsFromPriceText(priceStr),
           sell_price_cents: centsFromPriceText(sellPriceStr),
           supplier_hint: supplierStr.trim() || null,
-          custom_subcategory: subcategoryStr.trim() || null,
+          custom_subcategory: isDeveloperItem
+            ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
+            : subcategoryStr.trim() || null,
         };
         const note = reasonStr.trim();
         if (note) body.reason = note;
@@ -355,10 +364,7 @@ export default function InventoryItemScreen({ route, navigation }) {
   const isColorProduct = COLOR_CATEGORY_KEYS.has(categoryPreset) && !categoryCustom.trim();
   const isDeveloperItem = categoryPreset === 'oxidant' && !categoryCustom.trim();
 
-  // For developer items, derive effective package_size from ammoniaType
-  const effectivePackageSize = isDeveloperItem
-    ? (ammoniaType === 'ammonia' ? 'Ammonia' : ammoniaType === 'non-ammonia' ? 'Non-ammonia' : null)
-    : packageSizeStr.trim() || null;
+  const BOTTLE_SIZES = ['250 ml', '500 ml', '1000 ml', '2 L'];
 
   const STRENGTH_PERCENT = ['1.9%', '3%', '6%', '9%', '12%'];
   const STRENGTH_VOL = ['5 vol', '10 vol', '20 vol', '30 vol', '40 vol'];
@@ -427,15 +433,31 @@ export default function InventoryItemScreen({ route, navigation }) {
                 ))}
               </View>
               {/* Strength presets */}
-              <View style={styles.chips}>
+              <View style={[styles.chips, strengthMode === 'vol' && styles.chipsVolRow]}>
                 {(strengthMode === 'percent' ? STRENGTH_PERCENT : STRENGTH_VOL).map(s => (
                   <TouchableOpacity
                     key={s}
-                    style={[styles.chip, shadeStr === s && styles.chipOn]}
+                    style={[
+                      styles.chip,
+                      strengthMode === 'vol' && styles.chipVolRowCell,
+                      strengthMode === 'vol' && styles.chipVolSmaller,
+                      shadeStr === s && styles.chipOn,
+                    ]}
                     onPress={() => setShadeStr(shadeStr === s ? '' : s)}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.chipTxt, shadeStr === s && styles.chipTxtOn]}>{s}</Text>
+                    <Text
+                      style={[
+                        styles.chipTxt,
+                        strengthMode === 'vol' && styles.chipVolTxtCenter,
+                        strengthMode === 'vol' && styles.chipVolTxtSmaller,
+                        shadeStr === s && styles.chipTxtOn,
+                        strengthMode === 'vol' && shadeStr === s && styles.chipVolTxtOnSmaller,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {s}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -552,33 +574,79 @@ export default function InventoryItemScreen({ route, navigation }) {
             );
           })() : null}
 
-          {/* ── Unit + Quantity inline ── */}
-          <View style={styles.inlineRow}>
-            <Text style={styles.inlineLabel}>Stock</Text>
-            <View style={styles.stockRowInline}>
-              <TextInput
-                style={[styles.input, styles.inputInline]}
-                placeholder="0"
-                placeholderTextColor="#AEAEB2"
-                value={qtyStr}
-                onChangeText={setQtyStr}
-                keyboardType="decimal-pad"
-                textAlign="right"
-              />
-              <View style={styles.unitChips}>
-                {(isDeveloperItem ? ['ml', 'oz'] : UNIT_OPTIONS).map((u) => (
+          {/* ── Bottle size — developer only ── */}
+          {isDeveloperItem ? (
+            <>
+              <Text style={styles.label}>Bottle size</Text>
+              <View style={styles.chips}>
+                {BOTTLE_SIZES.map(s => (
                   <TouchableOpacity
-                    key={u}
-                    style={[styles.chip, unit === u && styles.chipOn]}
-                    onPress={() => setUnit(u)}
+                    key={s}
+                    style={[styles.chip, packageSizeStr === s && styles.chipOn]}
+                    onPress={() => setPackageSizeStr(packageSizeStr === s ? '' : s)}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                    <Text style={[styles.chipTxt, packageSizeStr === s && styles.chipTxtOn]}>{s}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+              <TextInput
+                style={[styles.input, { marginTop: 6 }]}
+                placeholder="or type custom e.g. 750 ml"
+                placeholderTextColor="#AEAEB2"
+                value={BOTTLE_SIZES.includes(packageSizeStr) ? '' : packageSizeStr}
+                onChangeText={setPackageSizeStr}
+              />
+            </>
+          ) : null}
+
+          {/* ── Unit (ml/oz toggle like % / vol) — developer; full chips otherwise ── */}
+          {isDeveloperItem ? (
+            <>
+              <Text style={styles.label}>Unit</Text>
+              <View style={styles.devModeToggle}>
+                {['ml', 'oz'].map(u => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.devModeBtn, unit === u && styles.devModeBtnOn]}
+                    onPress={() => setUnit(u)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.devModeTxt, unit === u && styles.devModeTxtOn]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {/* ── Stock quantity inline ── */}
+          <View style={styles.inlineRow}>
+            <Text style={styles.inlineLabel}>Stock {!isDeveloperItem ? `(${unit})` : '(pcs)'}</Text>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              placeholder="0"
+              placeholderTextColor="#AEAEB2"
+              value={qtyStr}
+              onChangeText={setQtyStr}
+              keyboardType="decimal-pad"
+              textAlign="right"
+            />
           </View>
+          {/* Unit chips for non-developer items */}
+          {!isDeveloperItem ? (
+            <View style={[styles.chips, { marginTop: -6 }]}>
+              {UNIT_OPTIONS.map((u) => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.chip, unit === u && styles.chipOn]}
+                  onPress={() => setUnit(u)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
 
           {/* ── Low stock ── */}
           <View style={styles.inlineRow}>
@@ -856,6 +924,33 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 8,
+  },
+  chipsVolRow: {
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  chipVolRowCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  chipVolSmaller: {
+    paddingHorizontal: 5,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  chipVolTxtCenter: {
+    width: '100%',
+    textAlign: 'center',
+  },
+  chipVolTxtSmaller: {
+    fontSize: 12,
+    lineHeight: typeLh(12),
+  },
+  chipVolTxtOnSmaller: {
+    fontSize: 12,
+    lineHeight: typeLh(12),
   },
   chip: {
     paddingHorizontal: 14,

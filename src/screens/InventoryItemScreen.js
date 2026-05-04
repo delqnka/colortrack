@@ -578,14 +578,16 @@ export default function InventoryItemScreen({ route, navigation }) {
   const isDyeItem = categoryPreset === 'dye' && !categoryCustom.trim();
   const isRetailItem = categoryPreset === 'retail' && !categoryCustom.trim();
   const isStockConsumable = categoryPreset === 'consumable' && !categoryCustom.trim();
+  /** Hide Type of product when adding a color-line preset (dye / developer / mixtone / toner); keep for edit and other flows. */
+  const showColorLineTypeOfProduct = isEdit || !COLOR_CATEGORY_KEYS.has(categoryPreset);
   const isStockProductForm =
     isStockConsumable ||
     (Boolean(item) && isStockTabInventoryItem(item) && categoryPreset !== 'dye');
   const showUnitChips =
     !isDeveloperItem && !isDyeItem && !(isStockProductForm && unit === 'pcs');
+  /** Hide Stock/Retail picker only when editing an existing retail row (adding retail shows both tabs). */
   const hideStockRetailSection =
-    (!isEdit && initialPresetCategory === 'retail') ||
-    (isEdit && item?.category === 'retail' && !categoryCustom.trim());
+    isEdit && item?.category === 'retail' && !categoryCustom.trim();
   const stockCategoryKey =
     isDeveloperItem
       ? 'oxidant'
@@ -628,7 +630,8 @@ export default function InventoryItemScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {!hideStockRetailSection ? (
+          {/* Retail: Section (Stock | Retail) sits under bottle + stock; stock consumable: Section first. */}
+          {!hideStockRetailSection && !isRetailItem ? (
             <>
               <Text style={styles.label}>Section</Text>
               <View style={styles.checkGroup}>
@@ -666,29 +669,29 @@ export default function InventoryItemScreen({ route, navigation }) {
                 onChangeText={setBrandStr}
               />
               <Text style={[styles.label, { marginTop: 14 }]}>Bottle size</Text>
-              <View style={styles.tubeRow}>
+              <View style={styles.bottleSizeCompactRow}>
                 <TextInput
-                  style={[styles.input, styles.inputTubeAmount]}
+                  style={[styles.input, styles.bottleSizeAmountField]}
                   placeholder=""
                   placeholderTextColor="#AEAEB2"
                   value={tubeAmountStr}
                   onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
                   keyboardType="decimal-pad"
                 />
-                <View style={styles.tubeUnitRow}>
+                <View style={styles.bottleGramUnitsRow}>
                   {STOCK_BOTTLE_UNITS.map((u) => (
                     <TouchableOpacity
                       key={u}
-                      style={[styles.tubeUnitChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                      style={[styles.bottleGramChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
                       onPress={() => setTubeSizeUnit(u)}
                       activeOpacity={0.85}
                     >
-                      <Text style={[styles.tubeUnitTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                      <Text style={[styles.bottleGramChipTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
-              <View style={[styles.inlineRow, { marginTop: 14 }]}>
+              <View style={[styles.inlineRow, styles.stockQtyUnderBottle]}>
                 <Text style={styles.inlineLabel}>
                   Stock {`(${unit})`}
                 </Text>
@@ -703,15 +706,15 @@ export default function InventoryItemScreen({ route, navigation }) {
                 />
               </View>
               {showUnitChips ? (
-                <View style={[styles.chips, { marginTop: 4, marginBottom: 2 }]}>
+                <View style={styles.stockUnitChipsCompact}>
                   {UNIT_OPTIONS.map((u) => (
                     <TouchableOpacity
                       key={u}
-                      style={[styles.chip, unit === u && styles.chipOn]}
+                      style={[styles.chipSm, unit === u && styles.chipOn]}
                       onPress={() => setUnit(u)}
                       activeOpacity={0.85}
                     >
-                      <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
+                      <Text style={[styles.chipTxtSm, unit === u && styles.chipTxtOnSm]}>{u}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -721,6 +724,15 @@ export default function InventoryItemScreen({ route, navigation }) {
 
           {!isStockProductForm ? (
             <>
+              {isRetailItem ? (
+                <ProductTypeComboField
+                  label="Type of product"
+                  value={subcategoryStr}
+                  onChangeText={setSubcategoryStr}
+                  options={subcategoryChipSuggestions}
+                  inputStyle={styles.input}
+                />
+              ) : null}
               <Text style={styles.label}>Brand</Text>
               <TextInput
                 style={styles.input}
@@ -729,6 +741,81 @@ export default function InventoryItemScreen({ route, navigation }) {
                 value={brandStr}
                 onChangeText={setBrandStr}
               />
+            </>
+          ) : null}
+
+          {isRetailItem ? (
+            <>
+              <Text style={[styles.label, { marginTop: 14 }]}>Bottle size</Text>
+              <View style={styles.bottleSizeCompactRow}>
+                <TextInput
+                  style={[styles.input, styles.bottleSizeAmountField]}
+                  placeholder="0"
+                  placeholderTextColor="#AEAEB2"
+                  value={tubeAmountStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
+                  keyboardType="decimal-pad"
+                />
+                <View style={styles.bottleGramUnitsRow}>
+                  {TUBE_UNIT_OPTIONS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.bottleGramChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                      onPress={() => setTubeSizeUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.bottleGramChipTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={[styles.inlineRow, styles.stockQtyUnderBottle]}>
+                <Text style={styles.inlineLabel}>
+                  Stock {`(${unit})`}
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.inputInline]}
+                  placeholder=""
+                  placeholderTextColor="#AEAEB2"
+                  value={qtyStr}
+                  onChangeText={(t) => applyIntegerDraftChange(setQtyStr, t)}
+                  keyboardType="decimal-pad"
+                  textAlign="right"
+                />
+              </View>
+              {showUnitChips ? (
+                <View style={styles.stockUnitChipsCompact}>
+                  {UNIT_OPTIONS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.chipSm, unit === u && styles.chipOn]}
+                      onPress={() => setUnit(u)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.chipTxtSm, unit === u && styles.chipTxtOnSm]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+              {!hideStockRetailSection ? (
+                <>
+                  <Text style={[styles.label, { marginTop: 18 }]}>Section</Text>
+                  <View style={styles.checkGroup}>
+                    {[
+                      { key: stockCategoryKey, label: 'Stock' },
+                      { key: 'retail', label: 'Retail' },
+                    ].map(({ key, label }, i, arr) => (
+                      <CheckRow
+                        key={key}
+                        label={label}
+                        checked={categoryPreset === key}
+                        onPress={() => { setCategoryPreset(key); setCategoryCustom(''); }}
+                        style={i === arr.length - 1 ? { borderBottomWidth: 0 } : {}}
+                      />
+                    ))}
+                  </View>
+                </>
+              ) : null}
             </>
           ) : null}
 
@@ -796,7 +883,7 @@ export default function InventoryItemScreen({ route, navigation }) {
                   />
                 ))}
               </View>
-              {ammoniaType == null ? (
+              {ammoniaType == null && showColorLineTypeOfProduct ? (
                 <ProductTypeComboField
                   label="Type of product"
                   value={subcategoryStr}
@@ -883,7 +970,7 @@ export default function InventoryItemScreen({ route, navigation }) {
                   />
                 ))}
               </View>
-              {ammoniaType == null ? (
+              {ammoniaType == null && showColorLineTypeOfProduct ? (
                 <ProductTypeComboField
                   label="Type of product"
                   value={subcategoryStr}
@@ -898,8 +985,8 @@ export default function InventoryItemScreen({ route, navigation }) {
             </>
           ) : null}
 
-          {/* ── Subcategory — retail / custom lines; stock consumable uses Type of product above ── */}
-          {!isDeveloperItem && !isDyeItem && !isStockProductForm ? (
+          {/* ── Subcategory — mixtone/toner/custom; retail uses Type of product above Brand; stock consumable above ── */}
+          {!isDeveloperItem && !isDyeItem && !isStockProductForm && !isRetailItem && showColorLineTypeOfProduct ? (
             <>
               <ProductTypeComboField
                 label="Type of product"
@@ -908,33 +995,6 @@ export default function InventoryItemScreen({ route, navigation }) {
                 options={subcategoryChipSuggestions}
                 inputStyle={styles.input}
               />
-              {isRetailItem ? (
-                <>
-                  <Text style={[styles.label, { marginTop: 14 }]}>Package size</Text>
-                  <View style={styles.tubeRow}>
-                    <TextInput
-                      style={[styles.input, styles.inputTubeAmount]}
-                      placeholder="0"
-                      placeholderTextColor="#AEAEB2"
-                      value={tubeAmountStr}
-                      onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
-                      keyboardType="decimal-pad"
-                    />
-                    <View style={styles.tubeUnitRow}>
-                      {TUBE_UNIT_OPTIONS.map((u) => (
-                        <TouchableOpacity
-                          key={u}
-                          style={[styles.tubeUnitChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
-                          onPress={() => setTubeSizeUnit(u)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={[styles.tubeUnitTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </>
-              ) : null}
             </>
           ) : null}
 
@@ -1059,39 +1119,6 @@ export default function InventoryItemScreen({ route, navigation }) {
               </>
             );
           })() : null}
-
-          {isRetailItem ? (
-            <>
-              <View style={[styles.inlineRow, { marginTop: 14 }]}>
-                <Text style={styles.inlineLabel}>
-                  Stock {`(${unit})`}
-                </Text>
-                <TextInput
-                  style={[styles.input, styles.inputInline]}
-                  placeholder=""
-                  placeholderTextColor="#AEAEB2"
-                  value={qtyStr}
-                  onChangeText={(t) => applyIntegerDraftChange(setQtyStr, t)}
-                  keyboardType="decimal-pad"
-                  textAlign="right"
-                />
-              </View>
-              {showUnitChips ? (
-                <View style={[styles.chips, { marginTop: 4, marginBottom: 2 }]}>
-                  {UNIT_OPTIONS.map((u) => (
-                    <TouchableOpacity
-                      key={u}
-                      style={[styles.chip, unit === u && styles.chipOn]}
-                      onPress={() => setUnit(u)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.chipTxt, unit === u && styles.chipTxtOn]}>{u}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
-            </>
-          ) : null}
 
           {/* ── Note (edit only) ── */}
           {isEdit ? (
@@ -1404,6 +1431,74 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     paddingVertical: 9,
     textAlign: 'right',
+  },
+  bottleSizeCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  /** Few digits only — narrow field; gram units sit on the same row to the right. */
+  bottleSizeAmountField: {
+    width: 88,
+    maxWidth: 96,
+    marginBottom: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    textAlign: 'center',
+    fontFamily: FontFamily.medium,
+  },
+  bottleGramUnitsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 5,
+    flexShrink: 0,
+  },
+  bottleGramChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  bottleGramChipTxt: {
+    fontSize: 11,
+    lineHeight: typeLh(11),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
+  },
+  stockQtyUnderBottle: {
+    marginTop: 8,
+  },
+  stockUnitChipsCompact: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  chipSm: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  chipTxtSm: {
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.medium,
+    color: '#0D0D0D',
+  },
+  chipTxtOnSm: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    fontFamily: FontFamily.medium,
   },
   tubeRow: {
     flexDirection: 'row',

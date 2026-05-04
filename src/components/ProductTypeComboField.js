@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ export default function ProductTypeComboField({
   inputStyle,
 }) {
   const [open, setOpen] = useState(false);
+  const [saveAsNewAck, setSaveAsNewAck] = useState(false);
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
 
@@ -65,6 +66,10 @@ export default function ProductTypeComboField({
   const showSaveAsNew =
     trimmedValue.length > 0 && !optionKeySet.has(trimmedValue.toLowerCase());
 
+  useEffect(() => {
+    setSaveAsNewAck(false);
+  }, [trimmedValue]);
+
   const valueNorm = trimmedValue.toLowerCase();
   const header = sheetTitle || label || '';
   const sheetBodyH = Math.min(Math.round(winH * 0.58), 440);
@@ -82,9 +87,30 @@ export default function ProductTypeComboField({
           autoCapitalize="words"
         />
         {showSaveAsNew ? (
-          <Text style={styles.saveInlineHint} numberOfLines={2} accessibilityLabel="Save as new">
-            Save{'\n'}as new
-          </Text>
+          <TouchableOpacity
+            style={styles.saveAsNewTap}
+            onPress={() => {
+              Keyboard.dismiss();
+              setSaveAsNewAck(true);
+            }}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={saveAsNewAck ? 'Saved' : 'Save as new'}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          >
+            {saveAsNewAck ? (
+              <View style={styles.saveAckRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#248A3D" />
+                <Text style={styles.saveAckTxt} numberOfLines={1}>
+                  Saved
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.saveInlineHint} numberOfLines={2}>
+                Save{'\n'}as new
+              </Text>
+            )}
+          </TouchableOpacity>
         ) : null}
         <TouchableOpacity
           style={styles.chevronBtn}
@@ -178,10 +204,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
     marginBottom: 0,
   },
-  saveInlineHint: {
+  saveAsNewTap: {
     alignSelf: 'center',
     flexShrink: 0,
-    maxWidth: 52,
+    justifyContent: 'center',
+    minWidth: 56,
+  },
+  saveInlineHint: {
     fontSize: 10,
     lineHeight: 12,
     fontFamily: FontFamily.semibold,
@@ -189,6 +218,18 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     textAlign: 'right',
     opacity: 0.92,
+  },
+  saveAckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  saveAckTxt: {
+    fontSize: 11,
+    lineHeight: typeLh(11),
+    fontFamily: FontFamily.semibold,
+    color: '#248A3D',
   },
   chevronBtn: {
     backgroundColor: '#FFFFFF',

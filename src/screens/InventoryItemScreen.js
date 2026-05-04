@@ -393,6 +393,7 @@ export default function InventoryItemScreen({ route, navigation }) {
         </View>
 
         <ScrollView
+          style={{ flex: 1, backgroundColor: '#FFFFFF' }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -533,52 +534,6 @@ export default function InventoryItemScreen({ route, navigation }) {
             </>
           ) : null}
 
-          {/* ── Price (cost) ── */}
-          <View style={styles.inlineRow}>
-            <Text style={styles.inlineLabel}>
-              {categoryPreset === 'retail' ? `Cost price (${currency})` : `Price (${currency})`}
-            </Text>
-            <TextInput
-              style={[styles.input, styles.inputInline]}
-              placeholder="0.00"
-              placeholderTextColor="#AEAEB2"
-              value={priceStr}
-              onChangeText={setPriceStr}
-              keyboardType="decimal-pad"
-              textAlign="right"
-            />
-          </View>
-
-          {/* ── Sell price + margin — retail only ── */}
-          {categoryPreset === 'retail' ? (() => {
-            const cost = centsFromPriceText(priceStr);
-            const sell = centsFromPriceText(sellPriceStr);
-            const marginPct = cost != null && sell != null && cost > 0 && sell > cost
-              ? Math.round((sell - cost) / sell * 100)
-              : null;
-            return (
-              <>
-                <View style={styles.inlineRow}>
-                  <Text style={styles.inlineLabel}>Sell price ({currency})</Text>
-                  <TextInput
-                    style={[styles.input, styles.inputInline]}
-                    placeholder="0.00"
-                    placeholderTextColor="#AEAEB2"
-                    textAlign="right"
-                    value={sellPriceStr}
-                    onChangeText={setSellPriceStr}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-                {marginPct != null ? (
-                  <View style={styles.marginRow}>
-                    <Text style={styles.marginTxt}>Margin  </Text>
-                    <Text style={styles.marginPct}>{marginPct}%</Text>
-                  </View>
-                ) : null}
-              </>
-            );
-          })() : null}
 
           {/* ── Bottle size — developer only ── */}
           {isDeveloperItem ? (
@@ -648,6 +603,53 @@ export default function InventoryItemScreen({ route, navigation }) {
               textAlign="right"
             />
           </View>
+
+          {/* ── Price (cost) ── */}
+          <View style={styles.inlineRow}>
+            <Text style={styles.inlineLabel}>
+              {categoryPreset === 'retail' ? `Cost price (${currency})` : `Price (${currency})`}
+            </Text>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              placeholder="0.00"
+              placeholderTextColor="#AEAEB2"
+              value={priceStr}
+              onChangeText={setPriceStr}
+              keyboardType="decimal-pad"
+              textAlign="right"
+            />
+          </View>
+
+          {/* ── Sell price + margin — retail only ── */}
+          {categoryPreset === 'retail' ? (() => {
+            const cost = centsFromPriceText(priceStr);
+            const sell = centsFromPriceText(sellPriceStr);
+            const marginPct = cost != null && sell != null && cost > 0 && sell > cost
+              ? Math.round((sell - cost) / sell * 100)
+              : null;
+            return (
+              <>
+                <View style={styles.inlineRow}>
+                  <Text style={styles.inlineLabel}>Sell price ({currency})</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputInline]}
+                    placeholder="0.00"
+                    placeholderTextColor="#AEAEB2"
+                    textAlign="right"
+                    value={sellPriceStr}
+                    onChangeText={setSellPriceStr}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                {marginPct != null ? (
+                  <View style={styles.marginRow}>
+                    <Text style={styles.marginTxt}>Margin  </Text>
+                    <Text style={styles.marginPct}>{marginPct}%</Text>
+                  </View>
+                ) : null}
+              </>
+            );
+          })() : null}
 
           {/* ── Note (edit only) ── */}
           {isEdit ? (
@@ -744,7 +746,7 @@ const styles = StyleSheet.create({
     color: '#0D0D0D',
     letterSpacing: -0.2,
   },
-  scroll: { paddingHorizontal: 24, paddingBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 24, backgroundColor: '#FFFFFF' },
   subMeta: { ...Type.listPrimary, color: '#0D0D0D', marginBottom: 4 },
   supplier: {
     ...Type.secondary,

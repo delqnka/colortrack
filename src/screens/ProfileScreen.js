@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiDelete, apiGet, apiPatch, apiPost, saveSessionToken, resolveImagePublicUri } from '../api/client';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
+import { useCurrency } from '../context/CurrencyContext';
+import CurrencyPickerModal from '../components/CurrencyPickerModal';
 
 const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
@@ -49,6 +51,8 @@ function pickContentType(asset) {
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { currency, setCurrency } = useCurrency();
+  const [pickCurOpen, setPickCurOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -341,10 +345,26 @@ export default function ProfileScreen() {
               {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveBtnText}>Save</Text>}
             </TouchableOpacity>
 
+            {/* Currency selector */}
+            <TouchableOpacity style={styles.currencyRow} onPress={() => setPickCurOpen(true)} activeOpacity={0.8}>
+              <Text style={styles.currencyLabel}>Currency</Text>
+              <View style={styles.currencyRight}>
+                <Text style={styles.currencyValue}>{currency}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
+              </View>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.signOut} onPress={confirmSignOut} activeOpacity={0.88}>
               <Text style={styles.signOutText}>Sign out</Text>
             </TouchableOpacity>
           </ScrollView>
+
+          <CurrencyPickerModal
+            visible={pickCurOpen}
+            currentCode={currency}
+            onClose={() => setPickCurOpen(false)}
+            onSelect={(code) => { setCurrency(code); setPickCurOpen(false); }}
+          />
 
           <View style={[styles.deleteFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <TouchableOpacity
@@ -456,6 +476,36 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     color: '#0D0D0D',
     backgroundColor: '#FFFFFF',
+  },
+  currencyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  currencyLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    color: '#0D0D0D',
+  },
+  currencyRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  currencyValue: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: '#5E35B1',
   },
   saveBtn: {
     alignSelf: 'stretch',

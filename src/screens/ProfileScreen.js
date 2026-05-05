@@ -5,12 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Image,
   ActivityIndicator,
   Alert,
   ScrollView,
   DeviceEventEmitter,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -258,7 +258,13 @@ export default function ProfileScreen() {
               disabled={uploading}
               accessibilityRole="button"
             >
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.avatar}
+                cachePolicy="disk"
+                transition={200}
+                placeholder={{ thumbhash: null }}
+              />
               <View style={styles.avatarDim}>
                 {uploading ? (
                   <ActivityIndicator color="#FFFFFF" />
@@ -363,15 +369,12 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
 
-            {__DEV__ && (
-              <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('PaywallPreview')} activeOpacity={0.8}>
-                <Text style={styles.currencyLabel}>Preview Paywall</Text>
-                <View style={styles.currencyRight}>
-                  <Text style={[styles.currencyValue, { color: '#C62828' }]}>DEV</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
-                </View>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('PaywallPreview')} activeOpacity={0.8}>
+              <Text style={styles.currencyLabel}>Preview Paywall</Text>
+              <View style={styles.currencyRight}>
+                <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
+              </View>
+            </TouchableOpacity>
 
             {me?.role === 'admin' && (
               <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('Affiliate')} activeOpacity={0.8}>

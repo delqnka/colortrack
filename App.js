@@ -417,11 +417,9 @@ export default function App() {
               <AppStack.Screen name="Profile" component={ProfileScreen} />
               <AppStack.Screen name="Services" component={ServicesScreen} />
               <AppStack.Screen name="Affiliate" component={AffiliateScreen} />
-              {__DEV__ && (
-                <AppStack.Screen name="PaywallPreview">
-                  {() => <PaywallScreen onDismiss={() => {}} />}
-                </AppStack.Screen>
-              )}
+              <AppStack.Screen name="PaywallPreview">
+                {() => <PaywallScreen onDismiss={() => {}} />}
+              </AppStack.Screen>
             </AppStack.Navigator>
           )}
         </NavigationContainer>

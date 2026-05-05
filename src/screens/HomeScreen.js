@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -17,6 +16,7 @@ import {
   RefreshControl,
   DeviceEventEmitter,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -584,6 +584,8 @@ export default function HomeScreen() {
                 <Image
                   source={{ uri: headerAvatarUri }}
                   style={styles.avatar}
+                  cachePolicy="disk"
+                  transition={200}
                   onError={() => setHeaderAvatarLoadFailed(true)}
                 />
               ) : (

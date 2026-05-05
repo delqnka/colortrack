@@ -26,6 +26,7 @@
     "expo-calendar": "~15.0.8",
     "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",
+    "expo-image": "~2.0.1",
     "expo-file-system": "~19.0.22",
     "expo-print": "~14.0.3",
     "expo-sharing": "~13.0.1",

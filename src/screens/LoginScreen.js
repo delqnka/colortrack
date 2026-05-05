@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  useWindowDimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,21 +22,15 @@ import {
   getApiBaseUrl,
 } from '../api/client';
 import { registerExpoPushIfPossible } from '../push/registerPush';
-import { BRAND_PURPLE } from '../theme/glassUi';
 import { FontFamily } from '../theme/fonts';
 import { typeLh } from '../theme/typography';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { setOnboardingComplete } from '../onboarding/storage';
 
-const LAVENDER_BG = '#F5F2FF';
-const CARD_FILL = '#EDE8FF';
-const CARD_STROKE = 'rgba(94, 53, 177, 0.28)';
-const INPUT_BORDER = '#E0DCEA';
-const SUBTITLE = '#6B6A72';
+const VIOLET = '#5E35B1';
+const VIOLET_LIGHT = '#7C4DFF';
 
 export default function LoginScreen({ onLoggedIn }) {
-  const { width: winW } = useWindowDimensions();
-  const cardMax = Math.min(400, winW - 48);
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,8 +38,18 @@ export default function LoginScreen({ onLoggedIn }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const isSignUp = mode === 'signup';
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,9 +62,7 @@ export default function LoginScreen({ onLoggedIn }) {
         if (!cancelled) setAppleAvailable(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   function mapErr(message) {
@@ -68,14 +70,11 @@ export default function LoginScreen({ onLoggedIn }) {
     if (m === 'conflict') return 'This email is already registered.';
     if (m === 'unauthorized') return 'Invalid email or password.';
     if (m === 'forbidden') return 'Registration is disabled.';
-    if (m === 'bad_request') {
-      return isSignUp
-        ? 'Enter a valid email and password (min. 8 characters).'
-        : 'Enter your email and password.';
-    }
-    if (m.includes('network request failed') || m.includes('failed to fetch')) {
-      return `No connection to the server (${getApiBaseUrl()}). Same Wi‑Fi as the Mac, correct LAN IP in root .env, fire up backend, then npx expo start --clear. On iPhone, test Safari: open that URL + /health`;
-    }
+    if (m === 'bad_request') return isSignUp
+      ? 'Enter a valid email and password (min. 8 characters).'
+      : 'Enter your email and password.';
+    if (m.includes('network request failed') || m.includes('failed to fetch'))
+      return `Cannot connect to server (${getApiBaseUrl()}).`;
     return message || 'Something went wrong';
   }
 
@@ -83,11 +82,9 @@ export default function LoginScreen({ onLoggedIn }) {
     setErr('');
     const em = String(email).trim();
     const pw = String(password);
-    if (isSignUp) {
-      if (pw !== String(confirm)) {
-        setErr('Passwords do not match.');
-        return;
-      }
+    if (isSignUp && pw !== String(confirm)) {
+      setErr('Passwords do not match.');
+      return;
     }
     setBusy(true);
     try {
@@ -114,10 +111,7 @@ export default function LoginScreen({ onLoggedIn }) {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      if (!cred.identityToken) {
-        setErr('Apple Sign-In did not return a token.');
-        return;
-      }
+      if (!cred.identityToken) { setErr('Apple Sign-In failed.'); return; }
       const data = await apiLoginWithApple({
         identity_token: cred.identityToken,
         email: cred.email || undefined,
@@ -128,7 +122,7 @@ export default function LoginScreen({ onLoggedIn }) {
       await setOnboardingComplete();
       onLoggedIn?.();
     } catch (e) {
-      const code = e && e.code;
+      const code = e?.code;
       if (code === 'ERR_REQUEST_CANCELED' || code === 'ERR_CANCELED') return;
       setErr(mapErr(e.message || code));
     } finally {
@@ -137,12 +131,7 @@ export default function LoginScreen({ onLoggedIn }) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <View style={styles.bgDecor}>
-        <View style={[styles.blob, styles.blob1]} />
-        <View style={[styles.blob, styles.blob2]} />
-        <View style={[styles.blob, styles.blob3]} />
-      </View>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -152,249 +141,275 @@ export default function LoginScreen({ onLoggedIn }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.card, { width: cardMax, maxWidth: cardMax, alignSelf: 'center' }]}>
-            <Text style={styles.brand}>ColorBar Suite</Text>
-            <Text style={styles.headline}>
-              {isSignUp ? 'Create your account' : 'Welcome back'}
+          <Animated.View style={[styles.inner, { opacity: fadeAnim }]}>
+
+            {/* Brand mark */}
+            <View style={styles.brandArea}>
+              <View style={styles.logoMark}>
+                <Ionicons name="cut" size={28} color="#FFFFFF" />
+              </View>
+              <Text style={styles.brandName}>ColorBar Suite</Text>
+              <Text style={styles.brandTagline}>Professional salon management</Text>
+            </View>
+
+            {/* Heading */}
+            <Text style={styles.heading}>
+              {isSignUp ? 'Create account' : 'Welcome back'}
             </Text>
-            <Text style={styles.sub}>
+            <Text style={styles.subheading}>
               {isSignUp
-                ? 'Sign up with email to access your schedule and clients.'
-                : 'Sign in with your email and password to continue.'}
+                ? 'Start your 7-day free trial'
+                : 'Sign in to continue'}
             </Text>
 
-            <View style={styles.fieldWrap}>
-              <Ionicons name="mail-outline" size={20} color={SUBTITLE} style={styles.fieldIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#9E9CAA"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
+            {/* Fields */}
+            <View style={styles.fields}>
+              <Field
+                icon="mail-outline"
+                placeholder="Email address"
                 value={email}
                 onChangeText={setEmail}
+                keyboardType="email-address"
+                autoComplete="email"
+                autoCapitalize="none"
+                editable={!busy}
               />
-            </View>
-
-            <View style={styles.fieldWrap}>
-              <Ionicons name="lock-closed-outline" size={20} color={SUBTITLE} style={styles.fieldIcon} />
-              <TextInput
-                style={styles.input}
+              <Field
+                icon="lock-closed-outline"
                 placeholder="Password"
-                placeholderTextColor="#9E9CAA"
-                secureTextEntry
-                autoComplete={isSignUp ? 'password-new' : 'password'}
                 value={password}
                 onChangeText={setPassword}
+                secureTextEntry={!showPass}
+                autoComplete={isSignUp ? 'password-new' : 'password'}
+                editable={!busy}
+                rightIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
+                onRightIcon={() => setShowPass(v => !v)}
               />
-            </View>
-
-            {isSignUp ? (
-              <View style={styles.fieldWrap}>
-                <Ionicons name="shield-checkmark-outline" size={20} color={SUBTITLE} style={styles.fieldIcon} />
-                <TextInput
-                  style={styles.input}
+              {isSignUp && (
+                <Field
+                  icon="shield-checkmark-outline"
                   placeholder="Confirm password"
-                  placeholderTextColor="#9E9CAA"
-                  secureTextEntry
-                  autoComplete="password-new"
                   value={confirm}
                   onChangeText={setConfirm}
+                  secureTextEntry
+                  autoComplete="password-new"
+                  editable={!busy}
                 />
-              </View>
-            ) : null}
+              )}
+            </View>
 
             {err ? <Text style={styles.err}>{err}</Text> : null}
 
+            {/* Primary button */}
             <Pressable
-              style={({ pressed }) => [styles.btn, pressed && styles.btnPressed, busy && styles.btnDisabled]}
+              style={({ pressed }) => [styles.btn, pressed && { opacity: 0.88 }, busy && { opacity: 0.6 }]}
               onPress={submit}
               disabled={busy}
             >
-              {busy ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.btnTxt}>{isSignUp ? 'Sign up' : 'Sign in'}</Text>
-              )}
+              {busy
+                ? <ActivityIndicator color="#FFFFFF" />
+                : <Text style={styles.btnTxt}>{isSignUp ? 'Create account' : 'Sign in'}</Text>
+              }
             </Pressable>
 
-            {appleAvailable ? (
+            {/* Apple */}
+            {appleAvailable && (
               <>
-                <View style={styles.orRow}>
-                  <View style={styles.orLine} />
-                  <Text style={styles.orTxt}>or</Text>
-                  <View style={styles.orLine} />
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerTxt}>or</Text>
+                  <View style={styles.dividerLine} />
                 </View>
                 <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={
-                    isSignUp
-                      ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
-                      : AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                  }
+                  buttonType={isSignUp
+                    ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
+                    : AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                   buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  cornerRadius={26}
+                  cornerRadius={14}
                   style={styles.appleBtn}
                   onPress={signInApple}
                   disabled={busy}
                 />
               </>
-            ) : null}
+            )}
 
+            {/* Switch mode */}
             <Pressable
               style={styles.switcher}
-              onPress={() => {
-                setErr('');
-                setMode(isSignUp ? 'signin' : 'signup');
-                if (!isSignUp) setConfirm('');
-              }}
+              onPress={() => { setErr(''); setMode(isSignUp ? 'signin' : 'signup'); if (!isSignUp) setConfirm(''); }}
               hitSlop={12}
             >
               <Text style={styles.switcherTxt}>
-                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-                <Text style={styles.switcherBold}>{isSignUp ? 'Sign in' : 'Sign up'}</Text>
+                {isSignUp ? 'Already have an account?  ' : "Don't have an account?  "}
+                <Text style={styles.switcherLink}>{isSignUp ? 'Sign in' : 'Sign up'}</Text>
               </Text>
             </Pressable>
-          </View>
+
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFFFF' },
-  flex: { flex: 1 },
-  bgDecor: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: LAVENDER_BG,
-    overflow: 'hidden',
-  },
-  blob: {
-    position: 'absolute',
-    borderRadius: 999,
-    opacity: 0.38,
-  },
-  blob1: {
-    width: 220,
-    height: 220,
-    backgroundColor: '#D4C4FC',
-    top: -60,
-    right: -50,
-  },
-  blob2: {
-    width: 160,
-    height: 160,
-    backgroundColor: '#C8B8F8',
-    bottom: 120,
-    left: -40,
-  },
-  blob3: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#B8A9F9',
-    bottom: 40,
-    right: 30,
-    opacity: 0.28,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-  },
-  card: {
-    borderRadius: 28,
-    paddingHorizontal: 26,
-    paddingTop: 32,
-    paddingBottom: 28,
-    backgroundColor: CARD_FILL,
-    borderWidth: 1.5,
-    borderColor: CARD_STROKE,
-    shadowColor: BRAND_PURPLE,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
-    elevation: 8,
-  },
-  brand: {
-    fontSize: 22,
-    lineHeight: typeLh(22),
-    fontFamily: FontFamily.semibold,
-    color: BRAND_PURPLE,
-    textAlign: 'center',
-    letterSpacing: -0.5,
-  },
-  headline: {
-    marginTop: 14,
-    fontSize: 17,
-    lineHeight: typeLh(17),
-    fontFamily: FontFamily.medium,
-    color: '#0D0D0D',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  sub: {
-    marginTop: 8,
-    marginBottom: 22,
-    fontSize: 13,
-    lineHeight: typeLh(13),
-    fontFamily: FontFamily.regular,
-    color: '#8A8A8E',
-    textAlign: 'center',
-    paddingHorizontal: 4,
-  },
-  fieldWrap: {
+function Field({ icon, rightIcon, onRightIcon, ...props }) {
+  return (
+    <View style={fieldStyles.wrap}>
+      <Ionicons name={icon} size={18} color="#AEAEB2" style={fieldStyles.icon} />
+      <TextInput
+        style={fieldStyles.input}
+        placeholderTextColor="#6B6B6B"
+        {...props}
+      />
+      {rightIcon && (
+        <Pressable onPress={onRightIcon} hitSlop={10} style={fieldStyles.rightBtn}>
+          <Ionicons name={rightIcon} size={18} color="#AEAEB2" />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+const fieldStyles = StyleSheet.create({
+  wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: INPUT_BORDER,
-    marginBottom: 12,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
     paddingHorizontal: 16,
     minHeight: 54,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
   },
-  fieldIcon: { marginRight: 10 },
+  icon: { marginRight: 12 },
   input: {
     flex: 1,
     fontSize: 15,
     lineHeight: typeLh(15),
     fontFamily: FontFamily.regular,
-    color: '#1C1C1E',
+    color: '#FFFFFF',
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
   },
+  rightBtn: { paddingLeft: 8 },
+});
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#0D0D0D' },
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 40,
+  },
+  inner: { width: '100%', maxWidth: 400, alignSelf: 'center' },
+
+  brandArea: { alignItems: 'center', marginBottom: 40 },
+  logoMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: VIOLET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    shadowColor: VIOLET_LIGHT,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  brandName: {
+    fontFamily: FontFamily.bold,
+    fontSize: 24,
+    lineHeight: typeLh(24),
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  brandTagline: {
+    marginTop: 4,
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    color: '#6B6B6B',
+    letterSpacing: 0.2,
+  },
+
+  heading: {
+    fontFamily: FontFamily.bold,
+    fontSize: 28,
+    lineHeight: typeLh(28),
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  subheading: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    color: '#6B6B6B',
+    marginBottom: 28,
+  },
+
+  fields: { marginBottom: 4 },
+
   err: {
-    color: '#B00020',
+    color: '#FF6B6B',
     fontSize: 13,
     lineHeight: typeLh(13),
     fontFamily: FontFamily.regular,
-    marginBottom: 10,
+    marginBottom: 12,
     textAlign: 'center',
   },
+
   btn: {
-    marginTop: 6,
-    backgroundColor: BRAND_PURPLE,
-    borderRadius: 26,
+    backgroundColor: VIOLET,
+    borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 54,
+    marginTop: 8,
+    shadowColor: VIOLET_LIGHT,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  btnPressed: { opacity: 0.92 },
-  btnDisabled: { opacity: 0.75 },
-  btnTxt: { color: '#FFFFFF', fontFamily: FontFamily.medium, fontSize: 15, lineHeight: typeLh(15) },
-  orRow: {
+  btnTxt: {
+    color: '#FFFFFF',
+    fontFamily: FontFamily.semibold,
+    fontSize: 16,
+    lineHeight: typeLh(16),
+    letterSpacing: 0.1,
+  },
+
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 18,
-    marginBottom: 14,
+    marginTop: 22,
+    marginBottom: 16,
   },
-  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(28,28,30,0.2)' },
-  orTxt: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: SUBTITLE },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#2C2C2E' },
+  dividerTxt: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: '#6B6B6B',
+  },
   appleBtn: { width: '100%', height: 54 },
-  switcher: { marginTop: 22, alignSelf: 'center', paddingVertical: 8 },
-  switcherTxt: { fontSize: 13, lineHeight: typeLh(13), fontFamily: FontFamily.regular, color: SUBTITLE, textAlign: 'center' },
-  switcherBold: { fontFamily: FontFamily.medium, fontSize: 15, lineHeight: typeLh(15), color: BRAND_PURPLE },
+
+  switcher: { marginTop: 28, alignSelf: 'center', paddingVertical: 8 },
+  switcherTxt: {
+    fontFamily: FontFamily.regular,
+    fontSize: 14,
+    lineHeight: typeLh(14),
+    color: '#6B6B6B',
+    textAlign: 'center',
+  },
+  switcherLink: {
+    fontFamily: FontFamily.semibold,
+    color: VIOLET_LIGHT,
+  },
 });

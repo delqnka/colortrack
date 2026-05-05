@@ -435,10 +435,14 @@ export default function App() {
                 {({ navigation: nav }) => (
                   <PaywallScreen
                     onDismiss={({ subscribed }) => {
-                      if (subscribed) refreshEntitlement();
-                      setShowPaywall(false);
                       AsyncStorage.setItem('colortrack_paywall_seen', '1');
-                      nav.goBack();
+                      setShowPaywall(false);
+                      if (subscribed) {
+                        refreshEntitlement();
+                        nav.navigate('Main');
+                      } else {
+                        nav.goBack();
+                      }
                     }}
                   />
                 )}

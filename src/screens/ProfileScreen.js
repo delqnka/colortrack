@@ -28,6 +28,7 @@ import {
 } from '../api/client';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { Linking } from 'react-native';
+import Purchases from 'react-native-purchases';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import { useCurrency } from '../context/CurrencyContext';
@@ -65,7 +66,14 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { currency, setCurrency } = useCurrency();
   const { isActive: isPro, isTrial, expirationDate, purchaseDate } = useEntitlement();
+  const [productPrice, setProductPrice] = useState(null);
   const [pickCurOpen, setPickCurOpen] = useState(false);
+
+  useEffect(() => {
+    Purchases.getOfferings()
+      .then(o => setProductPrice(o.current?.availablePackages?.[0]?.product?.priceString ?? null))
+      .catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -334,6 +342,20 @@ export default function ProfileScreen() {
                       <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
                     </View>
                   )}
+                  {productPrice && (
+                    <View style={[styles.subDateRow, { marginTop: 12, marginBottom: 0 }]}>
+                      <Text style={styles.subDateLabel}>Price</Text>
+                      <Text style={styles.subDateValue}>{productPrice} / month</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.manageBtn}
+                    onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={styles.manageBtnText}>Manage subscription</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#5E35B1" />
+                  </TouchableOpacity>
                 </View>
               );
             })()}
@@ -728,6 +750,20 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: '#452277',
+  },
+  manageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E5EA',
+  },
+  manageBtnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    color: '#5E35B1',
   },
   deleteProfileText: {
     ...Type.buttonLabel,

@@ -280,17 +280,18 @@ export default function App() {
 
   const refreshAuth = useCallback(async () => {
     const t = await loadStoredToken();
+    // Auth state is set immediately — never blocked by RC or network
+    setSignedIn(Boolean(t));
+    setAuthReady(true);
     if (t) {
-      await flushOutbox();
+      flushOutbox();
       registerExpoPushIfPossible();
       applyAffiliateAttribute();
-      const entResult = await refreshEntitlement();
-      // Only show paywall if RC positively confirms no subscription (false)
-      // null means RC failed/not configured — don't block the user
-      if (entResult === false) setShowPaywall(true);
+      // Entitlement check runs in background — does not block login
+      refreshEntitlement().then((result) => {
+        if (result === false) setShowPaywall(true);
+      }).catch(() => {});
     }
-    setSignedIn(Boolean(t));
-    setAuthReady(true); // Set last — UI only renders when everything is ready
   }, [refreshEntitlement]);
 
   useEffect(() => {

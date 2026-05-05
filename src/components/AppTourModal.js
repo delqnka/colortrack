@@ -20,63 +20,66 @@ export const TOUR_STORAGE_KEY = 'colortrack_tour_seen';
 
 const PAD = 8;
 
-// Each step: spotlight rect in absolute px (for a ~390pt wide screen, scaled)
+// Tabs: Dashboard(0-25%), Clients(25-50%), Inventory(50-75%), Calendar(75-100%)
+// Home cards: Lab(57-80% top, 0-55% left), Finance(57-70%, 55-100%), LowStock(70-80%), Services(80-88%)
 const STEPS = [
   {
     icon: 'calendar',
     title: 'Your iPhone Calendar in the app',
     body: 'ColorBar Suite shows your appointments from your iPhone calendar in real time, alongside your client bookings. Your full day, always in one place.',
-    spot: { top: 0.18, left: 0, w: 1, h: 0.08 }, // header greeting
+    spot: { top: 0.18, left: 0, w: 1, h: 0.08 },
     tipPos: 'bottom',
   },
   {
     icon: 'today-outline',
     title: 'Your Daily Schedule',
     body: 'The home screen shows today\'s bookings at a glance. Tap any date in the strip to jump to that day.',
-    spot: { top: 0.26, left: 0, w: 1, h: 0.22 }, // schedule card + date strip
+    spot: { top: 0.26, left: 0, w: 1, h: 0.22 },
     tipPos: 'bottom',
   },
   {
     icon: 'calendar-number-outline',
     title: 'Book Appointments',
     body: 'Tap the calendar icon in the tab bar to add a new appointment. Choose the client, service, date and time in seconds.',
-    spot: { top: 0.88, left: 0.7, w: 0.3, h: 0.12 }, // calendar tab
+    spot: { top: 0.87, left: 0.75, w: 0.25, h: 0.13 },
     tipPos: 'top',
   },
   {
     icon: 'people-outline',
     title: 'Client Dossiers',
     body: 'Every client has a complete dossier with contact info, appointment history, colour formulas and personal notes. Tap the clients tab to get started.',
-    spot: { top: 0.88, left: 0.15, w: 0.25, h: 0.12 }, // clients tab
+    spot: { top: 0.87, left: 0.25, w: 0.25, h: 0.13 },
     tipPos: 'top',
   },
   {
     icon: 'flask-outline',
-    title: 'Formula Builder',
-    body: 'Build and save colour formulas. Access them instantly from the client\'s dossier during any appointment.',
-    spot: { top: 0.55, left: 0, w: 0.55, h: 0.28 }, // Lab card
-    tipPos: 'bottom',
+    title: 'My Lab',
+    body: 'Build all your formulas in My Lab. Save them to each client\'s dossier and access them instantly during any appointment.',
+    spot: { top: 0.57, left: 0, w: 0.55, h: 0.25 },
+    tipPos: 'top',
   },
   {
-    icon: 'cube-outline',
+    icon: 'file-tray-stacked-outline',
     title: 'Inventory',
     body: 'Track your product stock. ColorBar Suite alerts you when items run low so you\'re never caught short mid-appointment.',
-    spot: { top: 0.67, left: 0.55, w: 0.45, h: 0.14 }, // Low stock card
-    tipPos: 'bottom',
+    spot: { top: 0.87, left: 0.50, w: 0.25, h: 0.13 },
+    tipPos: 'top',
   },
   {
     icon: 'list-outline',
     title: 'Services & Price List',
     body: 'Add your services and prices once. They appear automatically when filling in client appointments.',
-    spot: { top: 0.82, left: 0.55, w: 0.45, h: 0.10 }, // Services card
+    spot: { top: 0.80, left: 0.55, w: 0.44, h: 0.08 },
     tipPos: 'top',
+    cardOffset: -180,
   },
   {
     icon: 'stats-chart-outline',
     title: 'Finance, Sales & Revenue',
     body: 'Log sales and track income against expenses. See your monthly revenue and identify your most profitable services.',
-    spot: { top: 0.55, left: 0.55, w: 0.45, h: 0.14 }, // Finance card
-    tipPos: 'bottom',
+    spot: { top: 0.57, left: 0.55, w: 0.44, h: 0.13 },
+    tipPos: 'top',
+    cardOffset: -20,
   },
 ];
 
@@ -126,9 +129,13 @@ export default function AppTourModal({ visible, onClose }) {
   };
 
   const tipIsBottom = current.tipPos === 'bottom';
-  const tipTop = tipIsBottom
-    ? spotTop + spotH + 12
-    : spotTop - 200 - 12;
+  const cardH = 220;
+  const rawCardTop = tipIsBottom
+    ? spotTop + spotH + PAD + 28
+    : spotTop - cardH - PAD - 28;
+  const cardTop = current.cardOffset != null
+    ? spotTop + current.cardOffset
+    : Math.min(Math.max(rawCardTop, insets.top + 8), SH - cardH - insets.bottom - 8);
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
@@ -172,7 +179,7 @@ export default function AppTourModal({ visible, onClose }) {
           style={[
             styles.card,
             {
-              top: Math.min(Math.max(tipTop + (tipIsBottom ? 28 : 0), insets.top + 8), SH - 280 - insets.bottom),
+              top: cardTop,
               opacity: contentOpacity,
             },
           ]}

@@ -31,6 +31,7 @@ import {
 } from '../api/client';
 import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
 import { useEntitlement } from '../hooks/useEntitlement';
+import AppTourModal, { TOUR_STORAGE_KEY } from '../components/AppTourModal';
 import { hapticImpactLight } from '../theme/haptics';
 import { useCurrency } from '../context/CurrencyContext';
 import CurrencyPickerModal from '../components/CurrencyPickerModal';
@@ -235,6 +236,13 @@ export default function HomeScreen() {
   const [profileMe, setProfileMe] = useState(null);
   const [headerAvatarLoadFailed, setHeaderAvatarLoadFailed] = useState(false);
   const { isActive: isPro, isTrial, expirationDate } = useEntitlement();
+  const [showTour, setShowTour] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(TOUR_STORAGE_KEY).then(seen => {
+      if (!seen) setShowTour(true);
+    }).catch(() => {});
+  }, []);
 
   // Load from AsyncStorage immediately on mount so avatar survives hot reloads
   useEffect(() => {
@@ -961,6 +969,14 @@ export default function HomeScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AppTourModal
+        visible={showTour}
+        onClose={() => {
+          AsyncStorage.setItem(TOUR_STORAGE_KEY, '1').catch(() => {});
+          setShowTour(false);
+        }}
+      />
     </SafeAreaView>
   );
 }

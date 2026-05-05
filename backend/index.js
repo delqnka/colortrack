@@ -1229,8 +1229,8 @@ function normalizeInventoryImportCandidate(row) {
     200,
   );
   if (!name) return null;
-  const quantity = quantityFromLoose(row.quantity ?? row.qty ?? row.count ?? row.amount ?? row.pack_count);
-  if (!quantity) return null;
+  const quantityRaw = quantityFromLoose(row.quantity ?? row.qty ?? row.count ?? row.amount ?? row.pack_count);
+  const quantity = quantityRaw > 0 ? quantityRaw : 1; // default to 1 if not readable
   const unit = normalizeInventoryUnit(row.unit || row.quantity_unit || row.uom);
   const pricePerUnitCents = centsFromLoosePrice(
     row.price_per_unit_cents != null
@@ -1855,7 +1855,7 @@ async function extractInvoiceItemsFromBuffer(buffer, meta) {
   const apiKey = openRouterKey || openAiKey;
   if (!apiKey) throw new Error('missing_ocr_key');
   const model = usingOpenRouter
-    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.5-flash-preview').trim()
+    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash').trim()
     : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
 
   const mimeRaw = typeof meta.mime === 'string' ? meta.mime : '';
@@ -2091,7 +2091,7 @@ async function extractSalonServicesOcrFromBuffer(buffer, meta) {
   const apiKey = openRouterKey || openAiKey;
   if (!apiKey) throw new Error('missing_ocr_key');
   const model = usingOpenRouter
-    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.5-flash-preview').trim()
+    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash').trim()
     : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
 
   const mimeRaw = typeof meta.mime === 'string' ? meta.mime : '';

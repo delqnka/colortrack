@@ -16,43 +16,40 @@ import Purchases from 'react-native-purchases';
 import * as Notifications from 'expo-notifications';
 import { ENTITLEMENT_ID } from '../hooks/useEntitlement';
 import { FontFamily } from '../theme/fonts';
-import { Type, typeLh } from '../theme/typography';
+import { typeLh } from '../theme/typography';
 
 const VIOLET = '#5E35B1';
 const DEEP = '#0D0D0D';
 
 const FEATURES = [
-  { icon: 'people-outline',       text: 'Unlimited clients & dossiers' },
-  { icon: 'calendar-outline',     text: 'Appointments & calendar sync' },
-  { icon: 'flask-outline',        text: 'Formula builder & Lab' },
-  { icon: 'cube-outline',         text: 'Inventory management' },
-  { icon: 'stats-chart-outline',  text: 'Finance & revenue reports' },
+  'Unlimited clients & color dossiers',
+  'Formula builder & Lab',
+  'Appointments & calendar',
+  'Inventory management',
+  'Finance & revenue reports',
+  'Affiliate partner program',
 ];
 
 async function scheduleTrialReminder() {
   try {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') return;
-    // Cancel any existing trial reminders first
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of scheduled) {
       if (n.content.data?.type === 'trial_reminder') {
         await Notifications.cancelScheduledNotificationAsync(n.identifier);
       }
     }
-    // Schedule 5 days from now (2 days before 7-day trial ends)
     const reminderDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '⏰ Your free trial ends in 2 days',
+        title: 'Your free trial ends in 2 days',
         body: 'Subscribe now to keep access to ColorBar Suite Pro.',
         data: { type: 'trial_reminder' },
       },
       trigger: { type: 'date', date: reminderDate },
     });
-  } catch {
-    // noop — notification scheduling is best-effort
-  }
+  } catch { /* best-effort */ }
 }
 
 export default function PaywallScreen({ onDismiss }) {
@@ -65,44 +62,35 @@ export default function PaywallScreen({ onDismiss }) {
 
   useEffect(() => {
     Purchases.getOfferings()
-      .then((offerings) => {
-        const pkg = offerings.current?.availablePackages?.[0] ?? null;
-        setOffering(pkg);
-      })
+      .then((o) => setOffering(o.current?.availablePackages?.[0] ?? null))
       .catch(() => setOffering(null))
       .finally(() => setLoadingOffering(false));
   }, []);
 
-  const priceText = offering
-    ? offering.product.priceString
-    : '—';
+  const priceString = offering?.product?.priceString ?? '—';
 
   const startTrial = async () => {
     if (!offering || purchasing) return;
     setPurchasing(true);
     try {
       const { customerInfo } = await Purchases.purchasePackage(offering);
-      const isActive = Boolean(customerInfo.entitlements.active[ENTITLEMENT_ID]);
-      if (isActive) {
+      if (customerInfo.entitlements.active[ENTITLEMENT_ID]) {
         if (remindMe) await scheduleTrialReminder();
         onDismiss?.({ subscribed: true });
       }
     } catch (e) {
-      if (!e.userCancelled) {
-        Alert.alert('Purchase failed', String(e?.message || 'Try again later.'));
-      }
+      if (!e.userCancelled) Alert.alert('', String(e?.message || 'Try again later.'));
     } finally {
       setPurchasing(false);
     }
   };
 
-  const restorePurchases = async () => {
+  const restore = async () => {
     if (restoring) return;
     setRestoring(true);
     try {
       const info = await Purchases.restorePurchases();
-      const isActive = Boolean(info.entitlements.active[ENTITLEMENT_ID]);
-      if (isActive) {
+      if (info.entitlements.active[ENTITLEMENT_ID]) {
         onDismiss?.({ subscribed: true });
       } else {
         Alert.alert('', 'No active subscription found.');
@@ -116,62 +104,73 @@ export default function PaywallScreen({ onDismiss }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      {onDismiss && (
-        <TouchableOpacity
-          style={[styles.closeBtn, { top: insets.top + 8 }]}
-          onPress={() => onDismiss({ subscribed: false })}
-          hitSlop={12}
-        >
-          <Ionicons name="close" size={22} color="#AEAEB2" />
-        </TouchableOpacity>
-      )}
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        <View style={{ width: 32 }} />
+        <Text style={styles.topTitle}>ColorBar Suite Pro</Text>
+        {onDismiss ? (
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => onDismiss({ subscribed: false })}
+            hitSlop={12}
+          >
+            <Ionicons name="close" size={18} color="#AEAEB2" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 32 }} />
+        )}
+      </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 24, 48) }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero */}
-        <View style={styles.heroArea}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="cut-outline" size={36} color="#FFFFFF" />
+        {/* Trial badge */}
+        <View style={styles.trialBadgeRow}>
+          <View style={styles.trialBadge}>
+            <Text style={styles.trialBadgeText}>7-DAY FREE TRIAL</Text>
           </View>
-          <Text style={styles.heroTitle}>ColorBar Suite Pro</Text>
-          <Text style={styles.heroSub}>
-            Everything you need to run your salon — clients, formulas, inventory and finance in one place.
-          </Text>
         </View>
 
-        {/* Features */}
-        <View style={styles.featuresCard}>
+        {/* Headline */}
+        <Text style={styles.headline}>Everything you need{'\n'}to run your salon.</Text>
+        <Text style={styles.sub}>Start free. Cancel anytime.</Text>
+
+        {/* Feature list */}
+        <View style={styles.featuresList}>
           {FEATURES.map((f) => (
-            <View key={f.text} style={styles.featureRow}>
-              <View style={styles.featureIconWrap}>
-                <Ionicons name={f.icon} size={18} color={VIOLET} />
+            <View key={f} style={styles.featureRow}>
+              <View style={styles.check}>
+                <Ionicons name="checkmark" size={14} color={VIOLET} />
               </View>
-              <Text style={styles.featureText}>{f.text}</Text>
+              <Text style={styles.featureText}>{f}</Text>
             </View>
           ))}
         </View>
 
-        {/* Plan */}
+        {/* Plan card */}
         <View style={styles.planCard}>
-          <View style={styles.trialBadge}>
-            <Text style={styles.trialBadgeText}>7-DAY FREE TRIAL</Text>
+          <View style={styles.planCardAccent} />
+          <View style={styles.planCardInner}>
+            <View>
+              <Text style={styles.planName}>Monthly Pro</Text>
+              <Text style={styles.planNote}>
+                Free for 7 days, then {priceString}/month
+              </Text>
+            </View>
+            <View style={styles.planPriceCol}>
+              <Text style={styles.planPrice}>
+                {loadingOffering ? '…' : priceString}
+              </Text>
+              <Text style={styles.planPricePer}>/mo</Text>
+            </View>
           </View>
-          <Text style={styles.planName}>Monthly Pro</Text>
-          <Text style={styles.planPrice}>
-            {loadingOffering ? '…' : priceText}
-            <Text style={styles.planPer}> / month</Text>
-          </Text>
-          <Text style={styles.planNote}>Free for 7 days, then billed monthly. Cancel anytime.</Text>
         </View>
 
-        {/* Remind me toggle */}
+        {/* Remind me */}
         <View style={styles.remindRow}>
-          <View style={styles.remindLeft}>
-            <Ionicons name="notifications-outline" size={18} color={DEEP} style={{ marginRight: 10 }} />
-            <Text style={styles.remindText}>Remind me 2 days before trial ends</Text>
-          </View>
+          <Ionicons name="notifications-outline" size={18} color={DEEP} />
+          <Text style={styles.remindText}>Remind me 2 days before trial ends</Text>
           <Switch
             value={remindMe}
             onValueChange={setRemindMe}
@@ -182,7 +181,7 @@ export default function PaywallScreen({ onDismiss }) {
 
         {/* CTA */}
         <TouchableOpacity
-          style={[styles.ctaBtn, (purchasing || loadingOffering) && { opacity: 0.6 }]}
+          style={[styles.ctaBtn, (purchasing || loadingOffering) && styles.ctaBtnDisabled]}
           onPress={startTrial}
           disabled={purchasing || loadingOffering || !offering}
           activeOpacity={0.88}
@@ -194,15 +193,17 @@ export default function PaywallScreen({ onDismiss }) {
         </TouchableOpacity>
 
         {/* Restore */}
-        <TouchableOpacity style={styles.restoreBtn} onPress={restorePurchases} disabled={restoring}>
+        <TouchableOpacity style={styles.restoreBtn} onPress={restore} disabled={restoring}>
           {restoring
             ? <ActivityIndicator color="#AEAEB2" size="small" />
             : <Text style={styles.restoreText}>Restore purchase</Text>
           }
         </TouchableOpacity>
 
+        {/* Legal */}
         <Text style={styles.legal}>
-          Payment will be charged to your {Platform.OS === 'ios' ? 'Apple ID' : 'Google Play'} account at confirmation of purchase. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.
+          Charged to your {Platform.OS === 'ios' ? 'Apple ID' : 'Google Play'} account at purchase confirmation.
+          Renews automatically unless cancelled 24 h before the period ends.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -210,11 +211,26 @@ export default function PaywallScreen({ onDismiss }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFFFF' },
+  safe: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    paddingTop: 4,
+  },
+  topTitle: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 17,
+    lineHeight: typeLh(17),
+    color: DEEP,
+    letterSpacing: -0.2,
+  },
   closeBtn: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 10,
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -222,163 +238,175 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   scroll: {
     paddingHorizontal: 24,
-    paddingTop: 24,
-    alignItems: 'center',
+    paddingTop: 8,
   },
 
-  heroArea: { alignItems: 'center', marginBottom: 24, marginTop: 16 },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: VIOLET,
-    alignItems: 'center',
-    justifyContent: 'center',
+  trialBadgeRow: {
+    alignItems: 'flex-start',
     marginBottom: 16,
-    shadowColor: VIOLET,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  heroTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 26,
-    lineHeight: typeLh(26),
-    color: DEEP,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  heroSub: {
-    ...Type.secondary,
-    textAlign: 'center',
-    lineHeight: typeLh(14),
-    paddingHorizontal: 8,
-  },
-
-  featuresCard: {
-    alignSelf: 'stretch',
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
-    padding: 16,
-    marginBottom: 16,
-    gap: 12,
-  },
-  featureRow: { flexDirection: 'row', alignItems: 'center' },
-  featureIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#F3F0FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  featureText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 14,
-    lineHeight: typeLh(14),
-    color: DEEP,
-  },
-
-  planCard: {
-    alignSelf: 'stretch',
-    borderRadius: 18,
-    backgroundColor: VIOLET,
-    padding: 20,
-    marginBottom: 14,
-    alignItems: 'center',
-    shadowColor: VIOLET,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
   },
   trialBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3F0FF',
     borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
   },
   trialBadgeText: {
     fontFamily: FontFamily.bold,
     fontSize: 11,
-    letterSpacing: 1,
-    color: '#FFFFFF',
-  },
-  planName: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 18,
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  planPrice: {
-    fontFamily: FontFamily.bold,
-    fontSize: 32,
-    lineHeight: typeLh(32),
-    color: '#FFFFFF',
-  },
-  planPer: {
-    fontFamily: FontFamily.regular,
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.75)',
-  },
-  planNote: {
-    marginTop: 8,
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
+    letterSpacing: 1.5,
+    color: VIOLET,
   },
 
-  remindRow: {
-    alignSelf: 'stretch',
+  headline: {
+    fontFamily: FontFamily.bold,
+    fontSize: 30,
+    lineHeight: typeLh(30),
+    color: DEEP,
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  sub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    color: '#8A8A8E',
+    marginBottom: 28,
+  },
+
+  featuresList: {
+    marginBottom: 24,
+    gap: 12,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  check: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F3F0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    lineHeight: typeLh(15),
+    color: DEEP,
+  },
+
+  planCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  planCardAccent: {
+    height: 4,
+    backgroundColor: VIOLET,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  planCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F9F9FB',
+    padding: 20,
+  },
+  planName: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 17,
+    color: DEEP,
+    marginBottom: 4,
+  },
+  planNote: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: typeLh(13),
+    color: '#8A8A8E',
+  },
+  planPriceCol: {
+    alignItems: 'flex-end',
+  },
+  planPrice: {
+    fontFamily: FontFamily.bold,
+    fontSize: 26,
+    lineHeight: typeLh(26),
+    color: DEEP,
+    letterSpacing: -0.5,
+  },
+  planPricePer: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: '#8A8A8E',
+  },
+
+  remindRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#FAFAFA',
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
     marginBottom: 20,
   },
-  remindLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   remindText: {
+    flex: 1,
     fontFamily: FontFamily.medium,
     fontSize: 14,
     lineHeight: typeLh(14),
     color: DEEP,
-    flex: 1,
   },
 
   ctaBtn: {
-    alignSelf: 'stretch',
     backgroundColor: DEEP,
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 14,
+    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 5,
   },
+  ctaBtnDisabled: { opacity: 0.55 },
   ctaBtnText: {
     fontFamily: FontFamily.semibold,
     fontSize: 17,
     color: '#FFFFFF',
+    letterSpacing: 0.1,
   },
 
-  restoreBtn: { paddingVertical: 10, marginBottom: 16 },
-  restoreText: { ...Type.secondary, color: '#AEAEB2' },
+  restoreBtn: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  restoreText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: '#AEAEB2',
+  },
 
   legal: {
     fontFamily: FontFamily.regular,
     fontSize: 11,
-    lineHeight: typeLh(11),
-    color: '#AEAEB2',
+    lineHeight: 16,
+    color: '#C7C7CC',
     textAlign: 'center',
-    paddingHorizontal: 8,
   },
 });

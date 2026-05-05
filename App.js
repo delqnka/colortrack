@@ -268,11 +268,20 @@ export default function App() {
   const [signedIn, setSignedIn] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
 
-  useEffect(() => {
-    if (showPaywall && signedIn && navigationRef.isReady()) {
+  const navigateToPaywall = useCallback(() => {
+    if (navigationRef.isReady()) {
       navigationRef.navigate('Paywall');
+    } else {
+      const unsub = navigationRef.addListener('state', () => {
+        unsub();
+        navigationRef.navigate('Paywall');
+      });
     }
-  }, [showPaywall, signedIn]);
+  }, []);
+
+  useEffect(() => {
+    if (showPaywall && signedIn) navigateToPaywall();
+  }, [showPaywall, signedIn, navigateToPaywall]);
   const { isActive: hasEntitlement, loading: entitlementLoading, refresh: refreshEntitlement } = useEntitlement();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);

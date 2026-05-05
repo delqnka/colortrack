@@ -10,6 +10,8 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -294,6 +296,10 @@ export default function AffiliateScreen() {
       )}
 
       <Modal visible={modalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <Text style={styles.modalTitle}>New influencer</Text>
@@ -325,6 +331,7 @@ export default function AffiliateScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

@@ -234,7 +234,7 @@ export default function HomeScreen() {
 
   const [profileMe, setProfileMe] = useState(null);
   const [headerAvatarLoadFailed, setHeaderAvatarLoadFailed] = useState(false);
-  const { isActive: isPro } = useEntitlement();
+  const { isActive: isPro, isTrial, expirationDate } = useEntitlement();
 
   // Load from AsyncStorage immediately on mount so avatar survives hot reloads
   useEffect(() => {
@@ -597,17 +597,18 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
             <View style={styles.headerTextWrap}>
-              <View style={styles.greetingRow}>
-                <Text style={styles.greeting} numberOfLines={1}>
-                  {greetingName ? `Hello, ${greetingName}` : 'Hello'}
+              <Text style={styles.greeting} numberOfLines={1}>
+                {greetingName ? `Hello, ${greetingName}` : 'Hello'}
+              </Text>
+              {isPro ? (
+                <Text style={styles.subStatus}>
+                  {isTrial && expirationDate
+                    ? `Trial · ${Math.max(0, Math.ceil((new Date(expirationDate) - Date.now()) / 86400000))} days left`
+                    : 'Pro'}
                 </Text>
-                {isPro && (
-                  <View style={styles.proBadge}>
-                    <Text style={styles.proBadgeText}>PRO</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
+              ) : (
+                <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
+              )}
             </View>
           </View>
           <View style={styles.headerActions}>
@@ -999,22 +1000,12 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     paddingTop: 2,
   },
-  greetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  proBadge: {
-    backgroundColor: '#0D0D0D',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  proBadgeText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: '#FFFFFF',
+  subStatus: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: '#5E35B1',
+    marginTop: 1,
+    letterSpacing: 0.2,
   },
   avatar: {
     width: 48,

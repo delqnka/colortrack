@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ import {
   saveSessionToken,
   resolveImagePublicUri,
   mergeStaffMeResponse,
+  getProfileMeCacheStorageKey,
 } from '../api/client';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
@@ -71,6 +73,21 @@ export default function ProfileScreen() {
   const [currentPasswordDraft, setCurrentPasswordDraft] = useState('');
   const [newPasswordDraft, setNewPasswordDraft] = useState('');
   const [confirmPasswordDraft, setConfirmPasswordDraft] = useState('');
+
+  // Load avatar from AsyncStorage cache immediately — no network delay
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(getProfileMeCacheStorageKey());
+        if (raw) {
+          const cached = JSON.parse(raw);
+          if (cached && typeof cached === 'object') {
+            setMe((prev) => prev ?? mergeStaffMeResponse(null, cached));
+          }
+        }
+      } catch { /* noop */ }
+    })();
+  }, []);
 
   const load = useCallback(async () => {
     try {

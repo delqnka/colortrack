@@ -520,6 +520,7 @@ app.get('/api/media/r2', async (req, res, next) => {
       return res.status(400).send('Bad key');
     }
     const url = await r2.presignGet(key);
+    res.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     res.redirect(302, url);
   } catch (e) {
     next(e);

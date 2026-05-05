@@ -12,6 +12,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import HomeScreen from './src/screens/HomeScreen';
 import ClientsScreen from './src/screens/ClientsScreen';
@@ -297,8 +298,12 @@ export default function App() {
       registerExpoPushIfPossible();
       applyAffiliateAttribute();
       // Entitlement check runs in background — does not block login
-      refreshEntitlement().then((result) => {
-        if (result === false) setShowPaywall(true);
+      refreshEntitlement().then(async (result) => {
+        if (result === false) {
+          // Only show paywall if user has never seen it (first install)
+          const seen = await AsyncStorage.getItem('colortrack_paywall_seen');
+          if (!seen) setShowPaywall(true);
+        }
       }).catch(() => {});
     }
   }, [refreshEntitlement]);
@@ -432,6 +437,7 @@ export default function App() {
                     onDismiss={({ subscribed }) => {
                       if (subscribed) refreshEntitlement();
                       setShowPaywall(false);
+                      AsyncStorage.setItem('colortrack_paywall_seen', '1');
                       nav.goBack();
                     }}
                   />

@@ -22,8 +22,8 @@ const STEPS = [
   {
     icon: 'calendar',
     color: '#452277',
-    title: 'Syncs with your iPhone Calendar',
-    body: 'Every appointment you book in ColorBar Suite appears automatically in your iPhone calendar. Your schedule — always in one place.',
+    title: 'Your iPhone Calendar in the app',
+    body: 'ColorBar Suite shows your appointments from your iPhone calendar in real time, alongside your client bookings. Your full day, always in one place.',
   },
   {
     icon: 'today-outline',

@@ -26,6 +26,8 @@ import {
   mergeStaffMeResponse,
   getProfileMeCacheStorageKey,
 } from '../api/client';
+import { useEntitlement } from '../hooks/useEntitlement';
+import { Linking } from 'react-native';
 import { FontFamily } from '../theme/fonts';
 import { Type, typeLh } from '../theme/typography';
 import { useCurrency } from '../context/CurrencyContext';
@@ -62,6 +64,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { currency, setCurrency } = useCurrency();
+  const { isActive: isPro, isTrial } = useEntitlement();
   const [pickCurOpen, setPickCurOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -253,9 +256,7 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-back" size={26} color="#1C1C1E" />
         </TouchableOpacity>
         <Text style={styles.topTitle}>Profile</Text>
-        <TouchableOpacity hitSlop={12} onPress={() => navigation.navigate('PaywallPreview')} accessibilityRole="button">
-          <Ionicons name="card-outline" size={24} color="#5E35B1" />
-        </TouchableOpacity>
+        <View style={{ width: 26 }} />
       </View>
 
       {loading && !me ? (
@@ -378,6 +379,38 @@ export default function ProfileScreen() {
             >
               {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveBtnText}>Save</Text>}
             </TouchableOpacity>
+
+            {/* Subscription status */}
+            {isPro ? (
+              <TouchableOpacity
+                style={styles.currencyRow}
+                onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.currencyRight}>
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proBadgeText}>{isTrial ? 'TRIAL' : 'PRO'}</Text>
+                  </View>
+                  <Text style={styles.currencyLabel}>  Subscription active</Text>
+                </View>
+                <View style={styles.currencyRight}>
+                  <Text style={[styles.currencyValue, { fontSize: 13 }]}>Manage</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.currencyRow}
+                onPress={() => navigation.navigate('Paywall')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.currencyLabel}>ColorBar Suite Pro</Text>
+                <View style={styles.currencyRight}>
+                  <Text style={styles.currencyValue}>Subscribe</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
+                </View>
+              </TouchableOpacity>
+            )}
 
             {/* Currency selector */}
             <TouchableOpacity style={styles.currencyRow} onPress={() => setPickCurOpen(true)} activeOpacity={0.8}>
@@ -592,6 +625,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+  },
+  proBadge: {
+    backgroundColor: '#0D0D0D',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  proBadgeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#FFFFFF',
   },
   deleteProfileText: {
     ...Type.buttonLabel,

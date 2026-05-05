@@ -2257,7 +2257,7 @@ const styles = StyleSheet.create({
   pickSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -2311,7 +2311,7 @@ const styles = StyleSheet.create({
   modalTitle: { ...Type.screenTitle, color: '#0D0D0D' },
   modalClose: { fontSize: 16, fontFamily: FontFamily.regular, color: BRAND_PURPLE },
   invSearch: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 11,

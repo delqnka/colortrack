@@ -30,6 +30,7 @@ import {
   resolveImagePublicUri,
 } from '../api/client';
 import { BRAND_PURPLE, MY_LAB_VIOLET } from '../theme/glassUi';
+import { useEntitlement } from '../hooks/useEntitlement';
 import { hapticImpactLight } from '../theme/haptics';
 import { useCurrency } from '../context/CurrencyContext';
 import CurrencyPickerModal from '../components/CurrencyPickerModal';
@@ -233,6 +234,7 @@ export default function HomeScreen() {
 
   const [profileMe, setProfileMe] = useState(null);
   const [headerAvatarLoadFailed, setHeaderAvatarLoadFailed] = useState(false);
+  const { isActive: isPro } = useEntitlement();
 
   // Load from AsyncStorage immediately on mount so avatar survives hot reloads
   useEffect(() => {
@@ -595,9 +597,16 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.greeting} numberOfLines={1}>
-                {greetingName ? `Hello, ${greetingName}` : 'Hello'}
-              </Text>
+              <View style={styles.greetingRow}>
+                <Text style={styles.greeting} numberOfLines={1}>
+                  {greetingName ? `Hello, ${greetingName}` : 'Hello'}
+                </Text>
+                {isPro && (
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proBadgeText}>PRO</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
             </View>
           </View>
@@ -989,6 +998,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'stretch',
     paddingTop: 2,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  proBadge: {
+    backgroundColor: '#0D0D0D',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  proBadgeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#FFFFFF',
   },
   avatar: {
     width: 48,

@@ -58,7 +58,7 @@ function buildReportHtml(report) {
     th:nth-child(5),th:nth-child(6){text-align:right}
     td{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}
     tr:last-child td{border-bottom:none}
-    .summary{margin-top:24px;background:#F3F0FF;border-radius:12px;padding:16px 20px;display:flex;gap:32px}
+    .summary{margin-top:24px;background:#FFFFFF;border-radius:12px;padding:16px 20px;display:flex;gap:32px}
     .s-item{display:flex;flex-direction:column}
     .s-val{font-size:22px;font-weight:700;color:#5E35B1}
     .s-lbl{font-size:11px;color:#888;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
   },
   codePill: {
     alignSelf: 'flex-start',
-    backgroundColor: '#F3F0FF',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#F3F0FF',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 14,
     marginTop: 16,

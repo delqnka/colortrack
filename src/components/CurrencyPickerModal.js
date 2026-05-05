@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     flexDirection: 'column',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 14,
     borderTopRightRadius: 14,
     paddingBottom: Platform.OS === 'ios' ? 12 : 10,

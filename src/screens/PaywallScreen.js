@@ -17,6 +17,7 @@ import * as Notifications from 'expo-notifications';
 import { ENTITLEMENT_ID } from '../hooks/useEntitlement';
 import { FontFamily } from '../theme/fonts';
 import { typeLh } from '../theme/typography';
+import WelcomeProModal from '../components/WelcomeProModal';
 
 const VIOLET = '#5E35B1';
 const DEEP = '#0D0D0D';
@@ -59,6 +60,7 @@ export default function PaywallScreen({ onDismiss }) {
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [remindMe, setRemindMe] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     Purchases.getOfferings()
@@ -76,7 +78,7 @@ export default function PaywallScreen({ onDismiss }) {
       const { customerInfo } = await Purchases.purchasePackage(offering);
       if (customerInfo.entitlements.active[ENTITLEMENT_ID]) {
         if (remindMe) await scheduleTrialReminder();
-        onDismiss?.({ subscribed: true });
+        setShowWelcome(true);
       }
     } catch (e) {
       if (!e.userCancelled) Alert.alert('', String(e?.message || 'Try again later.'));
@@ -199,6 +201,11 @@ export default function PaywallScreen({ onDismiss }) {
             : <Text style={styles.restoreText}>Restore purchase</Text>
           }
         </TouchableOpacity>
+
+        <WelcomeProModal
+          visible={showWelcome}
+          onClose={() => { setShowWelcome(false); onDismiss?.({ subscribed: true }); }}
+        />
 
         {/* Legal */}
         <Text style={styles.legal}>

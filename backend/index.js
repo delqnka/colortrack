@@ -1836,8 +1836,12 @@ async function invoiceLlmJsonItems(apiKey, usingOpenRouter, model, payloadBody) 
   const assistantText = Array.isArray(rawContent)
     ? rawContent.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n')
     : rawContent;
+  console.log('[OCR-DEBUG] model:', payloadBody.model);
+  console.log('[OCR-DEBUG] raw response:', String(assistantText || '').slice(0, 2000));
   const parsed = parseJsonObjectFromText(assistantText);
+  console.log('[OCR-DEBUG] parsed:', JSON.stringify(parsed)?.slice(0, 500));
   const rows = Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
+  console.log('[OCR-DEBUG] rows count:', rows.length);
   const items = [];
   for (const row of rows) {
     const item = normalizeInventoryImportCandidate(row);

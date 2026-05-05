@@ -26,7 +26,7 @@ const STEPS = [
   {
     icon: 'calendar',
     title: 'Your iPhone Calendar in the app',
-    body: 'ColorBar Suite shows your appointments from your iPhone calendar in real time, alongside your client bookings. Your full day, always in one place.',
+    body: 'Open the calendar tab and ColorBar Suite shows your iPhone calendar events alongside your client appointments. Your full day, always in one place.',
     spot: { top: 0.18, left: 0, w: 1, h: 0.08 },
     tipPos: 'bottom',
   },

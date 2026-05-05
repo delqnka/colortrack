@@ -253,7 +253,9 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-back" size={26} color="#1C1C1E" />
         </TouchableOpacity>
         <Text style={styles.topTitle}>Profile</Text>
-        <View style={{ width: 26 }} />
+        <TouchableOpacity hitSlop={12} onPress={() => navigation.navigate('PaywallPreview')} accessibilityRole="button">
+          <Ionicons name="card-outline" size={24} color="#5E35B1" />
+        </TouchableOpacity>
       </View>
 
       {loading && !me ? (
@@ -386,12 +388,6 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('PaywallPreview')} activeOpacity={0.8}>
-              <Text style={styles.currencyLabel}>Preview Paywall</Text>
-              <View style={styles.currencyRight}>
-                <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
-              </View>
-            </TouchableOpacity>
 
             {me?.role === 'admin' && (
               <TouchableOpacity style={styles.currencyRow} onPress={() => navigation.navigate('Affiliate')} activeOpacity={0.8}>
@@ -456,13 +452,15 @@ const styles = StyleSheet.create({
   },
   contentColumn: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollInner: {
     paddingHorizontal: 24,
     paddingBottom: 32,
     alignItems: 'center',
     flexGrow: 1,
+    backgroundColor: '#FFFFFF',
   },
   avatarTouch: {
     width: 112,
@@ -515,8 +513,7 @@ const styles = StyleSheet.create({
   },
   input: {
     alignSelf: 'stretch',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
+    borderWidth: 0,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -525,6 +522,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     color: '#0D0D0D',
     backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 3,
   },
   currencyRow: {
     flexDirection: 'row',

@@ -141,7 +141,7 @@ export default function PaywallScreen({ onDismiss }) {
           {FEATURES.map((f) => (
             <View key={f} style={styles.featureRow}>
               <View style={styles.check}>
-                <Ionicons name="checkmark" size={14} color={VIOLET} />
+                <Ionicons name="checkmark" size={14} color="#FFFFFF" />
               </View>
               <Text style={styles.featureText}>{f}</Text>
             </View>
@@ -234,7 +234,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F2F2F7',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -249,10 +248,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   trialBadge: {
-    backgroundColor: '#F3F0FF',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingVertical: 2,
   },
   trialBadgeText: {
     fontFamily: FontFamily.bold,
@@ -290,7 +286,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#F3F0FF',
+    backgroundColor: '#452277',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -357,9 +353,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 14,
+    paddingHorizontal: 4,
     marginBottom: 20,
   },
   remindText: {

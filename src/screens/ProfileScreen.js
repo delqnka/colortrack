@@ -494,6 +494,21 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
 
+            <TouchableOpacity
+              style={styles.currencyRow}
+              onPress={async () => {
+                const { TOUR_STORAGE_KEY } = await import('../components/AppTourModal');
+                await AsyncStorage.removeItem(TOUR_STORAGE_KEY);
+                navigation.navigate('Main');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.currencyLabel}>Show app tour</Text>
+              <View style={styles.currencyRight}>
+                <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
+              </View>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.signOut} onPress={confirmSignOut} activeOpacity={0.88}>
               <Text style={styles.signOutText}>Sign out</Text>
             </TouchableOpacity>

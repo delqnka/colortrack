@@ -71,7 +71,7 @@ const STEPS = [
     body: 'Add your services and prices once. They appear automatically when filling in client appointments.',
     spot: { top: 0.80, left: 0.55, w: 0.44, h: 0.08 },
     tipPos: 'top',
-    cardOffset: -180,
+    cardOffset: -245,
   },
   {
     icon: 'stats-chart-outline',
@@ -79,7 +79,7 @@ const STEPS = [
     body: 'Log sales and track income against expenses. See your monthly revenue and identify your most profitable services.',
     spot: { top: 0.57, left: 0.55, w: 0.44, h: 0.13 },
     tipPos: 'top',
-    cardOffset: -20,
+    cardOffset: -245,
   },
 ];
 

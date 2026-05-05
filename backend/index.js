@@ -1855,7 +1855,7 @@ async function extractInvoiceItemsFromBuffer(buffer, meta) {
   const apiKey = openRouterKey || openAiKey;
   if (!apiKey) throw new Error('missing_ocr_key');
   const model = usingOpenRouter
-    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
+    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.5-flash-preview').trim()
     : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
 
   const mimeRaw = typeof meta.mime === 'string' ? meta.mime : '';
@@ -2064,20 +2064,24 @@ function normalizeServiceCandidate(row) {
 function parseJsonObjectFromText(text) {
   const raw = String(text || '').trim();
   if (!raw) return null;
+  // Strip markdown code fences
+  const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
   try {
-    return JSON.parse(raw);
-  } catch {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(raw.slice(start, end + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    return JSON.parse(stripped);
+  } catch { /* fall through */ }
+  // Try extracting {...}
+  const os = stripped.indexOf('{');
+  const oe = stripped.lastIndexOf('}');
+  if (os >= 0 && oe > os) {
+    try { return JSON.parse(stripped.slice(os, oe + 1)); } catch { /* fall through */ }
   }
+  // Try extracting [...]
+  const as = stripped.indexOf('[');
+  const ae = stripped.lastIndexOf(']');
+  if (as >= 0 && ae > as) {
+    try { return JSON.parse(stripped.slice(as, ae + 1)); } catch { /* fall through */ }
+  }
+  return null;
 }
 
 async function extractSalonServicesOcrFromBuffer(buffer, meta) {
@@ -2087,7 +2091,7 @@ async function extractSalonServicesOcrFromBuffer(buffer, meta) {
   const apiKey = openRouterKey || openAiKey;
   if (!apiKey) throw new Error('missing_ocr_key');
   const model = usingOpenRouter
-    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.0-flash-001').trim()
+    ? String(process.env.OPENROUTER_OCR_MODEL || 'google/gemini-2.5-flash-preview').trim()
     : String(process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini').trim();
 
   const mimeRaw = typeof meta.mime === 'string' ? meta.mime : '';

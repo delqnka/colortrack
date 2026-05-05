@@ -13,11 +13,14 @@ export function useEntitlement() {
     try {
       const info = await Purchases.getCustomerInfo();
       const ent = info.entitlements.active[ENTITLEMENT_ID];
-      setIsActive(Boolean(ent));
+      const active = Boolean(ent);
+      setIsActive(active);
       setIsTrial(ent?.periodType === 'trial' ?? false);
       setExpirationDate(ent?.expirationDate ?? null);
+      return active;
     } catch {
       setIsActive(false);
+      return false;
     } finally {
       setLoading(false);
     }

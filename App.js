@@ -272,15 +272,17 @@ export default function App() {
 
   const refreshAuth = useCallback(async () => {
     const t = await loadStoredToken();
-    setSignedIn(Boolean(t));
     setAuthReady(true);
     if (t) {
       await flushOutbox();
       registerExpoPushIfPossible();
       applyAffiliateAttribute();
-      await refreshEntitlement();
+      const entInfo = await refreshEntitlement();
+      const active = entInfo ?? false;
+      if (!active) setShowPaywall(true);
     }
-  }, []);
+    setSignedIn(Boolean(t));
+  }, [refreshEntitlement]);
 
   useEffect(() => {
     refreshAuth();
@@ -336,11 +338,6 @@ export default function App() {
     SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
-  useEffect(() => {
-    if (signedIn && authReady && !entitlementLoading && !hasEntitlement) {
-      setShowPaywall(true);
-    }
-  }, [signedIn, authReady, entitlementLoading, hasEntitlement]);
 
   if (!fontsLoaded || !authReady || !onboardingChecked) {
     return (
@@ -420,6 +417,11 @@ export default function App() {
               <AppStack.Screen name="Profile" component={ProfileScreen} />
               <AppStack.Screen name="Services" component={ServicesScreen} />
               <AppStack.Screen name="Affiliate" component={AffiliateScreen} />
+              {__DEV__ && (
+                <AppStack.Screen name="PaywallPreview">
+                  {() => <PaywallScreen onDismiss={() => {}} />}
+                </AppStack.Screen>
+              )}
             </AppStack.Navigator>
           )}
         </NavigationContainer>

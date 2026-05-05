@@ -597,14 +597,19 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.greeting} numberOfLines={1}>
-                {greetingName ? `Hello, ${greetingName}` : 'Hello'}
-              </Text>
-              {isPro ? (
+              <View style={styles.greetingRow}>
+                <Text style={styles.greeting} numberOfLines={1}>
+                  {greetingName ? `Hello, ${greetingName}` : 'Hello'}
+                </Text>
+                {isPro && (
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proBadgeText}>{isTrial ? 'TRIAL' : 'PRO'}</Text>
+                  </View>
+                )}
+              </View>
+              {isPro && isTrial && expirationDate ? (
                 <Text style={styles.subStatus}>
-                  {isTrial && expirationDate
-                    ? `Trial · ${Math.max(0, Math.ceil((new Date(expirationDate) - Date.now()) / 86400000))} days left`
-                    : 'Pro'}
+                  {`${Math.max(0, Math.ceil((new Date(expirationDate) - Date.now()) / 86400000))} days left`}
                 </Text>
               ) : (
                 <Text style={styles.date}>{formatHeaderSubtitle(selectedDate)}</Text>
@@ -999,6 +1004,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'stretch',
     paddingTop: 2,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  proBadge: {
+    backgroundColor: '#0D0D0D',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  proBadgeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#FFFFFF',
   },
   subStatus: {
     fontFamily: FontFamily.medium,

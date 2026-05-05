@@ -54,6 +54,18 @@ const STOCK_CATEGORY_OPTIONS = [
   { key: 'consumable', label: 'Consumables' },
 ];
 
+const RETAIL_CATEGORY_OPTIONS = [
+  { key: 'shampoo', label: 'Shampoo' },
+  { key: 'conditioner', label: 'Conditioner' },
+  { key: 'mask', label: 'Mask' },
+  { key: 'serum', label: 'Serum' },
+  { key: 'styling', label: 'Styling' },
+  { key: 'treatment', label: 'Treatment' },
+  { key: 'scalp', label: 'Scalp' },
+  { key: 'color_care', label: 'Color Care' },
+  { key: 'other_retail', label: 'Other' },
+];
+
 const INVENTORY_FILTERS = [
   {
     key: 'stock',
@@ -255,6 +267,8 @@ function invoiceRowsFromItems(items) {
   return items
     .map((item, index) => {
       const category = importCategoryForItem(item);
+      const name = String(item?.name || '').trim().toLowerCase();
+      const autoRetailSub = RETAIL_CATEGORY_OPTIONS.find(o => name.includes(o.key) || name.includes(o.label.toLowerCase()))?.key || '';
       return {
         key: `${Date.now()}-${index}`,
         name: String(item?.name || '').trim(),
@@ -262,6 +276,7 @@ function invoiceRowsFromItems(items) {
         stockCategory: category === 'retail' ? 'consumable' : category,
         addingCategory: false,
         categoryDraft: '',
+        retailSubcategory: category === 'retail' ? autoRetailSub : '',
         brand: item?.brand || '',
         shade_code: item?.shade_code || '',
         package_size: item?.package_size || '',
@@ -1156,19 +1171,26 @@ export default function InventoryScreen({ navigation, route }) {
                       </View>
                     ) : (
                       <View style={styles.previewCategoryDropdownRow}>
-                        <Text style={styles.previewCategoryLabel}>Sub-category</Text>
-                        <TextInput
-                          style={[styles.previewInput, { flex: 1, marginBottom: 0 }]}
-                          value={item.categoryDraft || ''}
-                          onChangeText={(text) => updatePreviewRow(item.key, { categoryDraft: text })}
-                          placeholder="e.g. conditioner, shampoo"
-                          placeholderTextColor="#AEAEB2"
-                          returnKeyType="done"
-                          onSubmitEditing={() => {
-                            const v = (item.categoryDraft || '').trim().toLowerCase().replace(/\s+/g, '_');
-                            if (v) updatePreviewRow(item.key, { retailSubcategory: v, categoryDraft: v });
-                          }}
-                        />
+                        <Text style={styles.previewCategoryLabel}>Type</Text>
+                        <View style={styles.previewDropdownWrap}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                            {RETAIL_CATEGORY_OPTIONS.map((option) => {
+                              const selected = item.retailSubcategory === option.key;
+                              return (
+                                <TouchableOpacity
+                                  key={option.key}
+                                  style={[styles.previewCategoryChip, selected && styles.previewCategoryChipOn]}
+                                  onPress={() => updatePreviewRow(item.key, { retailSubcategory: option.key })}
+                                  activeOpacity={0.85}
+                                >
+                                  <Text style={[styles.previewCategoryText, selected && styles.previewCategoryTextOn]}>
+                                    {option.label}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
                       </View>
                     )}
                     <View style={styles.previewBottomRow}>

@@ -22,10 +22,25 @@ export function looksLikeColorProduct(item) {
   );
 }
 
+const RETAIL_KEYWORDS = /\b(conditioner|shampoo|serum|treatment|mask|spray|styling|gel|cream|mousse|lotion|oil|scalp|hair\s*care|retail)\b/i;
+const OXIDANT_KEYWORDS = /\b(oxid|developer|welloxon|blondor|lightener|bleach|perox|creme\s*ox)\b/i;
+const TONER_KEYWORDS = /\b(toner|gloss|shinefinity|color\s*gloss)\b/i;
+const MIXTONE_KEYWORDS = /\b(mixtone|mix.tone|direct|special\s*mix)\b/i;
+
 export function importCategoryForItem(item) {
-  if (item?.category === 'retail') return 'retail';
-  if (item?.category === 'oxidant') return 'oxidant';
-  if (item?.category === 'dye' && looksLikeColorProduct(item)) return 'dye';
+  const cat = String(item?.category || '').toLowerCase();
+  if (cat === 'retail') return 'retail';
+  if (cat === 'oxidant') return 'oxidant';
+  if (cat === 'mixtone') return 'mixtone';
+  if (cat === 'toner') return 'toner';
+
+  const text = [item?.name, item?.brand].filter(Boolean).join(' ');
+  if (RETAIL_KEYWORDS.test(text)) return 'retail';
+  if (OXIDANT_KEYWORDS.test(text)) return 'oxidant';
+  if (TONER_KEYWORDS.test(text)) return 'toner';
+  if (MIXTONE_KEYWORDS.test(text)) return 'mixtone';
+  if (cat === 'dye' && looksLikeColorProduct(item)) return 'dye';
+  if (looksLikeColorProduct(item)) return 'dye';
   return 'consumable';
 }
 

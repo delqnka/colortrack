@@ -1100,7 +1100,8 @@ export default function InventoryScreen({ navigation, route }) {
                         style={styles.previewCheckChoice}
                         onPress={() =>
                           updatePreviewRow(item.key, {
-                            category: item.stockCategory || 'consumable',
+                            category: 'consumable',
+                            stockCategory: 'consumable',
                           })
                         }
                         activeOpacity={0.85}
@@ -1131,84 +1132,45 @@ export default function InventoryScreen({ navigation, route }) {
                       </TouchableOpacity>
                     </View>
                     {!isRetail ? (
-                      <>
-                        <View style={styles.previewCategoryRow}>
-                          {STOCK_CATEGORY_OPTIONS.map((option) => {
-                            const selected = item.category === option.key;
-                            return (
-                              <TouchableOpacity
-                                key={option.key}
-                                style={[styles.previewCategoryChip, selected && styles.previewCategoryChipOn]}
-                                onPress={() =>
-                                  updatePreviewRow(item.key, {
-                                    category: option.key,
-                                    stockCategory: option.key,
-                                    addingCategory: false,
-                                    categoryDraft: '',
-                                  })
-                                }
-                                activeOpacity={0.85}
-                              >
-                                <Text
-                                  style={[
-                                    styles.previewCategoryText,
-                                    selected && styles.previewCategoryTextOn,
-                                  ]}
+                      <View style={styles.previewCategoryDropdownRow}>
+                        <Text style={styles.previewCategoryLabel}>Category</Text>
+                        <View style={styles.previewDropdownWrap}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                            {STOCK_CATEGORY_OPTIONS.map((option) => {
+                              const selected = item.category === option.key;
+                              return (
+                                <TouchableOpacity
+                                  key={option.key}
+                                  style={[styles.previewCategoryChip, selected && styles.previewCategoryChipOn]}
+                                  onPress={() => updatePreviewRow(item.key, { category: option.key, stockCategory: option.key })}
+                                  activeOpacity={0.85}
                                 >
-                                  {option.label}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                          {!STOCK_CATEGORY_OPTIONS.some((option) => option.key === item.category) ? (
-                            <TouchableOpacity
-                              style={[styles.previewCategoryChip, styles.previewCategoryChipOn]}
-                              onPress={() =>
-                                updatePreviewRow(item.key, {
-                                  category: item.category,
-                                  stockCategory: item.category,
-                                  addingCategory: false,
-                                  categoryDraft: '',
-                                })
-                              }
-                              activeOpacity={0.85}
-                            >
-                              <Text style={[styles.previewCategoryText, styles.previewCategoryTextOn]}>
-                                {sectionTitle(item.category)}
-                              </Text>
-                            </TouchableOpacity>
-                          ) : null}
-                          <TouchableOpacity
-                            style={styles.previewAddCategory}
-                            onPress={() => updatePreviewRow(item.key, { addingCategory: true })}
-                            activeOpacity={0.85}
-                          >
-                            <Ionicons name="add" size={16} color={MY_LAB_VIOLET} />
-                            <Text style={styles.previewAddCategoryText}>Add new</Text>
-                          </TouchableOpacity>
+                                  <Text style={[styles.previewCategoryText, selected && styles.previewCategoryTextOn]}>
+                                    {option.label}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
                         </View>
-                        {item.addingCategory ? (
-                          <View style={styles.previewNewCategoryRow}>
-                            <TextInput
-                              style={[styles.previewInput, styles.previewCategoryInput]}
-                              value={item.categoryDraft}
-                              onChangeText={(text) => updatePreviewRow(item.key, { categoryDraft: text })}
-                              placeholder=""
-                              placeholderTextColor="#1C1C1E"
-                              returnKeyType="done"
-                              onSubmitEditing={() => savePreviewCategory(item.key)}
-                            />
-                            <TouchableOpacity
-                              style={styles.previewCategoryDone}
-                              onPress={() => savePreviewCategory(item.key)}
-                              activeOpacity={0.85}
-                            >
-                              <Text style={styles.previewCategoryDoneText}>Done</Text>
-                            </TouchableOpacity>
-                          </View>
-                        ) : null}
-                      </>
-                    ) : null}
+                      </View>
+                    ) : (
+                      <View style={styles.previewCategoryDropdownRow}>
+                        <Text style={styles.previewCategoryLabel}>Sub-category</Text>
+                        <TextInput
+                          style={[styles.previewInput, { flex: 1, marginBottom: 0 }]}
+                          value={item.categoryDraft || ''}
+                          onChangeText={(text) => updatePreviewRow(item.key, { categoryDraft: text })}
+                          placeholder="e.g. conditioner, shampoo"
+                          placeholderTextColor="#AEAEB2"
+                          returnKeyType="done"
+                          onSubmitEditing={() => {
+                            const v = (item.categoryDraft || '').trim().toLowerCase().replace(/\s+/g, '_');
+                            if (v) updatePreviewRow(item.key, { retailSubcategory: v, categoryDraft: v });
+                          }}
+                        />
+                      </View>
+                    )}
                     <View style={styles.previewBottomRow}>
                       <TextInput
                         style={[styles.previewInput, styles.previewSmallInput]}
@@ -1806,6 +1768,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 8,
+  },
+  previewCategoryDropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  previewCategoryLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: '#8A8A8E',
+    width: 70,
+  },
+  previewDropdownWrap: {
+    flex: 1,
+    flexDirection: 'row',
   },
   previewCategoryChip: {
     borderRadius: 12,

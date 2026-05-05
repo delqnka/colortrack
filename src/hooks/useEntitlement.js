@@ -7,6 +7,7 @@ export function useEntitlement() {
   const [isActive, setIsActive] = useState(false);
   const [isTrial, setIsTrial] = useState(false);
   const [expirationDate, setExpirationDate] = useState(null);
+  const [purchaseDate, setPurchaseDate] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -17,7 +18,8 @@ export function useEntitlement() {
       setIsActive(active);
       setIsTrial(ent?.periodType === 'trial' ?? false);
       setExpirationDate(ent?.expirationDate ?? null);
-      return active; // true = subscribed, false = confirmed no subscription
+      setPurchaseDate(ent?.latestPurchaseDate ?? null);
+      return active;
     } catch {
       // RC not configured or network error — treat as unknown, not as "no subscription"
       setIsActive(false);
@@ -29,5 +31,5 @@ export function useEntitlement() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  return { isActive, isTrial, expirationDate, loading, refresh };
+  return { isActive, isTrial, expirationDate, purchaseDate, loading, refresh };
 }

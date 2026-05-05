@@ -64,7 +64,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { currency, setCurrency } = useCurrency();
-  const { isActive: isPro, isTrial } = useEntitlement();
+  const { isActive: isPro, isTrial, expirationDate, purchaseDate } = useEntitlement();
   const [pickCurOpen, setPickCurOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -297,6 +297,46 @@ export default function ProfileScreen() {
             <Text style={styles.namePreview} numberOfLines={1}>
               {titleLine || '—'}
             </Text>
+            {isPro && (() => {
+              const now = Date.now();
+              const exp = expirationDate ? new Date(expirationDate) : null;
+              const start = purchaseDate ? new Date(purchaseDate) : null;
+              const daysLeft = exp ? Math.max(0, Math.ceil((exp - now) / 86400000)) : null;
+              const total = exp && start ? Math.ceil((exp - start) / 86400000) : null;
+              const progress = total && daysLeft != null ? Math.max(0, Math.min(1, (total - daysLeft) / total)) : 0;
+              const fmt = (d) => d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+              return (
+                <View style={styles.subCard}>
+                  <View style={styles.subCardHeader}>
+                    <View style={styles.proBadge}>
+                      <Text style={styles.proBadgeText}>{isTrial ? 'TRIAL' : 'PRO'}</Text>
+                    </View>
+                    {daysLeft != null && (
+                      <Text style={styles.daysLeft}>
+                        {daysLeft === 0 ? 'Expires today' : `${daysLeft} days left`}
+                      </Text>
+                    )}
+                  </View>
+                  {start && (
+                    <View style={styles.subDateRow}>
+                      <Text style={styles.subDateLabel}>Started</Text>
+                      <Text style={styles.subDateValue}>{fmt(start)}</Text>
+                    </View>
+                  )}
+                  {exp && (
+                    <View style={styles.subDateRow}>
+                      <Text style={styles.subDateLabel}>{isTrial ? 'Trial ends' : 'Renews'}</Text>
+                      <Text style={styles.subDateValue}>{fmt(exp)}</Text>
+                    </View>
+                  )}
+                  {total != null && (
+                    <View style={styles.progressBar}>
+                      <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
             {me?.email ? (
               <Text style={styles.emailMuted} numberOfLines={1}>
                 {me.email}
@@ -637,6 +677,57 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1,
     color: '#FFFFFF',
+  },
+  subCard: {
+    alignSelf: 'stretch',
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    marginTop: 14,
+    marginBottom: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  subCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  daysLeft: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    color: '#5E35B1',
+  },
+  subDateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  subDateLabel: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: '#8A8A8E',
+  },
+  subDateValue: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#0D0D0D',
+  },
+  progressBar: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E5EA',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#452277',
   },
   deleteProfileText: {
     ...Type.buttonLabel,

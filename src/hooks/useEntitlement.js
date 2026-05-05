@@ -17,10 +17,11 @@ export function useEntitlement() {
       setIsActive(active);
       setIsTrial(ent?.periodType === 'trial' ?? false);
       setExpirationDate(ent?.expirationDate ?? null);
-      return active;
+      return active; // true = subscribed, false = confirmed no subscription
     } catch {
+      // RC not configured or network error — treat as unknown, not as "no subscription"
       setIsActive(false);
-      return false;
+      return null; // null = unknown (don't show paywall)
     } finally {
       setLoading(false);
     }

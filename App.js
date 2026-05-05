@@ -4,7 +4,9 @@ import Purchases from 'react-native-purchases';
 import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import * as SplashScreen from 'expo-splash-screen';
 import { BlurView } from 'expo-blur';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
+
+const navigationRef = createNavigationContainerRef();
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -265,6 +267,12 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+
+  useEffect(() => {
+    if (showPaywall && signedIn && navigationRef.isReady()) {
+      navigationRef.navigate('Paywall');
+    }
+  }, [showPaywall, signedIn]);
   const { isActive: hasEntitlement, loading: entitlementLoading, refresh: refreshEntitlement } = useEntitlement();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
@@ -272,16 +280,17 @@ export default function App() {
 
   const refreshAuth = useCallback(async () => {
     const t = await loadStoredToken();
-    setAuthReady(true);
     if (t) {
       await flushOutbox();
       registerExpoPushIfPossible();
       applyAffiliateAttribute();
-      const entInfo = await refreshEntitlement();
-      const active = entInfo ?? false;
-      if (!active) setShowPaywall(true);
+      const entResult = await refreshEntitlement();
+      // Only show paywall if RC positively confirms no subscription (false)
+      // null means RC failed/not configured — don't block the user
+      if (entResult === false) setShowPaywall(true);
     }
     setSignedIn(Boolean(t));
+    setAuthReady(true); // Set last — UI only renders when everything is ready
   }, [refreshEntitlement]);
 
   useEffect(() => {
@@ -347,23 +356,10 @@ export default function App() {
     );
   }
 
-  if (signedIn && showPaywall) {
-    return (
-      <SafeAreaProvider>
-        <PaywallScreen
-          onDismiss={({ subscribed }) => {
-            if (subscribed) refreshEntitlement();
-            setShowPaywall(false);
-          }}
-        />
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <SafeAreaProvider>
       <CurrencyProvider>
-        <NavigationContainer theme={NAV_BG_WHITE}>
+        <NavigationContainer ref={navigationRef} theme={NAV_BG_WHITE}>
           {!signedIn ? (
             <GuestStack.Navigator
               key={`guest-${String(onboardingDone)}`}
@@ -417,6 +413,20 @@ export default function App() {
               <AppStack.Screen name="Profile" component={ProfileScreen} />
               <AppStack.Screen name="Services" component={ServicesScreen} />
               <AppStack.Screen name="Affiliate" component={AffiliateScreen} />
+              <AppStack.Screen
+                name="Paywall"
+                options={{ presentation: 'modal', gestureEnabled: true }}
+              >
+                {({ navigation: nav }) => (
+                  <PaywallScreen
+                    onDismiss={({ subscribed }) => {
+                      if (subscribed) refreshEntitlement();
+                      setShowPaywall(false);
+                      nav.goBack();
+                    }}
+                  />
+                )}
+              </AppStack.Screen>
               <AppStack.Screen name="PaywallPreview">
                 {() => <PaywallScreen onDismiss={() => {}} />}
               </AppStack.Screen>

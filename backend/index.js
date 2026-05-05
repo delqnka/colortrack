@@ -1803,26 +1803,36 @@ function effectiveServicesOcrMime(contentTypeHint, objectKeyHint) {
 }
 
 async function invoiceLlmJsonItems(apiKey, usingOpenRouter, model, payloadBody) {
-  const ocrRes = await fetch(
-    usingOpenRouter
-      ? 'https://openrouter.ai/api/v1/chat/completions'
-      : 'https://api.openai.com/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        ...(usingOpenRouter
-          ? {
-              'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
-              'X-Title': 'ColorTrack',
-            }
-          : {}),
+  console.log('[OCR-PRE] model:', model, 'using_openrouter:', usingOpenRouter);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 24000);
+  let ocrRes;
+  try {
+    ocrRes = await fetch(
+      usingOpenRouter
+        ? 'https://openrouter.ai/api/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...(usingOpenRouter
+            ? {
+                'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://colortrack.vercel.app',
+                'X-Title': 'ColorTrack',
+              }
+            : {}),
+        },
+        body: JSON.stringify(payloadBody),
       },
-      body: JSON.stringify(payloadBody),
-    },
-  );
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   const text = await ocrRes.text();
+  console.log('[OCR-POST] status:', ocrRes.status, 'body_start:', text.slice(0, 300));
   if (!ocrRes.ok) {
     throw new Error('ocr_http');
   }

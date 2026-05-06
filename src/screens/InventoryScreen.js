@@ -1161,6 +1161,53 @@ export default function InventoryScreen({ navigation, route }) {
                 <Text style={styles.modalClose}>Done</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Category picker inline overlay */}
+            {categoryPickerKey !== null && (
+              <TouchableOpacity
+                style={[StyleSheet.absoluteFillObject, { zIndex: 99 }]}
+                activeOpacity={1}
+                onPress={() => setCategoryPickerKey(null)}
+              >
+                <View style={styles.categoryPickerSheet}>
+                  <View style={styles.categoryPickerHandle} />
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {ALL_IMPORT_CATEGORIES.map((group) => (
+                      <View key={group.group}>
+                        <Text style={styles.categoryPickerGroupLabel}>{group.group}</Text>
+                        {group.items.map((option) => {
+                          const currentRow = previewRows.find(r => r.key === categoryPickerKey);
+                          const isSelected = currentRow
+                            ? (group.group === 'Retail'
+                                ? currentRow.category === 'retail' && currentRow.retailSubcategory === option.key
+                                : currentRow.category === option.key && currentRow.category !== 'retail')
+                            : false;
+                          return (
+                            <TouchableOpacity
+                              key={option.key}
+                              style={[styles.categoryPickerRow, isSelected && styles.categoryPickerRowOn]}
+                              onPress={() => {
+                                if (group.group === 'Retail') {
+                                  updatePreviewRow(categoryPickerKey, { category: 'retail', retailSubcategory: option.key, stockCategory: 'consumable' });
+                                } else {
+                                  updatePreviewRow(categoryPickerKey, { category: option.key, stockCategory: option.key, retailSubcategory: '' });
+                                }
+                                setCategoryPickerKey(null);
+                              }}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={[styles.categoryPickerText, isSelected && styles.categoryPickerTextOn]}>{option.label}</Text>
+                              {isSelected && <Ionicons name="checkmark" size={18} color="#5E35B1" />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              </TouchableOpacity>
+            )}
+
             <ScrollView
               contentContainerStyle={styles.previewContent}
               keyboardShouldPersistTaps="handled"
@@ -1237,64 +1284,6 @@ export default function InventoryScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Category picker modal */}
-      <Modal
-        visible={categoryPickerKey !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCategoryPickerKey(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setCategoryPickerKey(null)}
-        >
-          <View style={styles.categoryPickerSheet}>
-            <View style={styles.categoryPickerHandle} />
-            {ALL_IMPORT_CATEGORIES.map((group) => (
-              <View key={group.group}>
-                <Text style={styles.categoryPickerGroupLabel}>{group.group}</Text>
-                {group.items.map((option) => {
-                  const currentRow = previewRows.find(r => r.key === categoryPickerKey);
-                  const isSelected = currentRow
-                    ? (group.group === 'Retail'
-                        ? currentRow.category === 'retail' && currentRow.retailSubcategory === option.key
-                        : currentRow.category === option.key && currentRow.category !== 'retail')
-                    : false;
-                  return (
-                    <TouchableOpacity
-                      key={option.key}
-                      style={[styles.categoryPickerRow, isSelected && styles.categoryPickerRowOn]}
-                      onPress={() => {
-                        if (group.group === 'Retail') {
-                          updatePreviewRow(categoryPickerKey, {
-                            category: 'retail',
-                            retailSubcategory: option.key,
-                            stockCategory: 'consumable',
-                          });
-                        } else {
-                          updatePreviewRow(categoryPickerKey, {
-                            category: option.key,
-                            stockCategory: option.key,
-                            retailSubcategory: '',
-                          });
-                        }
-                        setCategoryPickerKey(null);
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.categoryPickerText, isSelected && styles.categoryPickerTextOn]}>
-                        {option.label}
-                      </Text>
-                      {isSelected && <Ionicons name="checkmark" size={18} color="#5E35B1" />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       <Modal
         visible={lowListOpen}

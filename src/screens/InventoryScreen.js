@@ -73,12 +73,14 @@ const ALL_IMPORT_CATEGORIES = [
 ];
 
 function labelForImportCategory(category, retailSub) {
-  if (!category) return 'Select…';
-  for (const g of ALL_IMPORT_CATEGORIES) {
-    const found = g.items.find(o => o.key === (category === 'retail' ? retailSub : category));
-    if (found) return found.label;
+  if (!category) return 'Select category…';
+  if (category === 'retail') {
+    if (!retailSub) return 'Retail — tap to select type';
+    const found = RETAIL_CATEGORY_OPTIONS.find(o => o.key === retailSub);
+    return found ? `Retail · ${found.label}` : 'Retail — tap to select type';
   }
-  return category;
+  const found = STOCK_CATEGORY_OPTIONS.find(o => o.key === category);
+  return found ? found.label : category;
 }
 
 function autoCategoryFromName(name) {
@@ -583,18 +585,22 @@ export default function InventoryScreen({ navigation, route }) {
       Alert.alert('', 'No products found.');
       return;
     }
-    // Auto-categorize based on name keywords
+    // Auto-categorize based on name keywords — runs for all items
     let autoCategorized = 0;
     const withAuto = parsed.map(item => {
       const auto = autoCategoryFromName(item.name);
-      if (auto && item.category === 'consumable') {
+      if (auto) {
         autoCategorized++;
         return {
           ...item,
           category: auto.category,
-          stockCategory: auto.category === 'retail' ? item.stockCategory : auto.category,
+          stockCategory: auto.category === 'retail' ? (item.stockCategory || 'consumable') : auto.category,
           retailSubcategory: auto.retailSub || '',
         };
+      }
+      // Retail without sub-category — default to other_retail
+      if (item.category === 'retail' && !item.retailSubcategory) {
+        return { ...item, retailSubcategory: 'other_retail' };
       }
       return item;
     });

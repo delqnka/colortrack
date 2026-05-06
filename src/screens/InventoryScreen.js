@@ -702,28 +702,42 @@ export default function InventoryScreen({ navigation, route }) {
   };
 
   const saveInvoiceImport = async () => {
-    const items = previewRows
-      .map((item) => ({
-        name: item.name.trim(),
-        category: item.category || 'dye',
-        brand: item.brand || null,
-        shade_code: item.shade_code || null,
-        package_size: item.package_size || null,
-        unit: item.category === 'oxidant' ? 'pcs' : (item.unit || 'pcs'),
-        quantity: Number(String(item.quantity).replace(',', '.')),
-        price_per_unit_cents: centsFromPriceText(item.price),
-        supplier_hint: item.supplier_hint || null,
-      }))
-      .filter((item) => item.name && Number.isFinite(item.quantity) && item.quantity > 0);
-    if (!items.length || savingImport) return;
+    if (savingImport) return;
+    const mapped = previewRows.map((item) => ({
+      name: item.name.trim(),
+      category: item.category || 'consumable',
+      brand: item.brand || null,
+      shade_code: item.shade_code || null,
+      package_size: item.package_size || null,
+      unit: item.unit || 'pcs',
+      quantity: Number(String(item.quantity || '1').replace(',', '.')),
+      price_per_unit_cents: centsFromPriceText(item.price),
+      supplier_hint: item.supplier_hint || null,
+    }));
+    const items = mapped.filter((item) => {
+      const hasName = Boolean(item.name);
+      const hasQty = Number.isFinite(item.quantity) && item.quantity > 0;
+      return hasName && hasQty;
+    });
+    if (!items.length) {
+      Alert.alert('', `Nothing to save — ${previewRows.length} rows found but all were filtered out (check names and quantities).`);
+      return;
+    }
     setSavingImport(true);
     try {
-      await apiPost('/api/inventory/import/bulk', { items }, { queueOffline: false });
+      const result = await apiPost('/api/inventory/import/bulk', { items }, { queueOffline: false });
+      const saved = Array.isArray(result) ? result : [];
+      const created = saved.filter(r => r.import_action === 'created').length;
+      const updated = saved.filter(r => r.import_action === 'updated').length;
       setPreviewOpen(false);
       setPreviewRows([]);
       await load();
+      Alert.alert(
+        'Saved',
+        `${created > 0 ? `${created} new product${created > 1 ? 's' : ''} added` : ''}${created > 0 && updated > 0 ? ', ' : ''}${updated > 0 ? `${updated} product${updated > 1 ? 's' : ''} updated` : ''}`.trim() || 'Done.',
+      );
     } catch (e) {
-      Alert.alert('', e.message || 'Save failed');
+      Alert.alert('Save failed', e.message || 'Something went wrong. Try again.');
     } finally {
       setSavingImport(false);
     }

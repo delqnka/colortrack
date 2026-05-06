@@ -1690,6 +1690,7 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
       UPDATE inventory_items
       SET
         quantity = quantity + ${item.quantity},
+        category = ${item.category},
         price_per_unit_cents = ${nextPrice},
         package_size = COALESCE(${item.package_size}, package_size),
         supplier_hint = COALESCE(${item.supplier_hint}, supplier_hint)

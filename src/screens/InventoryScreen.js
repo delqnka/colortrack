@@ -83,21 +83,27 @@ function labelForImportCategory(category, retailSub) {
   return found ? found.label : category;
 }
 
-function autoCategoryFromName(name) {
+// Returns best stock sub-category based on name — does NOT touch retail/stock choice
+function autoStockCategory(name) {
   const n = String(name || '').toLowerCase();
-  // Stock categories — check first, takes priority
-  if (/\b(welloxon|oxigent|oxidant|окси|оксидант)\b/.test(n)) return { category: 'oxidant', retailSub: '' };
-  if (/\b(developer|развивател|развиват)\b/.test(n)) return { category: 'oxidant', retailSub: '' };
-  if (/\b(mixtone|mix.?tone)\b/.test(n)) return { category: 'mixtone', retailSub: '' };
-  if (/\b(koleston|illumina|majirel|inoa|igora|dialight|shades.?eq|color.?touch|richesse|eloxon)\b/.test(n)) return { category: 'dye', retailSub: '' };
-  // Retail — only very specific product types
-  if (/\b(shampoo|шампоан|шампоа)\b/.test(n)) return { category: 'retail', retailSub: 'shampoo' };
-  if (/\b(conditioner|балсам|кондиционер)\b/.test(n)) return { category: 'retail', retailSub: 'conditioner' };
-  if (/\b(hair.?mask|маска.?за.?коса|hair.?masque)\b/.test(n)) return { category: 'retail', retailSub: 'mask' };
-  if (/\b(scalp.?serum|hair.?serum|серум.?за.?коса)\b/.test(n)) return { category: 'retail', retailSub: 'serum' };
-  if (/\b(hair.?spray|лак.?за.?коса|лак)\b/.test(n)) return { category: 'retail', retailSub: 'styling' };
-  // Unknown — let user decide
-  return null;
+  if (n.includes('welloxon') || n.includes('oxigent') || n.includes('oxidant') || n.includes('developer') || n.includes('cremeoxyd') || / \d+%/.test(n)) return 'oxidant';
+  if (n.includes('mixtone') || n.includes('mix tone') || n.includes('mix-tone')) return 'mixtone';
+  if (n.includes('toner') || n.includes('gloss')) return 'toner';
+  if (n.includes('koleston') || n.includes('illumina') || n.includes('majirel') || n.includes('inoa') || n.includes('igora') || n.includes('dialight') || n.includes('color touch') || n.includes('topchic') || n.includes('eloxon') || n.includes('richesse') || n.includes('shades eq')) return 'dye';
+  return 'consumable';
+}
+
+// Returns best retail sub-category based on name — does NOT touch retail/stock choice
+function autoRetailSubcategory(name) {
+  const n = String(name || '').toLowerCase();
+  if (n.includes('shampoo')) return 'shampoo';
+  if (n.includes('conditioner') || n.includes('balsam') || n.includes('balm')) return 'conditioner';
+  if (n.includes('mask') || n.includes('masque')) return 'mask';
+  if (n.includes('serum') || n.includes('elixir') || n.includes('oil reflections') || n.includes('hair oil')) return 'serum';
+  if (n.includes('spray') || n.includes('mousse') || n.includes('wax') || n.includes('foam') || n.includes('paste') || n.includes('clay')) return 'styling';
+  if (n.includes('scalp')) return 'scalp';
+  if (n.includes('color care') || n.includes('colour care') || n.includes('color save')) return 'color_care';
+  return 'other_retail';
 }
 
 const INVENTORY_FILTERS = [
@@ -586,30 +592,8 @@ export default function InventoryScreen({ navigation, route }) {
       Alert.alert('', 'No products found.');
       return;
     }
-    // Auto-categorize based on name keywords — runs for all items
-    let autoCategorized = 0;
-    const withAuto = parsed.map(item => {
-      const auto = autoCategoryFromName(item.name);
-      if (auto) {
-        autoCategorized++;
-        return {
-          ...item,
-          category: auto.category,
-          stockCategory: auto.category === 'retail' ? (item.stockCategory || 'consumable') : auto.category,
-          retailSubcategory: auto.retailSub || '',
-        };
-      }
-      // Retail without sub-category — default to other_retail
-      if (item.category === 'retail' && !item.retailSubcategory) {
-        return { ...item, retailSubcategory: 'other_retail' };
-      }
-      return item;
-    });
-    setPreviewRows(withAuto);
+    setPreviewRows(parsed);
     setPreviewOpen(true);
-    if (autoCategorized > 0) {
-      Alert.alert('Auto-categorized', `${autoCategorized} product${autoCategorized > 1 ? 's were' : ' was'} automatically categorized based on name.`);
-    }
   };
 
   const importInvoiceFromCamera = async () => {
@@ -1154,12 +1138,22 @@ export default function InventoryScreen({ navigation, route }) {
                   style={styles.autoCatBtn}
                   onPress={() => {
                     let count = 0;
-                    setPreviewRows(rows => rows.map(item => {
-                      const auto = autoCategoryFromName(item.name);
-                      if (auto) { count++; return { ...item, category: auto.category, stockCategory: auto.category === 'retail' ? (item.stockCategory || 'consumable') : auto.category, retailSubcategory: auto.retailSub || '' }; }
-                      return item;
-                    }));
-                    setTimeout(() => count > 0 && Alert.alert('Done', `${count} product${count > 1 ? 's' : ''} categorized.`), 100);
+                    setPreviewRows(prev => {
+                      const next = prev.map(item => {
+                        const isRetail = item.category === 'retail';
+                        if (isRetail) {
+                          const sub = autoRetailSubcategory(item.name);
+                          count++;
+                          return { ...item, retailSubcategory: sub };
+                        } else {
+                          const cat = autoStockCategory(item.name);
+                          count++;
+                          return { ...item, category: cat, stockCategory: cat };
+                        }
+                      });
+                      setTimeout(() => Alert.alert('Done', `${count} product${count !== 1 ? 's' : ''} categorized.`), 150);
+                      return next;
+                    });
                   }}
                   activeOpacity={0.85}
                 >

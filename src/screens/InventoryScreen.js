@@ -729,13 +729,15 @@ export default function InventoryScreen({ navigation, route }) {
       const saved = Array.isArray(result) ? result : [];
       const created = saved.filter(r => r.import_action === 'created').length;
       const updated = saved.filter(r => r.import_action === 'updated').length;
+      setCategoryPickerKey(null);
       setPreviewOpen(false);
       setPreviewRows([]);
       await load();
-      Alert.alert(
-        'Saved',
-        `${created > 0 ? `${created} new product${created > 1 ? 's' : ''} added` : ''}${created > 0 && updated > 0 ? ', ' : ''}${updated > 0 ? `${updated} product${updated > 1 ? 's' : ''} updated` : ''}`.trim() || 'Done.',
-      );
+      const msg = [
+        created > 0 ? `${created} new product${created > 1 ? 's' : ''} added` : '',
+        updated > 0 ? `${updated} product${updated > 1 ? 's' : ''} updated` : '',
+      ].filter(Boolean).join(', ') || 'Done.';
+      setTimeout(() => Alert.alert('Saved', msg), 400);
     } catch (e) {
       Alert.alert('Save failed', e.message || 'Something went wrong. Try again.');
     } finally {

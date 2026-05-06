@@ -85,17 +85,18 @@ function labelForImportCategory(category, retailSub) {
 
 function autoCategoryFromName(name) {
   const n = String(name || '').toLowerCase();
-  if (/conditioner|conditionneur/.test(n)) return { category: 'retail', retailSub: 'conditioner' };
-  if (/shampoo|шампоан/.test(n)) return { category: 'retail', retailSub: 'shampoo' };
-  if (/mask|masque|маска/.test(n)) return { category: 'retail', retailSub: 'mask' };
-  if (/serum|oil|масло|олио/.test(n)) return { category: 'retail', retailSub: 'serum' };
-  if (/styling|gel|spray|foam|wax/.test(n)) return { category: 'retail', retailSub: 'styling' };
-  if (/scalp|скалп/.test(n)) return { category: 'retail', retailSub: 'scalp' };
-  if (/color.?care|colour.?care/.test(n)) return { category: 'retail', retailSub: 'color_care' };
-  if (/treatment|tretman/.test(n)) return { category: 'retail', retailSub: 'mask' };
-  if (/oxidant|developer|welloxon|oxy/.test(n)) return { category: 'oxidant', retailSub: '' };
-  if (/toner/.test(n)) return { category: 'toner', retailSub: '' };
-  if (/mixtone/.test(n)) return { category: 'mixtone', retailSub: '' };
+  // Stock categories — check first, takes priority
+  if (/\b(welloxon|oxigent|oxidant|окси|оксидант)\b/.test(n)) return { category: 'oxidant', retailSub: '' };
+  if (/\b(developer|развивател|развиват)\b/.test(n)) return { category: 'oxidant', retailSub: '' };
+  if (/\b(mixtone|mix.?tone)\b/.test(n)) return { category: 'mixtone', retailSub: '' };
+  if (/\b(koleston|illumina|majirel|inoa|igora|dialight|shades.?eq|color.?touch|richesse|eloxon)\b/.test(n)) return { category: 'dye', retailSub: '' };
+  // Retail — only very specific product types
+  if (/\b(shampoo|шампоан|шампоа)\b/.test(n)) return { category: 'retail', retailSub: 'shampoo' };
+  if (/\b(conditioner|балсам|кондиционер)\b/.test(n)) return { category: 'retail', retailSub: 'conditioner' };
+  if (/\b(hair.?mask|маска.?за.?коса|hair.?masque)\b/.test(n)) return { category: 'retail', retailSub: 'mask' };
+  if (/\b(scalp.?serum|hair.?serum|серум.?за.?коса)\b/.test(n)) return { category: 'retail', retailSub: 'serum' };
+  if (/\b(hair.?spray|лак.?за.?коса|лак)\b/.test(n)) return { category: 'retail', retailSub: 'styling' };
+  // Unknown — let user decide
   return null;
 }
 

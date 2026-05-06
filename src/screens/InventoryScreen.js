@@ -57,14 +57,44 @@ const STOCK_CATEGORY_OPTIONS = [
 const RETAIL_CATEGORY_OPTIONS = [
   { key: 'shampoo', label: 'Shampoo' },
   { key: 'conditioner', label: 'Conditioner' },
-  { key: 'mask', label: 'Mask' },
-  { key: 'serum', label: 'Serum' },
+  { key: 'mask', label: 'Mask / Treatment' },
+  { key: 'serum', label: 'Serum / Oil' },
   { key: 'styling', label: 'Styling' },
-  { key: 'treatment', label: 'Treatment' },
-  { key: 'scalp', label: 'Scalp' },
+  { key: 'scalp', label: 'Scalp Care' },
   { key: 'color_care', label: 'Color Care' },
-  { key: 'other_retail', label: 'Other' },
+  { key: 'other_retail', label: 'Other Retail' },
 ];
+
+// Combined for the dropdown picker
+const ALL_IMPORT_CATEGORIES = [
+  { group: 'Stock', items: STOCK_CATEGORY_OPTIONS },
+  { group: 'Retail', items: RETAIL_CATEGORY_OPTIONS },
+];
+
+function labelForImportCategory(category, retailSub) {
+  if (!category) return 'Select…';
+  for (const g of ALL_IMPORT_CATEGORIES) {
+    const found = g.items.find(o => o.key === (category === 'retail' ? retailSub : category));
+    if (found) return found.label;
+  }
+  return category;
+}
+
+function autoCategoryFromName(name) {
+  const n = String(name || '').toLowerCase();
+  if (/conditioner|conditionneur/.test(n)) return { category: 'retail', retailSub: 'conditioner' };
+  if (/shampoo|шампоан/.test(n)) return { category: 'retail', retailSub: 'shampoo' };
+  if (/mask|masque|маска/.test(n)) return { category: 'retail', retailSub: 'mask' };
+  if (/serum|oil|масло|олио/.test(n)) return { category: 'retail', retailSub: 'serum' };
+  if (/styling|gel|spray|foam|wax/.test(n)) return { category: 'retail', retailSub: 'styling' };
+  if (/scalp|скалп/.test(n)) return { category: 'retail', retailSub: 'scalp' };
+  if (/color.?care|colour.?care/.test(n)) return { category: 'retail', retailSub: 'color_care' };
+  if (/treatment|tretman/.test(n)) return { category: 'retail', retailSub: 'mask' };
+  if (/oxidant|developer|welloxon|oxy/.test(n)) return { category: 'oxidant', retailSub: '' };
+  if (/toner/.test(n)) return { category: 'toner', retailSub: '' };
+  if (/mixtone/.test(n)) return { category: 'mixtone', retailSub: '' };
+  return null;
+}
 
 const INVENTORY_FILTERS = [
   {
@@ -298,6 +328,7 @@ export default function InventoryScreen({ navigation, route }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
   const [savingImport, setSavingImport] = useState(false);
+  const [categoryPickerKey, setCategoryPickerKey] = useState(null); // item key with open picker
   const [inventoryFilter, setInventoryFilter] = useState('stock');
   const [activeSubcategory, setActiveSubcategory] = useState(null); // null = All
   /** Colors tab: filter dye sections by formula type (matches developer pills). */
@@ -551,8 +582,26 @@ export default function InventoryScreen({ navigation, route }) {
       Alert.alert('', 'No products found.');
       return;
     }
-    setPreviewRows(parsed);
+    // Auto-categorize based on name keywords
+    let autoCategorized = 0;
+    const withAuto = parsed.map(item => {
+      const auto = autoCategoryFromName(item.name);
+      if (auto && item.category === 'consumable') {
+        autoCategorized++;
+        return {
+          ...item,
+          category: auto.category,
+          stockCategory: auto.category === 'retail' ? item.stockCategory : auto.category,
+          retailSubcategory: auto.retailSub || '',
+        };
+      }
+      return item;
+    });
+    setPreviewRows(withAuto);
     setPreviewOpen(true);
+    if (autoCategorized > 0) {
+      Alert.alert('Auto-categorized', `${autoCategorized} product${autoCategorized > 1 ? 's were' : ' was'} automatically categorized based on name.`);
+    }
   };
 
   const importInvoiceFromCamera = async () => {
@@ -1146,53 +1195,19 @@ export default function InventoryScreen({ navigation, route }) {
                         <Text style={styles.previewChoiceText}>Retail</Text>
                       </TouchableOpacity>
                     </View>
-                    {!isRetail ? (
-                      <View style={styles.previewCategoryDropdownRow}>
-                        <Text style={styles.previewCategoryLabel}>Category</Text>
-                        <View style={styles.previewDropdownWrap}>
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-                            {STOCK_CATEGORY_OPTIONS.map((option) => {
-                              const selected = item.category === option.key;
-                              return (
-                                <TouchableOpacity
-                                  key={option.key}
-                                  style={[styles.previewCategoryChip, selected && styles.previewCategoryChipOn]}
-                                  onPress={() => updatePreviewRow(item.key, { category: option.key, stockCategory: option.key })}
-                                  activeOpacity={0.85}
-                                >
-                                  <Text style={[styles.previewCategoryText, selected && styles.previewCategoryTextOn]}>
-                                    {option.label}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </ScrollView>
-                        </View>
+                    <TouchableOpacity
+                      style={styles.categoryDropdownBtn}
+                      onPress={() => setCategoryPickerKey(item.key)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.categoryDropdownLabel}>Category</Text>
+                      <View style={styles.categoryDropdownRight}>
+                        <Text style={styles.categoryDropdownValue}>
+                          {labelForImportCategory(item.category, item.retailSubcategory)}
+                        </Text>
+                        <Ionicons name="chevron-down" size={14} color="#5E35B1" />
                       </View>
-                    ) : (
-                      <View style={styles.previewCategoryDropdownRow}>
-                        <Text style={styles.previewCategoryLabel}>Type</Text>
-                        <View style={styles.previewDropdownWrap}>
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-                            {RETAIL_CATEGORY_OPTIONS.map((option) => {
-                              const selected = item.retailSubcategory === option.key;
-                              return (
-                                <TouchableOpacity
-                                  key={option.key}
-                                  style={[styles.previewCategoryChip, selected && styles.previewCategoryChipOn]}
-                                  onPress={() => updatePreviewRow(item.key, { retailSubcategory: option.key })}
-                                  activeOpacity={0.85}
-                                >
-                                  <Text style={[styles.previewCategoryText, selected && styles.previewCategoryTextOn]}>
-                                    {option.label}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </ScrollView>
-                        </View>
-                      </View>
-                    )}
+                    </TouchableOpacity>
                     <View style={styles.previewBottomRow}>
                       <TextInput
                         style={[styles.previewInput, styles.previewSmallInput]}
@@ -1230,6 +1245,64 @@ export default function InventoryScreen({ navigation, route }) {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Category picker modal */}
+      <Modal
+        visible={categoryPickerKey !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCategoryPickerKey(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setCategoryPickerKey(null)}
+        >
+          <View style={styles.categoryPickerSheet}>
+            <View style={styles.categoryPickerHandle} />
+            {ALL_IMPORT_CATEGORIES.map((group) => (
+              <View key={group.group}>
+                <Text style={styles.categoryPickerGroupLabel}>{group.group}</Text>
+                {group.items.map((option) => {
+                  const currentRow = previewRows.find(r => r.key === categoryPickerKey);
+                  const isSelected = currentRow
+                    ? (group.group === 'Retail'
+                        ? currentRow.category === 'retail' && currentRow.retailSubcategory === option.key
+                        : currentRow.category === option.key && currentRow.category !== 'retail')
+                    : false;
+                  return (
+                    <TouchableOpacity
+                      key={option.key}
+                      style={[styles.categoryPickerRow, isSelected && styles.categoryPickerRowOn]}
+                      onPress={() => {
+                        if (group.group === 'Retail') {
+                          updatePreviewRow(categoryPickerKey, {
+                            category: 'retail',
+                            retailSubcategory: option.key,
+                          });
+                        } else {
+                          updatePreviewRow(categoryPickerKey, {
+                            category: option.key,
+                            stockCategory: option.key,
+                            retailSubcategory: '',
+                          });
+                        }
+                        setCategoryPickerKey(null);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.categoryPickerText, isSelected && styles.categoryPickerTextOn]}>
+                        {option.label}
+                      </Text>
+                      {isSelected && <Ionicons name="checkmark" size={18} color="#5E35B1" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       <Modal
@@ -1784,6 +1857,82 @@ const styles = StyleSheet.create({
     lineHeight: typeLh(13),
     fontFamily: FontFamily.semibold,
     color: '#5E35B1',
+  },
+  categoryDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
+    marginBottom: 8,
+  },
+  categoryDropdownLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: '#8A8A8E',
+  },
+  categoryDropdownRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  categoryDropdownValue: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    color: '#5E35B1',
+  },
+  categoryPickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    maxHeight: '75%',
+  },
+  categoryPickerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E5EA',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  categoryPickerGroupLabel: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: '#AEAEB2',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    marginTop: 12,
+  },
+  categoryPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F2F2F7',
+  },
+  categoryPickerRowOn: {
+    backgroundColor: '#F9F7FF',
+  },
+  categoryPickerText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    color: '#0D0D0D',
+  },
+  categoryPickerTextOn: {
+    color: '#5E35B1',
+    fontFamily: FontFamily.semibold,
   },
   previewCategoryRow: {
     flexDirection: 'row',

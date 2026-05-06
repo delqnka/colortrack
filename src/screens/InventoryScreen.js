@@ -52,6 +52,11 @@ const STOCK_CATEGORY_OPTIONS = [
   { key: 'oxidant', label: 'Developer' },
   { key: 'mixtone', label: 'Mixtone' },
   { key: 'toner', label: 'Toner' },
+  { key: 'shampoo', label: 'Shampoo' },
+  { key: 'conditioner', label: 'Conditioner' },
+  { key: 'mask', label: 'Mask / Treatment' },
+  { key: 'serum', label: 'Serum / Oil' },
+  { key: 'styling', label: 'Styling' },
   { key: 'consumable', label: 'Consumables' },
 ];
 
@@ -79,8 +84,11 @@ function labelForImportCategory(category, retailSub) {
     const found = RETAIL_CATEGORY_OPTIONS.find(o => o.key === retailSub);
     return found ? `Retail · ${found.label}` : 'Retail — tap to select type';
   }
-  const found = STOCK_CATEGORY_OPTIONS.find(o => o.key === category);
-  return found ? found.label : category;
+  const stockFound = STOCK_CATEGORY_OPTIONS.find(o => o.key === category);
+  if (stockFound) return stockFound.label;
+  const retailFound = RETAIL_CATEGORY_OPTIONS.find(o => o.key === category);
+  if (retailFound) return retailFound.label;
+  return category;
 }
 
 // Returns best stock sub-category based on name — does NOT touch retail/stock choice
@@ -102,6 +110,12 @@ function autoStockCategory(name) {
   // Color product keywords
   if ((n.includes('color') || n.includes('colour') || n.includes('hair dye') || n.includes('hair color'))
     && !n.includes('shampoo') && !n.includes('conditioner') && !n.includes('care')) return 'dye';
+  // Care products used professionally
+  if (n.includes('shampoo')) return 'shampoo';
+  if (n.includes('conditioner') || n.includes('balsam') || n.includes('balm')) return 'conditioner';
+  if (n.includes('mask') || n.includes('masque') || n.includes('treatment')) return 'mask';
+  if (n.includes('serum') || n.includes('elixir') || n.includes('oil')) return 'serum';
+  if (n.includes('spray') || n.includes('mousse') || n.includes('wax') || n.includes('foam') || n.includes('gel') || n.includes('paste')) return 'styling';
   return 'consumable';
 }
 

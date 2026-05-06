@@ -1686,16 +1686,18 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
   if (match.length) {
     const nextPrice =
       item.price_per_unit_cents != null ? item.price_per_unit_cents : match[0].price_per_unit_cents;
+    const customSub = typeof item.custom_subcategory === 'string' ? item.custom_subcategory.trim() || null : null;
     const rows = await sql`
       UPDATE inventory_items
       SET
         quantity = quantity + ${item.quantity},
         category = ${item.category},
+        custom_subcategory = ${customSub},
         price_per_unit_cents = ${nextPrice},
         package_size = COALESCE(${item.package_size}, package_size),
         supplier_hint = COALESCE(${item.supplier_hint}, supplier_hint)
       WHERE id = ${match[0].id} AND salon_id = ${salonId}
-      RETURNING id, name, category, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
+      RETURNING id, name, category, custom_subcategory, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
         price_per_unit_cents, supplier_hint, (quantity <= low_stock_threshold) AS is_low_stock
     `;
     await sql`
@@ -1706,16 +1708,17 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
     return { ...rows[0], import_action: 'updated' };
   }
 
+  const customSubNew = typeof item.custom_subcategory === 'string' ? item.custom_subcategory.trim() || null : null;
   const rows = await sql`
     INSERT INTO inventory_items (
-      salon_id, name, category, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
+      salon_id, name, category, custom_subcategory, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
       price_per_unit_cents, supplier_hint
     )
     VALUES (
-      ${salonId}, ${item.name}, ${item.category}, ${item.brand}, ${item.shade_code}, ${item.package_size}, ${item.unit},
+      ${salonId}, ${item.name}, ${item.category}, ${customSubNew}, ${item.brand}, ${item.shade_code}, ${item.package_size}, ${item.unit},
       ${item.quantity}, ${0}, ${item.price_per_unit_cents}, ${item.supplier_hint}
     )
-    RETURNING id, name, category, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
+    RETURNING id, name, category, custom_subcategory, brand, shade_code, package_size, unit, quantity, low_stock_threshold,
       price_per_unit_cents, supplier_hint, (quantity <= low_stock_threshold) AS is_low_stock
   `;
   await sql`

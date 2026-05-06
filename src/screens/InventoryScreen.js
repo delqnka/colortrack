@@ -724,6 +724,9 @@ export default function InventoryScreen({ navigation, route }) {
     const mapped = previewRows.map((item) => ({
       name: item.name.trim(),
       category: item.category || 'consumable',
+      custom_subcategory: item.category === 'retail'
+        ? (item.retailSubcategory || null)
+        : null,
       brand: item.brand || null,
       shade_code: item.shade_code || null,
       package_size: item.package_size || null,

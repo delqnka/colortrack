@@ -584,7 +584,7 @@ export default function InventoryItemScreen({ route, navigation }) {
     isStockConsumable ||
     (Boolean(item) && isStockTabInventoryItem(item) && categoryPreset !== 'dye');
   const showUnitChips =
-    !isDeveloperItem && !isDyeItem && !(isStockProductForm && unit === 'pcs');
+    !isDeveloperItem && !isDyeItem && unit !== 'pcs';
   /** Hide Stock/Retail picker only when editing an existing retail row (adding retail shows both tabs). */
   const hideStockRetailSection =
     isEdit && item?.category === 'retail' && !categoryCustom.trim();
@@ -668,27 +668,30 @@ export default function InventoryItemScreen({ route, navigation }) {
                 value={brandStr}
                 onChangeText={setBrandStr}
               />
-              <Text style={[styles.label, { marginTop: 14 }]}>Bottle size</Text>
-              <View style={styles.bottleSizeCompactRow}>
-                <TextInput
-                  style={[styles.input, styles.bottleSizeAmountField]}
-                  placeholder=""
-                  placeholderTextColor="#AEAEB2"
-                  value={tubeAmountStr}
-                  onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
-                  keyboardType="decimal-pad"
-                />
-                <View style={styles.bottleGramUnitsRow}>
-                  {STOCK_BOTTLE_UNITS.map((u) => (
-                    <TouchableOpacity
-                      key={u}
-                      style={[styles.bottleGramChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
-                      onPress={() => setTubeSizeUnit(u)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.bottleGramChipTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
-                    </TouchableOpacity>
-                  ))}
+              <View style={styles.inlineRow}>
+                <Text style={styles.inlineLabel}>Bottle size</Text>
+                <View style={styles.bottleInlineRight}>
+                  <TextInput
+                    style={[styles.input, styles.bottleSizeAmountField]}
+                    placeholder=""
+                    placeholderTextColor="#AEAEB2"
+                    value={tubeAmountStr}
+                    onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
+                    keyboardType="decimal-pad"
+                    textAlign="right"
+                  />
+                  <View style={styles.bottleGramUnitsRow}>
+                    {STOCK_BOTTLE_UNITS.map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        style={[styles.bottleGramChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                        onPress={() => setTubeSizeUnit(u)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[styles.bottleGramChipTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
               <View style={[styles.inlineRow, styles.stockQtyUnderBottle]}>
@@ -746,27 +749,30 @@ export default function InventoryItemScreen({ route, navigation }) {
 
           {isRetailItem ? (
             <>
-              <Text style={[styles.label, { marginTop: 14 }]}>Bottle size</Text>
-              <View style={styles.bottleSizeCompactRow}>
-                <TextInput
-                  style={[styles.input, styles.bottleSizeAmountField]}
-                  placeholder="0"
-                  placeholderTextColor="#AEAEB2"
-                  value={tubeAmountStr}
-                  onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
-                  keyboardType="decimal-pad"
-                />
-                <View style={styles.bottleGramUnitsRow}>
-                  {TUBE_UNIT_OPTIONS.map((u) => (
-                    <TouchableOpacity
-                      key={u}
-                      style={[styles.bottleGramChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
-                      onPress={() => setTubeSizeUnit(u)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.bottleGramChipTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
-                    </TouchableOpacity>
-                  ))}
+              <View style={styles.inlineRow}>
+                <Text style={styles.inlineLabel}>Bottle size</Text>
+                <View style={styles.bottleInlineRight}>
+                  <TextInput
+                    style={[styles.input, styles.bottleSizeAmountField]}
+                    placeholder="0"
+                    placeholderTextColor="#AEAEB2"
+                    value={tubeAmountStr}
+                    onChangeText={(t) => applyIntegerDraftChange(setTubeAmountStr, t)}
+                    keyboardType="decimal-pad"
+                    textAlign="right"
+                  />
+                  <View style={styles.bottleGramUnitsRow}>
+                    {TUBE_UNIT_OPTIONS.map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        style={[styles.bottleGramChip, tubeSizeUnit === u && styles.tubeUnitChipOn]}
+                        onPress={() => setTubeSizeUnit(u)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[styles.bottleGramChipTxt, tubeSizeUnit === u && styles.tubeUnitTxtOn]}>{u}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
               <View style={[styles.inlineRow, styles.stockQtyUnderBottle]}>
@@ -1438,6 +1444,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 4,
+  },
+  bottleInlineRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   /** Few digits only — narrow field; gram units sit on the same row to the right. */
   bottleSizeAmountField: {

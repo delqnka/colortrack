@@ -1147,19 +1147,30 @@ export default function InventoryScreen({ navigation, route }) {
         >
           <View style={styles.modalSheet}>
             <View style={styles.modalHead}>
-              <View>
-                <Text style={styles.modalTitle}>Invoice</Text>
-                <Text style={styles.modalSubtitle}>Products are auto-categorized by name — tap to change</Text>
+              <Text style={styles.modalTitle}>Invoice</Text>
+              <View style={styles.modalHeadActions}>
+                <TouchableOpacity
+                  style={styles.autoCatBtn}
+                  onPress={() => {
+                    let count = 0;
+                    setPreviewRows(rows => rows.map(item => {
+                      const auto = autoCategoryFromName(item.name);
+                      if (auto) { count++; return { ...item, category: auto.category, stockCategory: auto.category === 'retail' ? (item.stockCategory || 'consumable') : auto.category, retailSubcategory: auto.retailSub || '' }; }
+                      return item;
+                    }));
+                    setTimeout(() => count > 0 && Alert.alert('Done', `${count} product${count > 1 ? 's' : ''} categorized.`), 100);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="sparkles-outline" size={14} color="#5E35B1" style={{ marginRight: 4 }} />
+                  <Text style={styles.autoCatBtnText}>Auto-categorize</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => { setCategoryPickerKey(null); setPreviewOpen(false); setPreviewRows([]); }}
+                >
+                  <Text style={styles.modalClose}>Done</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setCategoryPickerKey(null);
-                  setPreviewOpen(false);
-                  setPreviewRows([]);
-                }}
-              >
-                <Text style={styles.modalClose}>Done</Text>
-              </TouchableOpacity>
             </View>
 
             {/* Category picker inline overlay */}
@@ -1231,6 +1242,37 @@ export default function InventoryScreen({ navigation, route }) {
                       />
                       <TouchableOpacity onPress={() => removePreviewRow(item.key)} hitSlop={8}>
                         <Ionicons name="close-circle-outline" size={22} color={MY_LAB_VIOLET} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.previewChoiceRow}>
+                      <TouchableOpacity
+                        style={styles.previewCheckChoice}
+                        onPress={() => updatePreviewRow(item.key, {
+                          category: item.stockCategory || 'consumable',
+                          retailSubcategory: '',
+                        })}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons
+                          name={!isRetail ? 'checkbox' : 'square-outline'}
+                          size={19} color="#5E35B1"
+                        />
+                        <Text style={styles.previewChoiceText}>Stock</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.previewCheckChoice}
+                        onPress={() => updatePreviewRow(item.key, {
+                          stockCategory: isRetail ? item.stockCategory : item.category,
+                          category: 'retail',
+                          retailSubcategory: item.retailSubcategory || 'other_retail',
+                        })}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons
+                          name={isRetail ? 'checkbox' : 'square-outline'}
+                          size={19} color="#5E35B1"
+                        />
+                        <Text style={styles.previewChoiceText}>Retail</Text>
                       </TouchableOpacity>
                     </View>
                     <Pressable
@@ -1766,12 +1808,24 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     color: '#5E35B1',
   },
-  modalSubtitle: {
-    fontSize: 11,
-    lineHeight: typeLh(11),
-    fontFamily: FontFamily.regular,
-    color: '#AEAEB2',
-    marginTop: 2,
+  modalHeadActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  autoCatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#5E35B1',
+  },
+  autoCatBtnText: {
+    fontSize: 12,
+    fontFamily: FontFamily.medium,
+    color: '#5E35B1',
   },
   lowModalBackdropHit: {
     flex: 1,

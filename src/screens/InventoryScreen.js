@@ -86,10 +86,22 @@ function labelForImportCategory(category, retailSub) {
 // Returns best stock sub-category based on name — does NOT touch retail/stock choice
 function autoStockCategory(name) {
   const n = String(name || '').toLowerCase();
-  if (n.includes('welloxon') || n.includes('oxigent') || n.includes('oxidant') || n.includes('developer') || n.includes('cremeoxyd') || / \d+%/.test(n)) return 'oxidant';
+  // Developer/Oxidant
+  if (n.includes('welloxon') || n.includes('oxigent') || n.includes('oxidant') || n.includes('developer')
+    || n.includes('cremeoxyd') || n.includes('blond me') || n.includes('blondme')
+    || /\b\d+\s*%/.test(n) || /\b(3|6|9|12)%/.test(n)) return 'oxidant';
+  // Mixtone
   if (n.includes('mixtone') || n.includes('mix tone') || n.includes('mix-tone')) return 'mixtone';
-  if (n.includes('toner') || n.includes('gloss')) return 'toner';
-  if (n.includes('koleston') || n.includes('illumina') || n.includes('majirel') || n.includes('inoa') || n.includes('igora') || n.includes('dialight') || n.includes('color touch') || n.includes('topchic') || n.includes('eloxon') || n.includes('richesse') || n.includes('shades eq')) return 'dye';
+  // Toner
+  if (n.includes('toner') || n.includes(' gloss') || n.includes('color gloss')) return 'toner';
+  // Dye — brand names + color keywords
+  const dyeBrands = ['koleston', 'illumina', 'majirel', 'inoa', 'igora', 'dialight', 'color touch',
+    'topchic', 'eloxon', 'richesse', 'shades eq', 'luocolor', 'luo color', 'chromeo',
+    'chromatics', 'revlonissimo', 'wonder color', 'blondor', 'freelights'];
+  if (dyeBrands.some(b => n.includes(b))) return 'dye';
+  // Color product keywords
+  if ((n.includes('color') || n.includes('colour') || n.includes('hair dye') || n.includes('hair color'))
+    && !n.includes('shampoo') && !n.includes('conditioner') && !n.includes('care')) return 'dye';
   return 'consumable';
 }
 
@@ -718,13 +730,17 @@ export default function InventoryScreen({ navigation, route }) {
     setSavingImport(true);
     try {
       const result = await apiPost('/api/inventory/import/bulk', { items }, { queueOffline: false });
-      const saved = Array.isArray(result) ? result : [];
-      const created = saved.filter(r => r.import_action === 'created').length;
-      const updated = saved.filter(r => r.import_action === 'updated').length;
+      const hasRetail = items.some(i => i.category === 'retail');
+      const hasStock = items.some(i => i.category !== 'retail');
       setCategoryPickerKey(null);
       setPreviewOpen(false);
       setPreviewRows([]);
+      // Switch to the tab where items landed
+      if (hasRetail && !hasStock) setInventoryFilter('retail');
+      else if (hasStock && !hasRetail) setInventoryFilter('stock');
       await load();
+      const created = Array.isArray(result) ? result.filter(r => r.import_action === 'created').length : 0;
+      const updated = Array.isArray(result) ? result.filter(r => r.import_action === 'updated').length : 0;
       const msg = [
         created > 0 ? `${created} new product${created > 1 ? 's' : ''} added` : '',
         updated > 0 ? `${updated} product${updated > 1 ? 's' : ''} updated` : '',

@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   Alert,
@@ -1140,9 +1141,13 @@ export default function InventoryScreen({ navigation, route }) {
         >
           <View style={styles.modalSheet}>
             <View style={styles.modalHead}>
-              <Text style={styles.modalTitle}>Invoice</Text>
+              <View>
+                <Text style={styles.modalTitle}>Invoice</Text>
+                <Text style={styles.modalSubtitle}>Products are auto-categorized by name — tap to change</Text>
+              </View>
               <TouchableOpacity
                 onPress={() => {
+                  setCategoryPickerKey(null);
                   setPreviewOpen(false);
                   setPreviewRows([]);
                 }}
@@ -1211,10 +1216,9 @@ export default function InventoryScreen({ navigation, route }) {
                         <Text style={styles.previewChoiceText}>Retail</Text>
                       </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={styles.categoryDropdownBtn}
+                    <Pressable
+                      style={({ pressed }) => [styles.categoryDropdownBtn, pressed && { opacity: 0.7 }]}
                       onPress={() => setCategoryPickerKey(item.key)}
-                      activeOpacity={0.85}
                     >
                       <Text style={styles.categoryDropdownLabel}>Category</Text>
                       <View style={styles.categoryDropdownRight}>
@@ -1223,7 +1227,7 @@ export default function InventoryScreen({ navigation, route }) {
                         </Text>
                         <Ionicons name="chevron-down" size={14} color="#5E35B1" />
                       </View>
-                    </TouchableOpacity>
+                    </Pressable>
                     <View style={styles.previewBottomRow}>
                       <TextInput
                         style={[styles.previewInput, styles.previewSmallInput]}
@@ -1801,6 +1805,13 @@ const styles = StyleSheet.create({
     lineHeight: typeLh(17),
     fontFamily: FontFamily.regular,
     color: '#5E35B1',
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    lineHeight: typeLh(11),
+    fontFamily: FontFamily.regular,
+    color: '#AEAEB2',
+    marginTop: 2,
   },
   lowModalBackdropHit: {
     flex: 1,

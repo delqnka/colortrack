@@ -284352,9 +284352,7 @@ async function applyInventoryInvoiceItem(sql, salonId, item) {
     FROM inventory_items
     WHERE salon_id = ${salonId}
       AND lower(name) = ${item.name.toLowerCase()}
-      AND COALESCE(lower(brand), '') = ${String(item.brand || "").toLowerCase()}
-      AND COALESCE(lower(shade_code), '') = ${String(item.shade_code || "").toLowerCase()}
-      AND unit = ${item.unit}
+    ORDER BY id
     LIMIT 1
   `;
   if (match.length) {

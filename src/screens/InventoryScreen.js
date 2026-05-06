@@ -1186,42 +1186,6 @@ export default function InventoryScreen({ navigation, route }) {
                         <Ionicons name="close-circle-outline" size={22} color={MY_LAB_VIOLET} />
                       </TouchableOpacity>
                     </View>
-                    <View style={styles.previewChoiceRow}>
-                      <TouchableOpacity
-                        style={styles.previewCheckChoice}
-                        onPress={() =>
-                          updatePreviewRow(item.key, {
-                            category: 'consumable',
-                            stockCategory: 'consumable',
-                          })
-                        }
-                        activeOpacity={0.85}
-                      >
-                        <Ionicons
-                          name={!isRetail ? 'checkbox' : 'square-outline'}
-                          size={19}
-                          color="#5E35B1"
-                        />
-                        <Text style={styles.previewChoiceText}>Stock</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.previewCheckChoice}
-                        onPress={() =>
-                          updatePreviewRow(item.key, {
-                            stockCategory: item.category === 'retail' ? item.stockCategory : item.category,
-                            category: 'retail',
-                          })
-                        }
-                        activeOpacity={0.85}
-                      >
-                        <Ionicons
-                          name={isRetail ? 'checkbox' : 'square-outline'}
-                          size={19}
-                          color="#5E35B1"
-                        />
-                        <Text style={styles.previewChoiceText}>Retail</Text>
-                      </TouchableOpacity>
-                    </View>
                     <Pressable
                       style={({ pressed }) => [styles.categoryDropdownBtn, pressed && { opacity: 0.7 }]}
                       onPress={() => setCategoryPickerKey(item.key)}
@@ -1306,6 +1270,7 @@ export default function InventoryScreen({ navigation, route }) {
                           updatePreviewRow(categoryPickerKey, {
                             category: 'retail',
                             retailSubcategory: option.key,
+                            stockCategory: 'consumable',
                           });
                         } else {
                           updatePreviewRow(categoryPickerKey, {

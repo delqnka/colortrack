@@ -743,22 +743,25 @@ export default function InventoryScreen({ navigation, route }) {
     }
     setSavingImport(true);
     try {
+      console.log('[SAVE] items:', items.map(i => `${i.name}:${i.category}`).join(', '));
       const result = await apiPost('/api/inventory/import/bulk', { items }, { queueOffline: false });
-      const hasRetail = items.some(i => i.category === 'retail');
-      const hasStock = items.some(i => i.category !== 'retail');
+      const retailCount = items.filter(i => i.category === 'retail').length;
+      const stockCount = items.filter(i => i.category !== 'retail').length;
       setCategoryPickerKey(null);
       setPreviewOpen(false);
       setPreviewRows([]);
-      // Switch to the tab where items landed
-      if (hasRetail && !hasStock) setInventoryFilter('retail');
-      else if (hasStock && !hasRetail) setInventoryFilter('stock');
+      // Always switch to retail if any retail items
+      if (retailCount > 0) setInventoryFilter('retail');
+      else setInventoryFilter('stock');
       await load();
       const created = Array.isArray(result) ? result.filter(r => r.import_action === 'created').length : 0;
       const updated = Array.isArray(result) ? result.filter(r => r.import_action === 'updated').length : 0;
       const msg = [
-        created > 0 ? `${created} new product${created > 1 ? 's' : ''} added` : '',
-        updated > 0 ? `${updated} product${updated > 1 ? 's' : ''} updated` : '',
-      ].filter(Boolean).join(', ') || 'Done.';
+        created > 0 ? `${created} new` : '',
+        updated > 0 ? `${updated} updated` : '',
+        retailCount > 0 ? `${retailCount} in Retail` : '',
+        stockCount > 0 ? `${stockCount} in Stock` : '',
+      ].filter(Boolean).join(' · ') || 'Done.';
       setTimeout(() => Alert.alert('Saved', msg), 400);
     } catch (e) {
       Alert.alert('Save failed', e.message || 'Something went wrong. Try again.');

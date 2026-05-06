@@ -1242,9 +1242,11 @@ function normalizeInventoryImportCandidate(row) {
   );
   const computedTotalCents =
     lineTotalCents == null && pricePerUnitCents != null ? Math.round(pricePerUnitCents * quantity) : lineTotalCents;
+  const customSub = sanitizeInventoryText(row.custom_subcategory, 80) || null;
   return {
     name,
     category: normalizeInventoryCategory(row.category),
+    custom_subcategory: customSub,
     brand: sanitizeInventoryText(row.brand || row.manufacturer, 200),
     shade_code: sanitizeInventoryText(row.shade_code || row.shade || row.code || row.sku || row.volume, 80),
     package_size: sanitizeInventoryText(row.package_size || row.size || row.product_size, 80),
